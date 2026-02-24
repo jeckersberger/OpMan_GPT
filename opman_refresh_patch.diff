@@ -1,0 +1,13 @@
+*** Begin Patch
+*** Update File: static/app.js
+@@ window.addEventListener("DOMContentLoaded", async () => {
+   initMap();
+   wireUI();
+   await refreshAll(true);
++
++  // Periodically refresh data every 5 seconds without rebuilding markers.
++  setInterval(() => {
++    refreshAll(false);
++  }, 5000);
+ });
+*** End Patch

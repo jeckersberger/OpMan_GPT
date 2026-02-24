@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Einsatzleiter</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Top Navigation -->
+  <header class="topbar">
+    <div class="brand">🚨 Einsatzleiter</div>
+    <nav class="topnav">
+      <button id="btnRefresh" class="navbtn">Aktualisieren</button>
+      <button id="btnLocate" class="navbtn">Zu mir</button>
+      <div class="divider"></div>
+      <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <!-- Left: Teams -->
+    <aside class="sidebar left">
+      <h2>Einsatztrupps</h2>
+
+      <section class="panel">
+        <h3>Trupp erstellen</h3>
+        <div class="formrow">
+          <input id="teamName" placeholder="Name (z.B. Trupp 1)" />
+          <input id="teamCallsign" placeholder="Rufname (optional)" />
+        </div>
+
+        <div class="formrow">
+          <select id="teamRadioStatus" title="Funkstatus">
+            <option value="1" selected>1 – Frei auf Funk</option>
+            <option value="2">2 – Frei auf Wache</option>
+            <option value="3">3 – Auf Anfahrt</option>
+            <option value="4">4 – Am Einsatzort</option>
+            <option value="5">5 – Sprechwunsch</option>
+            <option value="6">6 – nicht Einsatzbereit</option>
+            <option value="7">7 – gebunden</option>
+            <option value="8">8 – Bedingt Einsatzbereit</option>
+            <option value="9">9 – Fremdanmeldung</option>
+            <option value="0">0 – prio. Sprechwunsch</option>
+          </select>
+        </div>
+
+        <div class="formrow">
+          <input id="teamColor" type="color" value="#4ea1ff" title="Trupp-Farbe" />
+          <button id="btnCreateTeam">Anlegen</button>
+        </div>
+
+        <div class="formrow small">
+          <input id="teamLat" placeholder="lat" />
+          <input id="teamLng" placeholder="lng" />
+        </div>
+        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
+      </section>
+
+      <section class="panel">
+        <h3>Schnellkoordination</h3>
+        <div id="teamsList" class="list"></div>
+      </section>
+    </aside>
+
+    <!-- Center: Map -->
+    <section class="mapwrap">
+      <div id="map"></div>
+      <div class="maphud">
+        <div>Auswahl: <span id="selectionLabel">—</span></div>
+        <div>Letzter Kartenklick: <span id="lastClick">—</span></div>
+        <div class="tiny">Tipp: Nutze „Kartenklick übernehmen“ bei Trupp/Einsatz.</div>
+      </div>
+    </section>
+
+    <!-- Right: Missions -->
+    <aside class="sidebar right">
+      <h2>Einsätze</h2>
+
+      <section class="panel">
+        <h3>Einsatz erstellen</h3>
+        <div class="formrow">
+          <input id="missionTitle" placeholder="Titel (z.B. Brandmelder)" />
+        </div>
+        <div class="formrow">
+          <textarea id="missionDesc" placeholder="Beschreibung (optional)"></textarea>
+        </div>
+        <div class="formrow">
+          <select id="missionStatus">
+            <option value="offen">offen</option>
+            <option value="zugewiesen">zugewiesen</option>
+            <option value="in_arbeit">in_arbeit</option>
+            <option value="abgeschlossen">abgeschlossen</option>
+            <option value="abgebrochen">abgebrochen</option>
+          </select>
+          <select id="missionPriority">
+            <option value="1">Priorität 1</option>
+            <option value="2">Priorität 2</option>
+            <option value="3" selected>Priorität 3</option>
+            <option value="4">Priorität 4</option>
+            <option value="5">Priorität 5</option>
+          </select>
+        </div>
+
+        <div class="formrow small">
+          <input id="missionLat" placeholder="lat" />
+          <input id="missionLng" placeholder="lng" />
+        </div>
+        <button id="btnCreateMission" class="full">Einsatz anlegen</button>
+        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
+      </section>
+
+      <section class="panel">
+        <h3>Schnellkoordination</h3>
+        <div id="missionsList" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Zuordnung</h3>
+        <div class="tiny">
+          Wähle links einen Trupp und rechts einen Einsatz, dann zuordnen
+          (oder nutze „Zuweisen“ direkt beim Einsatz).
+        </div>
+        <button id="btnAssign" class="full">Trupp ↔ Einsatz zuordnen</button>
+        <div id="assignmentsList" class="list smalllist"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

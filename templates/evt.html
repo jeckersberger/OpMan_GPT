@@ -246,8 +246,19 @@
     .fms-btn.b-s1 { border-color: var(--green);  color: var(--green);  background: #0e2a18; }
     .fms-btn.b-s3 { border-color: var(--yellow); color: var(--yellow); background: #2e2300; }
     .fms-btn.b-s4 { border-color: var(--accent); color: var(--accent); background: #0d2240; }
+    .fms-btn.b-s5 { border-color: var(--muted);  color: var(--muted);  background: #1a2030; }
     .fms-btn.b-s7 { border-color: var(--orange); color: var(--orange); background: #2e1a00; }
     .fms-btn.b-s8 { border-color: #5de89a;       color: #5de89a;       background: #0a2215; }
+
+    /* S0 Notfall-Button – volle Breite, auffällig rot */
+    .fms-btn.b-s0 {
+      border-color: var(--red); color: var(--red); background: #2e0a0a;
+      grid-column: 1 / -1;
+      font-size: 1rem;
+      padding: .9rem .4rem;
+    }
+    .fms-btn.b-s0 .fs-code { font-size: 1.1rem; }
+    .fms-btn.b-s0.is-active { box-shadow: 0 0 0 3px rgba(255,79,79,.7); }
 
     /* ── Warning box ── */
     .warn-box {
@@ -551,11 +562,13 @@ function renderMain(team, doc, meta) {
 
   // FMS-Tasten
   const btnDefs = [
-    { rs: 1, cls: 'b-s1', code: 'S1', sub: 'Frei Funk'  },
-    { rs: 3, cls: 'b-s3', code: 'S3', sub: 'Anfahrt'    },
-    { rs: 4, cls: 'b-s4', code: 'S4', sub: 'Einsatzort' },
-    { rs: 7, cls: 'b-s7', code: 'S7', sub: 'Transport'  },
-    { rs: 8, cls: 'b-s8', code: 'S8', sub: 'Ziel'       },
+    { rs: 1, cls: 'b-s1', code: 'S1', sub: 'Frei Funk'   },
+    { rs: 3, cls: 'b-s3', code: 'S3', sub: 'Anfahrt'     },
+    { rs: 4, cls: 'b-s4', code: 'S4', sub: 'Einsatzort'  },
+    { rs: 7, cls: 'b-s7', code: 'S7', sub: 'Transport'   },
+    { rs: 8, cls: 'b-s8', code: 'S8', sub: 'Ziel'        },
+    { rs: 5, cls: 'b-s5', code: 'S5', sub: 'Sprechwunsch'},
+    { rs: 0, cls: 'b-s0', code: '🚨 S0', sub: 'Dringender Sprechwunsch' },
   ];
   const fmsBtns = btnDefs.map(b => {
     const active  = currentRs === b.rs ? ' is-active' : '';

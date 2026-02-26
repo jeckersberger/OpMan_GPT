@@ -50,13 +50,16 @@ function esc(s){
 function badge(text){ return `<span class="badge">${esc(text)}</span>`; }
 function priorityBadge(p){ return `<span class="badge">P${esc(p)}</span>`; }
 
-function radioText(code, label){
+function radioText(code, label, pending=false){
   const l = label || RADIO_LABELS.get(code) || "";
-  return `Funk ${code}${l ? " – " + l : ""}`;
+  return `Funk ${code}${l ? " – " + l : ""}${pending ? " ·P" : ""}`;
 }
 
-function radioBadge(code, label){
-  return `<span class="badge">${esc(radioText(code, label))}</span>`;
+function radioBadge(code, label, pending=false){
+  const extra = pending
+    ? ' style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;font-weight:700;"'
+    : '';
+  return `<span class="badge"${extra}>${esc(radioText(code, label, pending))}</span>`;
 }
 
 function colorDot(hex){
@@ -437,7 +440,7 @@ function renderTeams(){
             ${t.callsign ? `<span class="badge">${esc(t.callsign)}</span>` : ""}
           </div>
           <div style="margin-top:4px;">
-            ${radioBadge(t.radio_status, t.radio_status_label)}
+            ${radioBadge(t.radio_status, t.radio_status_label, !!t.pending_alarm)}
             ${t.lat!=null ? `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span>` : `<span class="badge">ohne Position</span>`}
             ${assignedTeamIds.has(t.id) ? `<span class="badge">zugewiesen</span>` : ""}
           </div>

@@ -306,6 +306,14 @@
       -webkit-tap-highlight-color: transparent;
     }
     .alarm-dismiss:active { opacity: .8; }
+    .alarm-detail {
+      font-size: .85rem;
+      color: var(--text);
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+    .alarm-detail .alarm-w3w { color: var(--accent); font-family: monospace; font-weight: 700; }
+    .alarm-detail .alarm-patient { font-weight: 700; }
   </style>
 </head>
 <body>
@@ -317,6 +325,7 @@
     <div class="alarm-title">NEUER EINSATZ!</div>
     <div class="alarm-pid-big" id="alarmPid">–</div>
     <div class="alarm-schlw" id="alarmSchlw">–</div>
+    <div class="alarm-detail" id="alarmDetail"></div>
     <button class="alarm-dismiss" id="alarmDismiss">✓ Quittieren</button>
   </div>
 </div>
@@ -395,6 +404,7 @@ const savedEvt = localStorage.getItem('evt_selected') || '';
 if (savedEvt) evtSelect.value = savedEvt;
 
 evtSelect.addEventListener('change', () => {
+  _unlockAudio();  // Audio-Context beim ersten Tippen entsperren
   const v = evtSelect.value;
   localStorage.setItem('evt_selected', v);
   selectedEvt   = v;
@@ -450,10 +460,25 @@ function setDot(ok) {
 }
 
 // ── Alarmton (Web Audio API) ──────────────────────────────────
-function _playAlarmTone() {
+// Ein persistenter AudioContext, der bei erster Nutzerinteraktion entsperrt wird
+let _audioCtx = null;
+
+function _unlockAudio() {
+  if (_audioCtx) return;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Drei absteigende Töne: hoch → mittel → hoch (klassischer Alarm-Dreiklang)
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Stille Note → entsperrt den Context auch auf iOS/Android
+    const osc = _audioCtx.createOscillator();
+    osc.connect(_audioCtx.destination);
+    osc.start();
+    osc.stop(_audioCtx.currentTime + 0.001);
+  } catch (e) { _audioCtx = null; }
+}
+
+function _playAlarmTone() {
+  if (!_audioCtx) return;
+  try {
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
     const seq = [
       { freq: 880, start: 0.0, dur: 0.18 },
       { freq: 660, start: 0.2, dur: 0.18 },
@@ -462,18 +487,17 @@ function _playAlarmTone() {
       { freq: 880, start: 0.8, dur: 0.25 },
     ];
     seq.forEach(({ freq, start, dur }) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const osc  = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(_audioCtx.destination);
       osc.type = 'square';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-      osc.start(ctx.currentTime + start);
-      osc.stop(ctx.currentTime + start + dur + 0.02);
+      gain.gain.setValueAtTime(0.35, _audioCtx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
+      osc.start(_audioCtx.currentTime + start);
+      osc.stop(_audioCtx.currentTime + start + dur + 0.02);
     });
-    setTimeout(() => ctx.close(), 2000);
   } catch (e) { /* kein Audio-Support */ }
 }
 
@@ -490,6 +514,17 @@ function triggerAlarm(doc, meta) {
   _alarmDoc = doc;
   document.getElementById('alarmPid').textContent  = doc.id || '–';
   document.getElementById('alarmSchlw').textContent = (meta && meta.schlagwort) ? meta.schlagwort : '–';
+
+  // Alarmdetails: ggf. falscher Name (P2) oder falsche Adresse (P3)
+  let detail = '';
+  if (meta) {
+    const patName  = meta.patient_alarm || meta.patient || '';
+    const w3wAlarm = meta.w3w_alarm || meta.w3w || '';
+    if (patName)  detail += `<div>Patient: <span class="alarm-patient">${esc(patName)}</span></div>`;
+    if (w3wAlarm) detail += `<div>Ort: <span class="alarm-w3w">${esc(w3wAlarm)}</span></div>`;
+  }
+  document.getElementById('alarmDetail').innerHTML = detail;
+
   document.getElementById('alarmOverlay').classList.add('show');
 }
 
@@ -506,7 +541,8 @@ function renderMain(team, doc, meta) {
 
   const rs      = team ? team.radio_status : null;
   const rsCls   = rs !== null ? `c-${[0,5].includes(rs) ? 0 : rs}` : '';
-  const rsLabel = rs !== null ? (FMS_LABELS[rs] || 'S' + rs) : '–';
+  const pending = !!(team && team.pending_alarm);
+  const rsLabel = rs !== null ? (FMS_LABELS[rs] || 'S' + rs) + (pending ? ' ·P' : '') : '–';
   const notFound = !team;
 
   // Team-Status-Block
@@ -517,9 +553,12 @@ function renderMain(team, doc, meta) {
       Im Einsatzleiter anlegen → dann FMS-Tasten aktiviert.
     </div>`;
   } else {
-    teamHtml = `<div class="team-status ${rsCls}">
+    const badgeStyle = pending
+      ? ' style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;"'
+      : '';
+    teamHtml = `<div class="team-status ${rsCls}${pending ? ' c-0' : ''}">
       <div class="team-name">${esc(team.name)}</div>
-      <div class="fms-badge">${esc(rsLabel)}</div>
+      <div class="fms-badge"${badgeStyle}>${esc(rsLabel)}</div>
       <span class="pulse-dot"></span>
     </div>`;
   }

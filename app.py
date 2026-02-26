@@ -77,6 +77,7 @@ def create_app():
         "P2": {
             "schlagwort": "Sturz Skateboard – Handgelenksverletzung",
             "patient": "Elzbieta Szczepaniak", "alter": 19, "geschlecht": "w",
+            "patient_alarm": "Lisa Schneider",   # falscher Name in der Alarmierung
             "w3w": "///vorweisen.kanone.möchte", "w3w_alarm": None,
             "rmi_soll": "272", "sk_soll": "3", "pzc_soll": "272193",
             "besonderheit": "Name in Alarmierung falsch (Lisa Schneider). Buchstabieren erforderlich.",
@@ -173,8 +174,10 @@ def create_app():
                 active_doc = max(active, key=lambda d: d.alarm_time)
 
         case_meta = EXERCISE_CASES.get(active_doc.id) if active_doc else None
+        # pending_alarm: Alarm ausgelöst, aber S3 noch nicht bestätigt
+        _pa = bool(active_doc and active_doc.alarm_time and not active_doc.status3_time)
         return jsonify({
-            "team": serialize_team(team) if team else None,
+            "team": serialize_team(team, pending_alarm=_pa) if team else None,
             "case": serialize_casedoc(active_doc) if active_doc else None,
             "case_meta": case_meta,
         })
@@ -414,7 +417,22 @@ def create_app():
     @app.get("/api/teams")
     def list_teams():
         teams = Team.query.order_by(Team.updated_at.desc()).all()
-        return jsonify([serialize_team(t, include_missions=True) for t in teams])
+        # Alarmierte aber noch nicht quittierte Teams (alarm_time gesetzt, status3_time noch nicht)
+        _pending_evts = {
+            d.assigned_evt for d in CaseDoc.query.filter(
+                CaseDoc.alarm_time.isnot(None),
+                CaseDoc.status3_time.is_(None),
+                CaseDoc.completed == False  # noqa: E712
+            ).all() if d.assigned_evt
+        }
+        result = []
+        for t in teams:
+            _ident = {t.name, t.callsign} - {None}
+            result.append(serialize_team(
+                t, include_missions=True,
+                pending_alarm=bool(_ident & _pending_evts)
+            ))
+        return jsonify(result)
 
     @app.get("/api/teams/available")
     def list_available_teams():
@@ -784,8 +802,6 @@ def _sync_team_from_doc(doc: "CaseDoc") -> None:
         rs = 4
     elif doc.status3_time:
         rs = 3
-    elif doc.alarm_time:
-        rs = 3  # Alarmierung impliziert Anfahrt
     else:
         return  # Nichts gesetzt → kein Update
 
@@ -834,7 +850,7 @@ def serialize_logentry(e: RadioLogEntry):
     }
 
 
-def serialize_team(t: Team, include_missions: bool = False):
+def serialize_team(t: Team, include_missions: bool = False, pending_alarm: bool = False):
     payload = {
         "id": t.id,
         "name": t.name,
@@ -846,6 +862,7 @@ def serialize_team(t: Team, include_missions: bool = False):
         "lat": t.lat,
         "lng": t.lng,
         "updated_at": t.updated_at.isoformat() + "Z",
+        "pending_alarm": pending_alarm,
     }
 
     if include_missions:

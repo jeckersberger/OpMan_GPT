@@ -13,6 +13,13 @@ let missionMarkers = new Map();  // missionId -> L.Marker
 
 let assignedTeamIds = new Set(); // Teams, die bereits irgendwo zugewiesen sind
 
+// Exercise layer (Funkübung)
+let exerciseGeodata = null;       // geodata from /api/exercise/geodata
+let casedocData = [];             // from /api/casedocs
+let exerciseMarkers = new Map();  // caseId (string) -> L.Marker
+let connectionLines = [];         // L.Polyline[] team <-> case
+let startpunktMarker = null;
+
 const $ = (id) => document.getElementById(id);
 
 // ---- Funkstatus (nur 0-9) ----
@@ -82,7 +89,7 @@ async function api(url, options){
 
 // ---------------- Map ----------------
 function initMap(){
-  map = L.map("map").setView([52.52, 13.405], 12); // Default: Berlin
+  map = L.map("map").setView([49.3783, 11.2134], 15); // Default: Feucht
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
@@ -189,6 +196,140 @@ function missionColor(m){
   const greenCodes = new Set([4, 7, 8]);
   const anyGreen = assignedTeams.some(t => greenCodes.has(Number(t.radio_status)));
   return anyGreen ? "green" : "yellow";
+}
+
+// ---------------- Exercise Layer helpers ----------------
+
+// Color by CaseDoc status: grey → yellow → orange → blue → green
+function exerciseCaseColor(doc) {
+  if (!doc || !doc.alarm_time) return "#777777";           // grey: not alarmed
+  if (doc.status8_time || doc.status7_time) return "#22cc66"; // green: S7/S8
+  if (doc.status4_time) return "#2299ff";                  // blue: S4 on scene
+  if (doc.status3_time) return "#ff8800";                  // orange: S3 en route
+  return "#ffcc00";                                        // yellow: alarmed, pre-S3
+}
+
+// Straight-line distance (Haversine) in km
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function walkingTimeStr(km) {
+  const mins = Math.round(km / 4.5 * 60);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}min`;
+}
+
+function makeExerciseIcon(color, label) {
+  const bg = color || "#777777";
+  const html = `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;` +
+    `border:2px solid rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;` +
+    `font-weight:bold;font-size:11px;box-shadow:0 2px 5px rgba(0,0,0,0.5);font-family:monospace;">${label}</div>`;
+  return L.divIcon({ className: "", html, iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -17] });
+}
+
+function makeStartpunktIcon() {
+  const html = `<div style="background:#9933cc;color:#fff;width:40px;height:20px;border-radius:4px;` +
+    `border:2px solid rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;` +
+    `font-weight:bold;font-size:10px;box-shadow:0 2px 5px rgba(0,0,0,0.5);">START</div>`;
+  return L.divIcon({ className: "", html, iconSize: [40, 20], iconAnchor: [20, 10], popupAnchor: [0, -12] });
+}
+
+function refreshExerciseLayer() {
+  if (!exerciseGeodata) return;
+
+  // Remove old connection lines
+  for (const line of connectionLines) line.remove();
+  connectionLines = [];
+
+  const cases = exerciseGeodata.cases || {};
+
+  for (const [id, data] of Object.entries(cases)) {
+    if (data.lat == null || data.lng == null) continue;
+
+    const doc = casedocData.find(d => d.id === id);
+    const color = exerciseCaseColor(doc);
+    const ll = [data.lat, data.lng];
+
+    // Draw dashed line from assigned EVT team to this case
+    let walkExtra = "";
+    if (doc?.assigned_evt) {
+      const team = teams.find(t => t.name === doc.assigned_evt || t.callsign === doc.assigned_evt);
+      if (team?.lat != null) {
+        const km = haversine(team.lat, team.lng, data.lat, data.lng);
+        walkExtra = ` | ~${walkingTimeStr(km)} Fußweg`;
+        const line = L.polyline([[team.lat, team.lng], ll], {
+          color, weight: 2, dashArray: "6 4", opacity: 0.75,
+        }).addTo(map);
+        connectionLines.push(line);
+      }
+    }
+
+    const tooltipText = `${id}: ${data.schlagwort}${walkExtra}`;
+    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}`;
+
+    if (exerciseMarkers.has(id)) {
+      const marker = exerciseMarkers.get(id);
+      marker.setLatLng(ll);
+      marker.setIcon(makeExerciseIcon(color, id));
+      if (marker.getTooltip()) {
+        marker.setTooltipContent(tooltipText);
+      } else {
+        marker.bindTooltip(tooltipText, { permanent: true, direction: "right", offset: [18, 0], opacity: 0.9 });
+      }
+      marker.setPopupContent(popupHtml);
+    } else {
+      const marker = L.marker(ll, { icon: makeExerciseIcon(color, id) })
+        .addTo(map)
+        .bindTooltip(tooltipText, { permanent: true, direction: "right", offset: [18, 0], opacity: 0.9 })
+        .bindPopup(popupHtml);
+      exerciseMarkers.set(id, marker);
+    }
+  }
+
+  // Startpunkt marker
+  const sp = exerciseGeodata.startpunkt;
+  if (sp?.lat != null) {
+    if (!startpunktMarker) {
+      startpunktMarker = L.marker([sp.lat, sp.lng], { icon: makeStartpunktIcon() })
+        .addTo(map)
+        .bindTooltip("Startpunkt", { permanent: true, direction: "right", offset: [22, 0], opacity: 0.9 })
+        .bindPopup("Startpunkt der Funkübung");
+    } else {
+      startpunktMarker.setLatLng([sp.lat, sp.lng]);
+    }
+  }
+}
+
+async function loadExerciseLayer() {
+  try {
+    [exerciseGeodata, casedocData] = await Promise.all([
+      api("/api/exercise/geodata"),
+      api("/api/casedocs"),
+    ]);
+  } catch (e) {
+    console.warn("Exercise layer konnte nicht geladen werden:", e);
+    return;
+  }
+
+  refreshExerciseLayer();
+
+  // Auto-fit map bounds to all exercise locations
+  const pts = [];
+  for (const data of Object.values(exerciseGeodata.cases || {})) {
+    if (data.lat != null) pts.push([data.lat, data.lng]);
+  }
+  const sp = exerciseGeodata.startpunkt;
+  if (sp?.lat != null) pts.push([sp.lat, sp.lng]);
+  if (pts.length > 0) {
+    map.fitBounds(L.latLngBounds(pts).pad(0.15));
+  }
 }
 
 function upsertMissionMarker(m){
@@ -588,9 +729,12 @@ function normalizeRadioLabels(){
 }
 
 async function refreshAll(rebuild = true){
-  teams = await api("/api/teams");
-  missions = await api("/api/missions");
-  assignments = await api("/api/assignments");
+  [teams, missions, assignments, casedocData] = await Promise.all([
+    api("/api/teams"),
+    api("/api/missions"),
+    api("/api/assignments"),
+    api("/api/casedocs"),
+  ]);
 
   normalizeRadioLabels();
   computeAssignedTeamIds();
@@ -606,6 +750,8 @@ async function refreshAll(rebuild = true){
     for (const t of teams) upsertTeamMarker(t);
     for (const m of missions) upsertMissionMarker(m);
   }
+
+  if (exerciseGeodata) refreshExerciseLayer();
 }
 
 // ---------------- UI Wiring ----------------
@@ -709,4 +855,5 @@ window.addEventListener("DOMContentLoaded", async () => {
   initMap();
   wireUI();
   await refreshAll(true);
+  await loadExerciseLayer();
 });

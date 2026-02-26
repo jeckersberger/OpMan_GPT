@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry
@@ -28,6 +32,30 @@ ALLOWED_AVAILABILITY = {"verfügbar", "bedingt", "nicht_verfügbar"}
 # Optional (empfohlen): welche Funkstatus gelten als "disponierbar"?
 # Wenn du ALLE "availability=verfügbar" zulassen willst, setze DISPATCHABLE... = None
 DISPATCHABLE_RADIO_STATUSES: set[int] | None = {1, 2}  # frei auf Funk / frei auf Wache
+
+# ---------------------------
+# what3words API
+# ---------------------------
+W3W_API_KEY = "2ZJ55EYB"
+W3W_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "w3w_cache.json")
+STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
+
+
+def resolve_w3w(words: str):
+    """Resolve a what3words address to (lat, lng). Returns (None, None) on error."""
+    clean = words.lstrip("/")
+    url = (
+        "https://api.what3words.com/v3/convert-to-coordinates"
+        f"?words={urllib.parse.quote(clean)}&key={W3W_API_KEY}"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
+            data = json.loads(resp.read().decode())
+        if "coordinates" in data:
+            return data["coordinates"]["lat"], data["coordinates"]["lng"]
+    except Exception:
+        pass
+    return None, None
 
 
 def create_app():
@@ -230,6 +258,43 @@ def create_app():
 
         db.session.commit()
         return jsonify({"ok": True})
+
+    # ---------------------------
+    # Exercise Geodata (what3words)
+    # ---------------------------
+    @app.get("/api/exercise/geodata")
+    def exercise_geodata():
+        """Resolve all exercise location w3w addresses to coordinates (cached)."""
+        if os.path.exists(W3W_CACHE_FILE):
+            try:
+                with open(W3W_CACHE_FILE) as f:
+                    return jsonify(json.load(f))
+            except Exception:
+                pass
+
+        result: dict = {"cases": {}, "startpunkt": None}
+
+        for case_id, cd in EXERCISE_CASES.items():
+            lat, lng = resolve_w3w(cd["w3w"])
+            result["cases"][case_id] = {
+                "lat": lat,
+                "lng": lng,
+                "schlagwort": cd["schlagwort"],
+                "patient": cd["patient"],
+                "w3w": cd["w3w"],
+            }
+
+        sp_lat, sp_lng = resolve_w3w(STARTPUNKT_W3W)
+        result["startpunkt"] = {"lat": sp_lat, "lng": sp_lng, "w3w": STARTPUNKT_W3W}
+
+        try:
+            os.makedirs(os.path.dirname(W3W_CACHE_FILE), exist_ok=True)
+            with open(W3W_CACHE_FILE, "w") as f:
+                json.dump(result, f, indent=2)
+        except Exception:
+            pass
+
+        return jsonify(result)
 
     # ---------------------------
     # Teams

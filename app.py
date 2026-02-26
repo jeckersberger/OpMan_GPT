@@ -536,22 +536,27 @@ def create_app():
             return jsonify({"error": "Kein aktiver Sprechwunsch"}), 400
 
         sw_status = team.radio_status  # 0 oder 5
-
-        # Vorgänger-Status aus aktivem CaseDoc ableiten
-        restore_rs = 1  # Default: Frei auf Funk
         _ident = {team.name, team.callsign} - {None}
+
+        # Vorgänger-Status: letzter Log-Eintrag des Teams vor dem S0/S5
+        restore_rs = 1  # Default
+        last_log = (RadioLogEntry.query
+                    .filter(RadioLogEntry.sender.in_(list(_ident)),
+                            RadioLogEntry.fms_status.notin_([0, 5]),
+                            RadioLogEntry.fms_status.isnot(None))
+                    .order_by(RadioLogEntry.timestamp.desc())
+                    .first())
+        if last_log:
+            restore_rs = last_log.fms_status
+
+        # case_ref für den Log-Eintrag
         _case_ref = None
         for _i in _ident:
             _doc = CaseDoc.query.filter_by(assigned_evt=_i).filter(
-                CaseDoc.alarm_time.isnot(None), CaseDoc.completed == False  # noqa: E712
-            ).first()
+                CaseDoc.alarm_time.isnot(None)
+            ).order_by(CaseDoc.id.desc()).first()
             if _doc:
                 _case_ref = _doc.id
-                if _doc.status8_time:        restore_rs = 8
-                elif _doc.status7_time:      restore_rs = 7
-                elif _doc.status4_time:      restore_rs = 4
-                elif _doc.status3_time:      restore_rs = 3
-                elif _doc.alarm_time:        restore_rs = 3
                 break
 
         team.radio_status = restore_rs

@@ -281,6 +281,34 @@
     }
     .evt-count-sel select { width:56px; padding:.15rem .3rem; }
 
+    /* ── Sprechwunsch-Panel ── */
+    .sw-panel{position:fixed;bottom:1.25rem;right:1.25rem;z-index:500;width:310px;
+      background:var(--panel);border:1px solid var(--border);border-radius:10px;
+      box-shadow:0 6px 30px rgba(0,0,0,.55);overflow:hidden;
+      transform:translateX(120%);opacity:0;pointer-events:none;
+      transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .25s ease;}
+    .sw-panel.sw-visible{transform:translateX(0);opacity:1;pointer-events:auto;}
+    .sw-header{display:flex;align-items:center;gap:.5rem;padding:.45rem .85rem;
+      font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      background:rgba(245,200,66,.1);color:#f5c842;border-bottom:1px solid rgba(245,200,66,.18);}
+    .sw-list{list-style:none;margin:0;padding:0;max-height:320px;overflow-y:auto;}
+    .sw-item{display:flex;align-items:center;gap:.55rem;padding:.42rem .8rem;
+      border-bottom:1px solid var(--border);transition:background .15s;}
+    .sw-item:last-child{border-bottom:none;}
+    .sw-item.s0{background:rgba(255,79,79,.13);border-left:3px solid #ff4f4f;}
+    .sw-item.s5{background:rgba(245,200,66,.04);border-left:3px solid transparent;}
+    .sw-badge{font-size:.72rem;font-weight:800;padding:.12rem .4rem;border-radius:4px;white-space:nowrap;flex-shrink:0;}
+    .sw-badge.s0{background:#3a1212;color:#ff4f4f;border:1px solid rgba(255,79,79,.45);}
+    .sw-badge.s5{background:#2e2600;color:#f5c842;border:1px solid rgba(245,200,66,.4);}
+    .sw-name{font-weight:700;font-size:.85rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .sw-time{font-size:.72rem;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+    .sw-quit{padding:.28rem .55rem;background:transparent;border:1px solid var(--border);
+      border-radius:5px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer;
+      font-family:inherit;white-space:nowrap;flex-shrink:0;
+      transition:background .12s,color .12s,border-color .12s;}
+    .sw-quit:hover{background:rgba(78,161,255,.15);border-color:var(--accent);color:var(--accent);}
+    @media print{ .sw-panel{display:none!important;} }
+
     /* ── Print ── */
     @media print {
       body { background:#fff; color:#000; }
@@ -325,6 +353,9 @@
   <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Drucken</button>
   <button class="btn btn-danger no-print" onclick="showResetModal()">↺ Reset</button>
 </div>
+
+<!-- Sprechwunsch-Panel -->
+<div id="swPanel" class="sw-panel no-print"></div>
 
 <!-- ═══ RESET MODAL ═══ -->
 <div class="modal-overlay" id="resetModal">
@@ -1168,9 +1199,44 @@ async function refreshAll() {
   renderAlarmGrid();
   renderCaseGrid();
   renderLogList();
+  renderSprechwunschPanel();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();
   if(sectionOpen.tp)  renderTeamProgress();
+}
+
+/* ── Sprechwunsch-Panel ──────────────────────────────────── */
+function renderSprechwunschPanel() {
+  const panel = document.getElementById('swPanel');
+  if (!panel) return;
+  const byTime = (a,b) => new Date(a.updated_at) - new Date(b.updated_at);
+  const s0 = teams.filter(t => t.radio_status === 0).sort(byTime);
+  const s5 = teams.filter(t => t.radio_status === 5).sort(byTime);
+  const sw = [...s0, ...s5];
+  if (!sw.length) { panel.classList.remove('sw-visible'); return; }
+  panel.className = 'sw-panel sw-visible no-print';
+  const label = s0.length ? '🚨 Sprechwunsch' : '📻 Sprechwunsch';
+  const rows = sw.map(t => {
+    const cls   = t.radio_status === 0 ? 's0' : 's5';
+    const badge = t.radio_status === 0 ? 'S0 PRIO' : 'S5';
+    const time  = new Date(t.updated_at).toLocaleTimeString('de-DE',
+                    {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<li class="sw-item ${cls}">
+      <span class="sw-badge ${cls}">${badge}</span>
+      <span class="sw-name">${esc(t.name)}${t.callsign
+        ? ` <span style="font-weight:400;color:var(--muted)">(${esc(t.callsign)})</span>` : ''}</span>
+      <span class="sw-time">${time}</span>
+      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+    </li>`;
+  }).join('');
+  panel.innerHTML = `<div class="sw-header">${label}&nbsp;<span style="opacity:.7">${sw.length}</span></div>
+    <ul class="sw-list">${rows}</ul>`;
+}
+
+async function quittieren(teamId) {
+  const res = await fetch(`/api/teams/${teamId}/quittieren`, {method:'POST'});
+  if (!res.ok) { alert('Quittierung fehlgeschlagen.'); return; }
+  await refreshAll();
 }
 
 /* ── Auto-Refresh ────────────────────────────────────────── */
@@ -1181,7 +1247,7 @@ const TS_FIELDS=['alarm_time','status3_time','status4_time','status7_time','stat
 async function softRefreshCaseDocs() {
   const [docsRes,teamsRes]=await Promise.all([fetch('/api/casedocs'),fetch('/api/teams')]);
   if(docsRes.ok)  { const arr=await docsRes.json(); arr.forEach(d=>{caseDocs[d.id]=d;}); }
-  if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); }
+  if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); renderSprechwunschPanel(); }
 
   const focused=document.activeElement;
   ['P1','P2','P3','P4','P5','P6'].forEach(pid=>{

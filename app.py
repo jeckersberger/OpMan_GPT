@@ -302,6 +302,19 @@ def create_app():
                 return jsonify({"error": "radio_status not allowed"}), 400
             team.radio_status = rs
 
+            # Status 1 (Frei auf Funk) → alle Einsatzzuweisungen automatisch aufheben
+            if rs == 1:
+                for assignment in list(team.assignments):
+                    mission = assignment.mission
+                    db.session.delete(assignment)
+                    db.session.flush()
+                    # Mission auf "offen" zurücksetzen falls keine weiteren Teams mehr
+                    remaining = Assignment.query.filter_by(mission_id=mission.id).first()
+                    if not remaining and mission.status == "zugewiesen":
+                        mission.status = "offen"
+                        mission.updated_at = datetime.utcnow()
+                team.availability = "verfügbar"
+
         if "color" in data:
             team.color = (data["color"] or team.color).strip() or team.color
 

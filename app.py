@@ -200,6 +200,7 @@ def create_app():
                     setattr(doc, ts_field, None)
 
         doc.updated_at = datetime.utcnow()
+        _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
 
@@ -215,6 +216,7 @@ def create_app():
             return jsonify({"error": "unknown field"}), 400
         setattr(doc, field, datetime.utcnow())
         doc.updated_at = datetime.utcnow()
+        _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
 
@@ -474,30 +476,26 @@ def create_app():
                         mission.updated_at = datetime.utcnow()
                 team.availability = "verfügbar"
 
-                # Auto-complete CaseDoc: wenn S4 erreicht wurde, Station als fertig markieren
-                _identifiers = {team.name}
-                if team.callsign:
-                    _identifiers.add(team.callsign)
-                for _ident in _identifiers:
-                    _doc = CaseDoc.query.filter_by(assigned_evt=_ident).first()
-                    if _doc and _doc.status4_time is not None and not _doc.completed:
-                        _doc.completed = True
-                        _doc.updated_at = datetime.utcnow()
-
-            # Status 3/4/7/8 → CaseDoc-Zeitstempel automatisch setzen
-            # (falls dieses Team als assigned_evt in einem Fall eingetragen ist)
-            elif rs in {3, 4, 7, 8}:
-                _stamp_map = {3: "status3_time", 4: "status4_time",
-                              7: "status7_time",  8: "status8_time"}
-                _field = _stamp_map[rs]
-                _identifiers = {team.name}
-                if team.callsign:
-                    _identifiers.add(team.callsign)
-                for _ident in _identifiers:
-                    _doc = CaseDoc.query.filter_by(assigned_evt=_ident).first()
-                    if _doc and getattr(_doc, _field) is None:
+            # Aktiven CaseDoc suchen → Zeitstempel spiegeln + ggf. abschließen
+            _stamp_map = {3: "status3_time", 4: "status4_time",
+                          7: "status7_time", 8: "status8_time"}
+            _ident = {team.name, team.callsign} - {None}
+            _case_ref = None
+            for _i in _ident:
+                _doc = CaseDoc.query.filter_by(assigned_evt=_i).filter(
+                    CaseDoc.alarm_time.isnot(None)
+                ).first()
+                if _doc:
+                    _case_ref = _doc.id
+                    _field = _stamp_map.get(rs)
+                    if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
+                    if rs == 1 and _doc.status4_time is not None and not _doc.completed:
+                        _doc.completed = True
+                        _doc.updated_at = datetime.utcnow()
+                    break
+            _auto_log(team, rs, case_ref=_case_ref)
 
         if "color" in data:
             team.color = (data["color"] or team.color).strip() or team.color
@@ -643,6 +641,60 @@ def create_app():
         return jsonify({"ok": True})
 
     return app
+
+
+# ---------------------------
+# Synchronisation-Helfer
+# ---------------------------
+def _auto_log(team: "Team", rs: int, case_ref: str | None = None) -> None:
+    """Erstellt automatisch einen RadioLogEntry für eine FMS-Statusänderung."""
+    label = RADIO_STATUS_LABELS.get(rs, f"S{rs}")
+    name = team.callsign or team.name
+    entry = RadioLogEntry(
+        timestamp=datetime.utcnow(),
+        sender=name,
+        receiver="FüSt",
+        fms_status=rs,
+        case_ref=case_ref,
+        message=f"FMS {rs} – {label}",
+        created_at=datetime.utcnow(),
+    )
+    db.session.add(entry)
+
+
+def _sync_team_from_doc(doc: "CaseDoc") -> None:
+    """Leitet den aktuellen FMS-Status aus einem CaseDoc ab und setzt ihn am Team.
+    Wird gerufen nachdem ein Zeitstempel in der Falldokumentation gesetzt wurde."""
+    if not doc.assigned_evt:
+        return
+    team = Team.query.filter(
+        (Team.name == doc.assigned_evt) | (Team.callsign == doc.assigned_evt)
+    ).first()
+    if not team:
+        return
+
+    # Höchsten gesetzten Zeitstempel → FMS-Status ableiten
+    if doc.completed:
+        rs = 1
+    elif doc.status8_time:
+        rs = 8
+    elif doc.status7_time:
+        rs = 7
+    elif doc.status4_time:
+        rs = 4
+    elif doc.status3_time:
+        rs = 3
+    elif doc.alarm_time:
+        rs = 3  # Alarmierung impliziert Anfahrt
+    else:
+        return  # Nichts gesetzt → kein Update
+
+    if team.radio_status == rs:
+        return  # Schon korrekt, kein Eintrag nötig
+
+    team.radio_status = rs
+    team.updated_at = datetime.utcnow()
+    _auto_log(team, rs, case_ref=doc.id)
 
 
 # ---------------------------

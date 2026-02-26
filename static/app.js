@@ -850,19 +850,9 @@ function wireUI(){
   }
 }
 
-// ---------------- Auto-Refresh (Live-Sync mit Funkprotokoll-Seite) ----------------
-// Aktualisiert alle 10 s: Team-Marker + Übungs-Layer, ohne die Seitenleiste neu zu bauen
-setInterval(async () => {
-  try {
-    [teams, casedocData] = await Promise.all([
-      api("/api/teams"),
-      api("/api/casedocs"),
-    ]);
-    normalizeRadioLabels();
-    for (const t of teams) upsertTeamMarker(t);
-    if (exerciseGeodata) refreshExerciseLayer();
-  } catch (_) {}
-}, 10000);
+// ---------------- Auto-Refresh (Live-Sync, alle 10 s) ----------------
+// Vollständiger Refresh: Sidebar-Listen + Marker + Übungs-Layer
+setInterval(() => refreshAll(false).catch(() => {}), 10000);
 
 // ---------------- Boot ----------------
 window.addEventListener("DOMContentLoaded", async () => {

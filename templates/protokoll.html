@@ -1024,22 +1024,41 @@ async function refreshAll() {
 }
 
 /* ── Auto-Refresh ────────────────────────────────────────── */
-setInterval(async()=>{ const r=await fetch('/api/teams'); if(r.ok){teams=await r.json(); renderEvtBoard();} },10000);
 setInterval(async()=>{ const r=await fetch('/api/radiolog'); if(r.ok){logEntries=await r.json(); renderLogList();} },15000);
 
-// CaseDoc soft-refresh: update timestamp chips in-place (no input disruption)
+// CaseDoc soft-refresh: alle 10 s, ohne aktive Eingabefelder zu überschreiben
 const TS_FIELDS=['alarm_time','status3_time','status4_time','status7_time','status8_time'];
 async function softRefreshCaseDocs() {
-  const r=await fetch('/api/casedocs');
-  if(!r.ok) return;
-  const arr=await r.json();
-  arr.forEach(d=>{
-    caseDocs[d.id]=d;
+  const [docsRes,teamsRes]=await Promise.all([fetch('/api/casedocs'),fetch('/api/teams')]);
+  if(docsRes.ok)  { const arr=await docsRes.json(); arr.forEach(d=>{caseDocs[d.id]=d;}); }
+  if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); }
+
+  const focused=document.activeElement;
+  ['P1','P2','P3','P4','P5','P6'].forEach(pid=>{
+    const d=caseDocs[pid]||{};
+
+    // Zeitstempel-Chips in-place
     TS_FIELDS.forEach(f=>{
-      const el=document.getElementById(`ts_${d.id}_${f}`);
+      const el=document.getElementById(`ts_${pid}_${f}`);
       if(el){ el.textContent=d[f]?fmtTime(d[f]):'–'; el.classList.toggle('empty',!d[f]); }
     });
+
+    // EVT-Dropdown (Falldoku + Alarmgrid) – nur wenn nicht gerade fokussiert
+    const evtSel=document.getElementById(`evt_${pid}`);
+    if(evtSel && evtSel!==focused) evtSel.value=d.assigned_evt||'';
+
+    // Fertig-Checkbox + Karten-Styling
+    const chk=document.getElementById(`chk_${pid}`);
+    if(chk && chk!==focused){
+      chk.checked=!!d.completed;
+      document.getElementById(`card_${pid}`)?.classList.toggle('done',!!d.completed);
+      document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
+    }
+
+    // Eval-Badges (RMI/SK/PZC)
+    refreshEvalRow(pid);
   });
+
   renderAlarmGrid();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();

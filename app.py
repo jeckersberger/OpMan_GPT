@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
-from models import db, Team, Mission, Assignment
+from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry
 
 # ---------------------------
 # Funkstatus (Code -> Text)
@@ -37,12 +37,169 @@ def create_app():
 
     db.init_app(app)
 
+    # Übungs-Falldaten (statisch, aus Übungsleiterunterlagen)
+    EXERCISE_CASES = {
+        "P1": {
+            "schlagwort": "VU (schwer) – Radfahrer vs. PKW",
+            "patient": "Lennart Voigt", "alter": 27, "geschlecht": "m",
+            "w3w": "///erstes.arbeitswelt.spülmittel", "w3w_alarm": None,
+            "rmi_soll": "211", "sk_soll": "1", "pzc_soll": "211271",
+            "besonderheit": "Pflichtfall ABCD-Schema (SK1). RD + POL auf Anfahrt.",
+        },
+        "P2": {
+            "schlagwort": "Sturz Skateboard – Handgelenksverletzung",
+            "patient": "Elzbieta Szczepaniak", "alter": 19, "geschlecht": "w",
+            "w3w": "///vorweisen.kanone.möchte", "w3w_alarm": None,
+            "rmi_soll": "272", "sk_soll": "3", "pzc_soll": "272193",
+            "besonderheit": "Name in Alarmierung falsch (Lisa Schneider). Buchstabieren erforderlich.",
+        },
+        "P3": {
+            "schlagwort": "Atemnot – COPD-Exazerbation",
+            "patient": "Hakan Yilmaz", "alter": 62, "geschlecht": "m",
+            "w3w": "///wunder.untersuchen.lacke",
+            "w3w_alarm": "///geiger.kerzen.besonders",
+            "rmi_soll": "312", "sk_soll": "2", "pzc_soll": "312622",
+            "besonderheit": "Adressfalle: Alarmadresse falsch. Korrektur erst nach Rückmeldung 'keine Lage'.",
+        },
+        "P4": {
+            "schlagwort": "VU (leicht) – Auffahrunfall",
+            "patient": "Kevin Schäfer", "alter": 31, "geschlecht": "m",
+            "w3w": "///zumal.genügt.hellbraun", "w3w_alarm": None,
+            "rmi_soll": "—", "sk_soll": "—", "pzc_soll": "—",
+            "besonderheit": "Fokus: Lagemeldung + Nachforderung (Gefahrenlage erkennen). Patient lehnt Transport ab.",
+        },
+        "P5": {
+            "schlagwort": "Schlaganfall – neurologischer Ausfall",
+            "patient": "Jürgen Krämer", "alter": 72, "geschlecht": "m",
+            "w3w": "///familienname.haltung.aufdeckung", "w3w_alarm": None,
+            "rmi_soll": "421", "sk_soll": "2", "pzc_soll": "421722",
+            "besonderheit": "Stroke-Klinik. Fokus auf PZC / Klinikwahl. Antikoagulation beachten.",
+        },
+        "P6": {
+            "schlagwort": "Brustschmerz – V.a. ACS",
+            "patient": "Sabine Lutz", "alter": 56, "geschlecht": "w",
+            "w3w": "///obernum.kranz.wählen", "w3w_alarm": None,
+            "rmi_soll": "331", "sk_soll": "2", "pzc_soll": "331562",
+            "besonderheit": "ASS-Allergie! Fokus auf PZC / Klinikwahl.",
+        },
+    }
+
     with app.app_context():
         db.create_all()
+        # CaseDoc-Einträge initialisieren (nur beim ersten Start)
+        for case_id in EXERCISE_CASES:
+            if CaseDoc.query.get(case_id) is None:
+                db.session.add(CaseDoc(id=case_id))
+        db.session.commit()
 
     @app.get("/")
     def index():
         return render_template("index.html")
+
+    @app.get("/protokoll")
+    def protokoll():
+        return render_template("protokoll.html", cases=EXERCISE_CASES)
+
+    # ---------------------------
+    # CaseDoc API
+    # ---------------------------
+    @app.get("/api/casedocs")
+    def list_casedocs():
+        docs = CaseDoc.query.order_by(CaseDoc.id).all()
+        return jsonify([serialize_casedoc(d) for d in docs])
+
+    @app.patch("/api/casedocs/<string:case_id>")
+    def update_casedoc(case_id: str):
+        doc = CaseDoc.query.get_or_404(case_id)
+        data = request.get_json(force=True)
+
+        for field in ("assigned_evt", "rmi_reported", "sk_reported",
+                      "pzc_reported", "zielklinik", "notes"):
+            if field in data:
+                setattr(doc, field, (data[field] or "").strip() or None)
+
+        if "completed" in data:
+            doc.completed = bool(data["completed"])
+
+        # Zeitstempel-Felder (ISO-String oder null)
+        for ts_field in ("alarm_time", "status3_time", "status4_time",
+                         "status7_time", "status8_time"):
+            if ts_field in data:
+                val = data[ts_field]
+                if val:
+                    try:
+                        setattr(doc, ts_field,
+                                datetime.fromisoformat(val.replace("Z", "+00:00"))
+                                        .replace(tzinfo=None))
+                    except (ValueError, AttributeError):
+                        pass
+                else:
+                    setattr(doc, ts_field, None)
+
+        doc.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify(serialize_casedoc(doc))
+
+    @app.post("/api/casedocs/<string:case_id>/stamp")
+    def stamp_casedoc(case_id: str):
+        """Setzt einen Zeitstempel auf 'jetzt'."""
+        doc = CaseDoc.query.get_or_404(case_id)
+        data = request.get_json(force=True)
+        field = data.get("field")
+        allowed = {"alarm_time", "status3_time", "status4_time",
+                   "status7_time", "status8_time"}
+        if field not in allowed:
+            return jsonify({"error": "unknown field"}), 400
+        setattr(doc, field, datetime.utcnow())
+        doc.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify(serialize_casedoc(doc))
+
+    # ---------------------------
+    # RadioLog API
+    # ---------------------------
+    @app.get("/api/radiolog")
+    def list_radiolog():
+        entries = RadioLogEntry.query.order_by(RadioLogEntry.timestamp.desc()).all()
+        return jsonify([serialize_logentry(e) for e in entries])
+
+    @app.post("/api/radiolog")
+    def create_logentry():
+        data = request.get_json(force=True)
+        sender = (data.get("sender") or "").strip()
+        if not sender:
+            return jsonify({"error": "sender is required"}), 400
+        message = (data.get("message") or "").strip()
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+
+        ts_raw = data.get("timestamp")
+        if ts_raw:
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except (ValueError, AttributeError):
+                ts = datetime.utcnow()
+        else:
+            ts = datetime.utcnow()
+
+        entry = RadioLogEntry(
+            timestamp=ts,
+            sender=sender,
+            receiver=(data.get("receiver") or "").strip() or None,
+            fms_status=int(data["fms_status"]) if data.get("fms_status") is not None else None,
+            case_ref=(data.get("case_ref") or "").strip() or None,
+            message=message,
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify(serialize_logentry(entry)), 201
+
+    @app.delete("/api/radiolog/<int:entry_id>")
+    def delete_logentry(entry_id: int):
+        entry = RadioLogEntry.query.get_or_404(entry_id)
+        db.session.delete(entry)
+        db.session.commit()
+        return jsonify({"ok": True})
 
     # ---------------------------
     # Teams
@@ -264,6 +421,40 @@ def create_app():
 # ---------------------------
 # Serialization
 # ---------------------------
+def serialize_casedoc(d: CaseDoc):
+    def fmt(dt):
+        return (dt.isoformat() + "Z") if dt else None
+    return {
+        "id":            d.id,
+        "assigned_evt":  d.assigned_evt,
+        "alarm_time":    fmt(d.alarm_time),
+        "status3_time":  fmt(d.status3_time),
+        "status4_time":  fmt(d.status4_time),
+        "status7_time":  fmt(d.status7_time),
+        "status8_time":  fmt(d.status8_time),
+        "rmi_reported":  d.rmi_reported,
+        "sk_reported":   d.sk_reported,
+        "pzc_reported":  d.pzc_reported,
+        "zielklinik":    d.zielklinik,
+        "notes":         d.notes,
+        "completed":     d.completed,
+        "updated_at":    fmt(d.updated_at),
+    }
+
+
+def serialize_logentry(e: RadioLogEntry):
+    return {
+        "id":         e.id,
+        "timestamp":  (e.timestamp.isoformat() + "Z"),
+        "sender":     e.sender,
+        "receiver":   e.receiver,
+        "fms_status": e.fms_status,
+        "case_ref":   e.case_ref,
+        "message":    e.message,
+        "created_at": (e.created_at.isoformat() + "Z"),
+    }
+
+
 def serialize_team(t: Team, include_missions: bool = False):
     payload = {
         "id": t.id,

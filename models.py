@@ -3,6 +3,45 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
+class CaseDoc(db.Model):
+    """Dokumentation eines Übungsfalls (P1–P6)."""
+    __tablename__ = "case_docs"
+
+    id = db.Column(db.String(5), primary_key=True)   # 'P1' … 'P6'
+
+    assigned_evt   = db.Column(db.String(20),  nullable=True)   # z.B. "EVT 3"
+    alarm_time     = db.Column(db.DateTime,    nullable=True)
+    status3_time   = db.Column(db.DateTime,    nullable=True)
+    status4_time   = db.Column(db.DateTime,    nullable=True)
+    status7_time   = db.Column(db.DateTime,    nullable=True)
+    status8_time   = db.Column(db.DateTime,    nullable=True)
+
+    rmi_reported   = db.Column(db.String(20),  nullable=True)
+    sk_reported    = db.Column(db.String(5),   nullable=True)
+    pzc_reported   = db.Column(db.String(20),  nullable=True)
+    zielklinik     = db.Column(db.String(120), nullable=True)
+
+    notes          = db.Column(db.Text,        nullable=True)
+    completed      = db.Column(db.Boolean,     nullable=False, default=False)
+
+    updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
+
+class RadioLogEntry(db.Model):
+    """Einzelner Eintrag im Funkprotokoll."""
+    __tablename__ = "radio_log"
+
+    id         = db.Column(db.Integer,  primary_key=True)
+    timestamp  = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    sender     = db.Column(db.String(50), nullable=False)
+    receiver   = db.Column(db.String(50), nullable=True)
+    fms_status = db.Column(db.Integer,  nullable=True)
+    case_ref   = db.Column(db.String(5), nullable=True)   # 'P1' … 'P6'
+    message    = db.Column(db.Text,     nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Team(db.Model):
     __tablename__ = "teams"
     id = db.Column(db.Integer, primary_key=True)

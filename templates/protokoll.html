@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Funkprotokoll – BRK Übung Feucht</title>
+  <style>
+    :root {
+      --bg:      #0b1220;
+      --panel:   #111b2e;
+      --panel2:  #162035;
+      --text:    #e7eefc;
+      --accent:  #4ea1ff;
+      --green:   #3ddc84;
+      --yellow:  #f5c842;
+      --red:     #ff4f4f;
+      --muted:   #a6b3d1;
+      --border:  #223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0 1.25rem;
+      height: 52px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar a.back {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: .85rem;
+      padding: .3rem .7rem;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+    }
+    .topbar a.back:hover { background: rgba(78,161,255,.12); }
+    .topbar h1 { font-size: 1rem; font-weight: 700; flex: 1; }
+    .topbar .meta { font-size: .78rem; color: var(--muted); }
+
+    .btn {
+      padding: .35rem .75rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: .82rem;
+      font-family: inherit;
+      font-weight: 600;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-success   { background: var(--green);  color: #000; }
+    .btn-warn      { background: var(--yellow); color: #000; }
+    .btn-danger    { background: var(--red);    color: #fff; }
+    .btn-ghost     { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-sm        { padding: .22rem .5rem; font-size: .76rem; }
+
+    /* ── Sections ── */
+    .section { padding: 1.1rem 1.25rem; }
+    .section-title {
+      font-size: .85rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .75rem;
+    }
+
+    /* ── EVT Status Board ── */
+    .evt-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: .6rem;
+    }
+    .evt-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .6rem .8rem;
+      cursor: pointer;
+    }
+    .evt-card:hover { border-color: var(--accent); }
+    .evt-card .name { font-weight: 700; font-size: .9rem; }
+    .evt-card .status-badge {
+      display: inline-block;
+      margin-top: .25rem;
+      padding: .12rem .5rem;
+      border-radius: 12px;
+      font-size: .72rem;
+      font-weight: 600;
+      background: var(--panel2);
+      color: var(--muted);
+    }
+    .evt-card.s1 .status-badge, .evt-card.s2 .status-badge { background:#1a3a20; color: var(--green); }
+    .evt-card.s3 .status-badge { background:#2a2000; color: var(--yellow); }
+    .evt-card.s4 .status-badge { background:#1a2a3a; color: var(--accent); }
+    .evt-card.s7 .status-badge, .evt-card.s8 .status-badge { background:#2a1a00; color: #ff9f43; }
+    .evt-card.s0 .status-badge, .evt-card.s5 .status-badge { background:#3a1a1a; color: var(--red); }
+
+    /* ── Case Grid ── */
+    .case-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: .9rem;
+    }
+    .case-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .case-card.done { border-color: var(--green); opacity: .85; }
+
+    .case-header {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .65rem .85rem;
+      background: var(--panel2);
+      border-bottom: 1px solid var(--border);
+    }
+    .case-id {
+      font-size: 1rem;
+      font-weight: 800;
+      background: var(--accent);
+      color: #fff;
+      padding: .1rem .5rem;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .case-id.done { background: var(--green); color: #000; }
+    .case-title   { font-size: .82rem; font-weight: 600; flex: 1; }
+    .case-toggle  { font-size: .75rem; color: var(--muted); cursor: pointer; user-select: none; }
+
+    .case-body { padding: .75rem .85rem; display: flex; flex-direction: column; gap: .55rem; }
+
+    .case-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .25rem .6rem;
+      font-size: .78rem;
+      color: var(--muted);
+    }
+    .case-meta span b { color: var(--text); }
+
+    .hint-box {
+      font-size: .74rem;
+      background: rgba(245,200,66,.07);
+      border: 1px solid rgba(245,200,66,.25);
+      border-radius: 6px;
+      padding: .35rem .55rem;
+      color: #c8a800;
+    }
+
+    .soll-row {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      font-size: .75rem;
+    }
+    .soll-chip {
+      padding: .18rem .5rem;
+      border-radius: 10px;
+      background: rgba(78,161,255,.1);
+      border: 1px solid rgba(78,161,255,.25);
+      color: var(--accent);
+    }
+
+    label.form-label {
+      font-size: .74rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: .18rem;
+    }
+    .form-row { display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
+    .form-row > div { flex: 1; min-width: 120px; }
+    input, select, textarea {
+      width: 100%;
+      padding: .35rem .5rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #0d1525;
+      color: var(--text);
+      font-size: .8rem;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 52px; }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Timestamps */
+    .ts-row {
+      display: flex;
+      gap: .4rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .ts-chip {
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      font-size: .74rem;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .2rem .45rem;
+    }
+    .ts-chip .ts-label { color: var(--muted); }
+    .ts-chip .ts-val   { font-weight: 700; color: var(--text); }
+    .ts-chip .ts-val.empty { color: var(--border); }
+
+    .eval-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .eval-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      font-size: .74rem;
+      padding: .15rem .5rem;
+      border-radius: 10px;
+    }
+    .eval-badge.ok    { background: rgba(61,220,132,.12); color: var(--green); border: 1px solid rgba(61,220,132,.3); }
+    .eval-badge.fail  { background: rgba(255,79,79,.1);   color: var(--red);   border: 1px solid rgba(255,79,79,.3); }
+    .eval-badge.na    { background: rgba(166,179,209,.07); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ── Radio Log ── */
+    .log-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr 80px 80px 1fr auto;
+      gap: .5rem;
+      align-items: end;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem;
+      margin-bottom: .8rem;
+    }
+    @media (max-width: 900px) {
+      .log-form { grid-template-columns: 1fr 1fr; }
+    }
+
+    .log-list { display: flex; flex-direction: column; gap: .35rem; }
+    .log-entry {
+      display: grid;
+      grid-template-columns: 80px 120px 80px 60px 60px 1fr 28px;
+      gap: .4rem;
+      align-items: start;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: .45rem .7rem;
+      font-size: .78rem;
+    }
+    @media (max-width: 1000px) {
+      .log-entry { grid-template-columns: 1fr; }
+    }
+    .log-entry .ts   { color: var(--muted); font-size: .72rem; white-space: nowrap; }
+    .log-entry .from { font-weight: 700; }
+    .log-entry .to   { color: var(--muted); }
+    .log-entry .fms  {
+      display: inline-block;
+      padding: .1rem .4rem;
+      border-radius: 10px;
+      background: rgba(78,161,255,.1);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: .72rem;
+      white-space: nowrap;
+    }
+    .log-entry .ref  {
+      display: inline-block;
+      padding: .1rem .4rem;
+      border-radius: 10px;
+      background: rgba(61,220,132,.08);
+      color: var(--green);
+      font-size: .72rem;
+      font-weight: 700;
+    }
+    .log-entry .msg  { color: var(--text); }
+    .log-entry .del  {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .9rem;
+      padding: 0;
+      line-height: 1;
+    }
+    .log-entry .del:hover { color: var(--red); }
+
+    .log-empty { color: var(--muted); font-size: .84rem; padding: .5rem; }
+
+    /* ── Misc ── */
+    hr.divider { border: none; border-top: 1px solid var(--border); margin: .15rem 0; }
+    .save-indicator {
+      font-size: .72rem;
+      color: var(--green);
+      opacity: 0;
+      transition: opacity .4s;
+    }
+    .save-indicator.show { opacity: 1; }
+    .text-muted { color: var(--muted); font-size: .78rem; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ TOP BAR ═══════════════════════ -->
+<div class="topbar">
+  <a class="back" href="/">← Einsatzleiter</a>
+  <h1>BRK Funkübung Feucht – Übungsprotokoll</h1>
+  <span class="meta" id="clock"></span>
+  <button class="btn btn-ghost btn-sm" onclick="refreshAll()">⟳ Aktualisieren</button>
+</div>
+
+<!-- ═══════════════════════ EVT STATUS ═══════════════════════ -->
+<div class="section">
+  <div class="section-title">EVT-Status (Live)</div>
+  <div class="evt-board" id="evtBoard">
+    <div class="text-muted">Lade…</div>
+  </div>
+</div>
+
+<hr class="divider" style="margin:0 1.25rem;">
+
+<!-- ═══════════════════════ FALL-DOKUMENTATION ═══════════════════════ -->
+<div class="section">
+  <div class="section-title">Falldokumentation P1–P6</div>
+  <div class="case-grid" id="caseGrid">
+    <div class="text-muted">Lade…</div>
+  </div>
+</div>
+
+<hr class="divider" style="margin:0 1.25rem;">
+
+<!-- ═══════════════════════ FUNKPROTOKOLL ═══════════════════════ -->
+<div class="section">
+  <div class="section-title">Funkprotokoll</div>
+
+  <!-- Eingabe-Formular -->
+  <div class="log-form">
+    <div>
+      <label class="form-label">Von</label>
+      <input id="logSender" type="text" placeholder="Äskulap Feucht / EVT X" list="senderList"/>
+      <datalist id="senderList">
+        <option value="Äskulap Feucht"/>
+        <option value="EVT 1"/><option value="EVT 2"/><option value="EVT 3"/>
+        <option value="EVT 4"/><option value="EVT 5"/><option value="EVT 6"/>
+      </datalist>
+    </div>
+    <div>
+      <label class="form-label">An</label>
+      <input id="logReceiver" type="text" placeholder="Äskulap Feucht / EVT X" list="receiverList"/>
+      <datalist id="receiverList">
+        <option value="Äskulap Feucht"/>
+        <option value="EVT 1"/><option value="EVT 2"/><option value="EVT 3"/>
+        <option value="EVT 4"/><option value="EVT 5"/><option value="EVT 6"/>
+      </datalist>
+    </div>
+    <div>
+      <label class="form-label">Status</label>
+      <select id="logFms">
+        <option value="">–</option>
+        <option value="0">S0 – Dring. SW</option>
+        <option value="1">S1 – Frei Funk</option>
+        <option value="2">S2 – Frei Wache</option>
+        <option value="3">S3 – Unterwegs</option>
+        <option value="4">S4 – Einsatzstelle</option>
+        <option value="5">S5 – Sprechwunsch</option>
+        <option value="6">S6 – Außer Dienst</option>
+        <option value="7">S7 – Transport</option>
+        <option value="8">S8 – Ziel erreicht</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Fall</label>
+      <select id="logCase">
+        <option value="">–</option>
+        <option value="P1">P1</option><option value="P2">P2</option>
+        <option value="P3">P3</option><option value="P4">P4</option>
+        <option value="P5">P5</option><option value="P6">P6</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Nachricht / Inhalt</label>
+      <input id="logMsg" type="text" placeholder="Funkspruch oder Notiz…"/>
+    </div>
+    <div>
+      <label class="form-label">&nbsp;</label>
+      <button class="btn btn-primary" onclick="addLogEntry()">+ Eintragen</button>
+    </div>
+  </div>
+
+  <div class="log-list" id="logList">
+    <div class="log-empty">Keine Einträge.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ JAVASCRIPT ═══════════════════════ -->
+<script>
+// ── Statische Übungsdaten ──────────────────────────────────
+const CASES_META = {{ cases | tojson }};
+
+const FMS_LABELS = {
+  0:'S0 Dring. SW', 1:'S1 Frei Funk', 2:'S2 Frei Wache',
+  3:'S3 Unterwegs', 4:'S4 Einsatzstelle', 5:'S5 Sprechwunsch',
+  6:'S6 Außer Dienst', 7:'S7 Transport', 8:'S8 Ziel'
+};
+
+// ── State ──────────────────────────────────────────────────
+let caseDocs = {};      // { P1: {...}, ... }
+let teams    = [];
+let logEntries = [];
+
+// ── Utilities ──────────────────────────────────────────────
+function fmtTime(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function fmtDateTime(isoStr) {
+  if (!isoStr) return '–';
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function nowISO() { return new Date().toISOString(); }
+
+// ── Clock ──────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('de-DE');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── EVT Board ─────────────────────────────────────────────
+function renderEvtBoard() {
+  const board = document.getElementById('evtBoard');
+  const evts = teams
+    .filter(t => /^EVT\s*\d/i.test(t.name))
+    .sort((a,b) => a.name.localeCompare(b.name, 'de'));
+
+  if (!evts.length) {
+    board.innerHTML = '<div class="text-muted">Keine EVT-Teams in der Datenbank. Teams im Einsatzleiter anlegen.</div>';
+    return;
+  }
+  board.innerHTML = evts.map(t => {
+    const rs = t.radio_status;
+    const cls = [0,5].includes(rs) ? 's0' : `s${rs}`;
+    const label = FMS_LABELS[rs] || `S${rs}`;
+    return `<div class="evt-card ${cls}">
+      <div class="name">${esc(t.name)}</div>
+      <div class="status-badge">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Case Grid ──────────────────────────────────────────────
+function renderCaseGrid() {
+  const grid = document.getElementById('caseGrid');
+  const ids = ['P1','P2','P3','P4','P5','P6'];
+  grid.innerHTML = ids.map(pid => buildCaseCard(pid)).join('');
+  // Attach save listeners
+  ids.forEach(pid => attachCaseListeners(pid));
+}
+
+function buildCaseCard(pid) {
+  const meta = CASES_META[pid] || {};
+  const doc  = caseDocs[pid] || {};
+  const done = doc.completed;
+
+  const evtOptions = ['','EVT 1','EVT 2','EVT 3','EVT 4','EVT 5','EVT 6']
+    .map(v => `<option value="${v}" ${doc.assigned_evt===v?'selected':''}>${v||'– nicht zugewiesen –'}</option>`)
+    .join('');
+
+  const tsFields = [
+    {field:'alarm_time',   label:'Alarm'},
+    {field:'status3_time', label:'S3'},
+    {field:'status4_time', label:'S4'},
+    {field:'status7_time', label:'S7'},
+    {field:'status8_time', label:'S8'},
+  ];
+
+  const tsRow = tsFields.map(({field, label}) => {
+    const val = doc[field];
+    const display = val ? fmtTime(val) : '–';
+    const empty = !val;
+    return `<div class="ts-chip">
+      <span class="ts-label">${label}</span>
+      <span class="ts-val${empty?' empty':''}" id="ts_${pid}_${field}">${display}</span>
+      <button class="btn btn-ghost btn-sm" title="Jetzt stempeln"
+        onclick="stampTime('${pid}','${field}')">⏱</button>
+    </div>`;
+  }).join('');
+
+  // Eval badges
+  function evalBadge(label, reported, soll) {
+    if (soll === '—' || !soll) return `<span class="eval-badge na">${label}: n/a</span>`;
+    if (!reported) return `<span class="eval-badge na">${label}: –</span>`;
+    const ok = reported.trim() === soll.trim();
+    return `<span class="eval-badge ${ok?'ok':'fail'}">${label}: ${esc(reported)} ${ok?'✓':'≠'+soll}</span>`;
+  }
+
+  const evalRow = [
+    evalBadge('RMI', doc.rmi_reported, meta.rmi_soll),
+    evalBadge('SK',  doc.sk_reported,  meta.sk_soll),
+    evalBadge('PZC', doc.pzc_reported, meta.pzc_soll),
+  ].join('');
+
+  return `
+<div class="case-card${done?' done':''}" id="card_${pid}">
+  <div class="case-header">
+    <span class="case-id${done?' done':''}">${pid}</span>
+    <div class="case-title">${esc(meta.schlagwort||'')}</div>
+    <label style="display:flex;align-items:center;gap:.3rem;font-size:.75rem;cursor:pointer;">
+      <input type="checkbox" id="chk_${pid}" ${done?'checked':''} onchange="toggleDone('${pid}')">
+      Fertig
+    </label>
+  </div>
+  <div class="case-body">
+
+    <!-- Meta -->
+    <div class="case-meta">
+      <span><b>${esc(meta.patient||'–')}</b></span>
+      <span>${meta.alter||'–'} J., ${meta.geschlecht==='m'?'männl.':meta.geschlecht==='w'?'weibl.':'–'}</span>
+      <span colspan="2" style="grid-column:1/-1;font-size:.72rem;">
+        📍 <a href="https://what3words.com/${(meta.w3w||'').replace('///','')}"
+             style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w||'–')}</a>
+        ${meta.w3w_alarm ? `<span style="color:var(--yellow);margin-left:.4rem;">⚠ Alarm: ${esc(meta.w3w_alarm)}</span>` : ''}
+      </span>
+    </div>
+
+    <!-- Hinweis -->
+    ${meta.besonderheit ? `<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>` : ''}
+
+    <!-- Soll-Werte -->
+    <div class="soll-row">
+      <span class="soll-chip">RMI: ${esc(meta.rmi_soll||'–')}</span>
+      <span class="soll-chip">SK: ${esc(meta.sk_soll||'–')}</span>
+      <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
+    </div>
+
+    <hr class="divider">
+
+    <!-- EVT Zuweisung -->
+    <div>
+      <label class="form-label">Zugewiesenes EVT-Team</label>
+      <select id="evt_${pid}" onchange="saveCase('${pid}')">
+        ${evtOptions}
+      </select>
+    </div>
+
+    <!-- Zeitstempel -->
+    <div>
+      <label class="form-label">Zeitstempel</label>
+      <div class="ts-row">${tsRow}</div>
+    </div>
+
+    <!-- Ist-Werte -->
+    <div class="form-row">
+      <div>
+        <label class="form-label">RMI (ist)</label>
+        <input id="rmi_${pid}" type="text" placeholder="${esc(meta.rmi_soll||'–')}"
+          value="${esc(doc.rmi_reported||'')}" oninput="debounceSave('${pid}')">
+      </div>
+      <div>
+        <label class="form-label">SK (ist)</label>
+        <input id="sk_${pid}" type="text" placeholder="${esc(meta.sk_soll||'–')}"
+          value="${esc(doc.sk_reported||'')}" oninput="debounceSave('${pid}')">
+      </div>
+      <div>
+        <label class="form-label">PZC (ist)</label>
+        <input id="pzc_${pid}" type="text" placeholder="${esc(meta.pzc_soll||'–')}"
+          value="${esc(doc.pzc_reported||'')}" oninput="debounceSave('${pid}')">
+      </div>
+    </div>
+    <div>
+      <label class="form-label">Zielklinik</label>
+      <input id="klinik_${pid}" type="text" placeholder="Klinik…"
+        value="${esc(doc.zielklinik||'')}" oninput="debounceSave('${pid}')">
+    </div>
+    <div>
+      <label class="form-label">Notizen / Beobachtungen</label>
+      <textarea id="notes_${pid}" oninput="debounceSave('${pid}')">${esc(doc.notes||'')}</textarea>
+    </div>
+
+    <!-- Auswertung -->
+    <div class="eval-row">${evalRow}</div>
+
+    <div style="display:flex;justify-content:flex-end;">
+      <span class="save-indicator" id="saved_${pid}">✓ gespeichert</span>
+    </div>
+  </div>
+</div>`;
+}
+
+function attachCaseListeners(pid) { /* listeners via inline events */ }
+
+// Debounce-Save
+const debounceTimers = {};
+function debounceSave(pid, delay=800) {
+  clearTimeout(debounceTimers[pid]);
+  debounceTimers[pid] = setTimeout(() => saveCase(pid), delay);
+}
+
+async function saveCase(pid) {
+  const payload = {
+    assigned_evt: document.getElementById(`evt_${pid}`)?.value || null,
+    rmi_reported: document.getElementById(`rmi_${pid}`)?.value || null,
+    sk_reported:  document.getElementById(`sk_${pid}`)?.value  || null,
+    pzc_reported: document.getElementById(`pzc_${pid}`)?.value || null,
+    zielklinik:   document.getElementById(`klinik_${pid}`)?.value || null,
+    notes:        document.getElementById(`notes_${pid}`)?.value || null,
+  };
+  const res = await fetch(`/api/casedocs/${pid}`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+  });
+  if (res.ok) {
+    const updated = await res.json();
+    caseDocs[pid] = updated;
+    flashSaved(pid);
+    refreshEvalRow(pid);
+  }
+}
+
+async function toggleDone(pid) {
+  const checked = document.getElementById(`chk_${pid}`)?.checked;
+  const res = await fetch(`/api/casedocs/${pid}`, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({completed: checked}),
+  });
+  if (res.ok) {
+    const updated = await res.json();
+    caseDocs[pid] = updated;
+    document.getElementById(`card_${pid}`)?.classList.toggle('done', checked);
+    document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done', checked);
+  }
+}
+
+async function stampTime(pid, field) {
+  const res = await fetch(`/api/casedocs/${pid}/stamp`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({field}),
+  });
+  if (res.ok) {
+    const updated = await res.json();
+    caseDocs[pid] = updated;
+    const el = document.getElementById(`ts_${pid}_${field}`);
+    if (el) {
+      el.textContent = fmtTime(updated[field]) || '–';
+      el.classList.remove('empty');
+    }
+  }
+}
+
+function flashSaved(pid) {
+  const el = document.getElementById(`saved_${pid}`);
+  if (!el) return;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+function refreshEvalRow(pid) {
+  // Partial re-render of eval row only
+  const meta = CASES_META[pid] || {};
+  const doc  = caseDocs[pid] || {};
+  function evalBadge(label, reported, soll) {
+    if (soll === '—' || !soll) return `<span class="eval-badge na">${label}: n/a</span>`;
+    if (!reported) return `<span class="eval-badge na">${label}: –</span>`;
+    const ok = reported.trim() === soll.trim();
+    return `<span class="eval-badge ${ok?'ok':'fail'}">${label}: ${esc(reported)} ${ok?'✓':'≠'+soll}</span>`;
+  }
+  const rows = document.querySelectorAll(`#card_${pid} .eval-row`);
+  rows.forEach(row => {
+    row.innerHTML = [
+      evalBadge('RMI', doc.rmi_reported, meta.rmi_soll),
+      evalBadge('SK',  doc.sk_reported,  meta.sk_soll),
+      evalBadge('PZC', doc.pzc_reported, meta.pzc_soll),
+    ].join('');
+  });
+}
+
+// ── Radio Log ──────────────────────────────────────────────
+function renderLogList() {
+  const list = document.getElementById('logList');
+  if (!logEntries.length) {
+    list.innerHTML = '<div class="log-empty">Keine Einträge.</div>';
+    return;
+  }
+  list.innerHTML = [...logEntries].sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp))
+    .map(e => {
+      const fmsLabel = e.fms_status != null ? FMS_LABELS[e.fms_status] || `S${e.fms_status}` : '';
+      return `<div class="log-entry">
+        <span class="ts">${fmtDateTime(e.timestamp)}</span>
+        <span class="from">${esc(e.sender)}</span>
+        <span class="to">${e.receiver ? '→ '+esc(e.receiver) : ''}</span>
+        <span class="fms">${fmsLabel}</span>
+        <span class="ref">${e.case_ref ? esc(e.case_ref) : ''}</span>
+        <span class="msg">${esc(e.message)}</span>
+        <button class="del" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+      </div>`;
+    }).join('');
+}
+
+async function addLogEntry() {
+  const sender  = document.getElementById('logSender').value.trim();
+  const receiver= document.getElementById('logReceiver').value.trim();
+  const fms     = document.getElementById('logFms').value;
+  const caseRef = document.getElementById('logCase').value;
+  const msg     = document.getElementById('logMsg').value.trim();
+
+  if (!sender || !msg) { alert('Von und Nachricht sind erforderlich.'); return; }
+
+  const payload = {
+    sender,
+    receiver:   receiver  || null,
+    fms_status: fms !== '' ? parseInt(fms) : null,
+    case_ref:   caseRef   || null,
+    message:    msg,
+    timestamp:  new Date().toISOString(),
+  };
+  const res = await fetch('/api/radiolog', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+  });
+  if (res.ok) {
+    const entry = await res.json();
+    logEntries.unshift(entry);
+    renderLogList();
+    document.getElementById('logMsg').value    = '';
+    document.getElementById('logFms').value    = '';
+    document.getElementById('logCase').value   = '';
+  }
+}
+
+async function deleteLogEntry(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  const res = await fetch(`/api/radiolog/${id}`, {method:'DELETE'});
+  if (res.ok) {
+    logEntries = logEntries.filter(e => e.id !== id);
+    renderLogList();
+  }
+}
+
+// ── Data Fetch ─────────────────────────────────────────────
+async function fetchAll() {
+  const [docsRes, teamsRes, logRes] = await Promise.all([
+    fetch('/api/casedocs'),
+    fetch('/api/teams'),
+    fetch('/api/radiolog'),
+  ]);
+  if (docsRes.ok) {
+    const arr = await docsRes.json();
+    arr.forEach(d => { caseDocs[d.id] = d; });
+  }
+  if (teamsRes.ok) { teams = await teamsRes.json(); }
+  if (logRes.ok)   { logEntries = await logRes.json(); }
+}
+
+async function refreshAll() {
+  await fetchAll();
+  renderEvtBoard();
+  renderCaseGrid();
+  renderLogList();
+}
+
+// ── Init ───────────────────────────────────────────────────
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto-refresh EVT every 10 s, log every 15 s
+setInterval(async () => {
+  const res = await fetch('/api/teams');
+  if (res.ok) { teams = await res.json(); renderEvtBoard(); }
+}, 10000);
+setInterval(async () => {
+  const res = await fetch('/api/radiolog');
+  if (res.ok) { logEntries = await res.json(); renderLogList(); }
+}, 15000);
+
+refreshAll();
+</script>
+</body>
+</html>

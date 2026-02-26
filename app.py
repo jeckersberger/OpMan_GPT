@@ -511,18 +511,30 @@ def create_app():
                     if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
-                    # S1 nach S4 oder S8 → CaseDoc zurücksetzen
-                    # (Zeitstempel + EVT löschen, bereit für nächsten Trupp)
+                    # S1 nach S4 oder S8 → CaseDoc abschließen + Mission schließen
                     if rs == 1 and (_doc.status4_time is not None
                                     or _doc.status8_time is not None):
+                        _done_case_id = _doc.id
+                        # CaseDoc: Zeitstempel zurücksetzen, als abgeschlossen markieren
                         _doc.assigned_evt = None
                         _doc.alarm_time   = None
                         _doc.status3_time = None
                         _doc.status4_time = None
                         _doc.status7_time = None
                         _doc.status8_time = None
-                        _doc.completed    = False
+                        _doc.completed    = True
                         _doc.updated_at   = datetime.utcnow()
+                        # Mission abschließen + Assignment dieses Teams aufheben
+                        for _dm in Mission.query.filter(
+                            Mission.title.like(f"{_done_case_id}:%")
+                        ).all():
+                            _dm.status = "abgeschlossen"
+                            _dm.updated_at = datetime.utcnow()
+                            _del_a = Assignment.query.filter_by(
+                                team_id=team.id, mission_id=_dm.id
+                            ).first()
+                            if _del_a:
+                                db.session.delete(_del_a)
                     break
             _auto_log(team, rs, case_ref=_case_ref)
 
@@ -695,6 +707,16 @@ def create_app():
         # (damit es nicht weiter als verfügbar angeboten wird)
         team.availability = "bedingt"
         team.updated_at = datetime.utcnow()
+
+        # CaseDoc alarmieren: Mission-Titel hat Format "P1: Schlagwort"
+        _parts = mission.title.split(":", 1)
+        _mission_case_id = _parts[0].strip() if len(_parts) >= 2 else None
+        if _mission_case_id:
+            _cdoc = CaseDoc.query.get(_mission_case_id)
+            if _cdoc and not _cdoc.alarm_time and not _cdoc.completed:
+                _cdoc.assigned_evt = team.name
+                _cdoc.alarm_time   = datetime.utcnow()
+                _cdoc.updated_at   = datetime.utcnow()
 
         db.session.commit()
         return jsonify(serialize_assignment(a)), 201

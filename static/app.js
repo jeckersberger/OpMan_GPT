@@ -932,15 +932,29 @@ function wireUI(){
   if (btnImport) {
     btnImport.addEventListener("click", async () => {
       btnImport.disabled = true;
-      btnImport.textContent = "Importiere…";
+      btnImport.textContent = "Löse w3w-Adressen auf…";
       try {
-        // Sicherstellen, dass Geodaten gecacht sind
-        await api("/api/exercise/geodata");
+        // Immer frisch auflösen (refresh=1), damit keine veralteten Null-Koordinaten verwendet werden
+        const geo = await api("/api/exercise/geodata?refresh=1");
+        const cases = geo.cases || {};
+        const withCoords = Object.values(cases).filter(c => c.lat != null).length;
+        const total = Object.keys(cases).length;
+        if (withCoords === 0) {
+          alert(`⚠ Keine w3w-Koordinaten konnten aufgelöst werden (${total} Fälle).\nPrüfe Internet-Verbindung und API-Key.`);
+          return;
+        }
+        btnImport.textContent = "Importiere…";
         const result = await api("/api/exercise/import-missions", { method: "POST" });
         const created = result.created || [];
         const newOnes = created.filter(c => !c.skipped).length;
         const skipped = created.filter(c => c.skipped).length;
-        alert(`Import abgeschlossen: ${newOnes} neu angelegt, ${skipped} bereits vorhanden (übersprungen).`);
+        const noCoord = created.filter(c => {
+          const caseData = cases[c.title?.split(":")[0]?.trim()];
+          return caseData && caseData.lat == null;
+        }).length;
+        let msg = `Import: ${newOnes} neu angelegt, ${skipped} übersprungen (bereits vorhanden).`;
+        if (withCoords < total) msg += `\n⚠ ${total - withCoords} Fälle ohne Koordinaten (w3w fehlgeschlagen).`;
+        alert(msg);
         await refreshAll(true);
         if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
       } catch (e) {
@@ -948,6 +962,21 @@ function wireUI(){
       } finally {
         btnImport.disabled = false;
         btnImport.textContent = "📥 Übungsfälle als Einsätze importieren (P1–P6)";
+      }
+    });
+  }
+
+  const btnRefreshGeo = $("btnRefreshGeodata");
+  if (btnRefreshGeo) {
+    btnRefreshGeo.addEventListener("click", async () => {
+      btnRefreshGeo.disabled = true;
+      btnRefreshGeo.textContent = "Löse auf…";
+      try {
+        await api("/api/exercise/geodata?refresh=1");
+        if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
+      } catch (e) { /* shown by api() */ } finally {
+        btnRefreshGeo.disabled = false;
+        btnRefreshGeo.textContent = "🗺 w3w-Koordinaten neu auflösen";
       }
     });
   }

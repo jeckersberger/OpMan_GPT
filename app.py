@@ -167,13 +167,10 @@ def create_app():
         docs = CaseDoc.query.filter_by(assigned_evt=evt_name).all()
         active_doc = None
         if docs:
+            # Nur aktive (nicht abgeschlossene) Fälle anzeigen
             active = [d for d in docs if d.alarm_time and not d.completed]
             if active:
                 active_doc = max(active, key=lambda d: d.alarm_time)
-            else:
-                with_alarm = [d for d in docs if d.alarm_time]
-                if with_alarm:
-                    active_doc = max(with_alarm, key=lambda d: d.alarm_time)
 
         case_meta = EXERCISE_CASES.get(active_doc.id) if active_doc else None
         return jsonify({
@@ -514,7 +511,9 @@ def create_app():
                     if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
-                    if rs == 1 and _doc.status4_time is not None:
+                    # S1 nach S4 oder S8 → Fall abschließen
+                    if rs == 1 and (_doc.status4_time is not None
+                                    or _doc.status8_time is not None):
                         _doc.completed = True
                         _doc.updated_at = datetime.utcnow()
                     break

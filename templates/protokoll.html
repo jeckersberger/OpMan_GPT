@@ -343,19 +343,8 @@
 
 <!-- ═══ EVT STATUS ═══ -->
 <div class="section no-print">
-  <div class="section-title" style="display:flex;align-items:center;">
+  <div class="section-title">
     EVT-Status (Live – alle 10 s)
-    <span class="evt-count-sel">
-      Anzahl EVTs:
-      <select id="evtCountSel" onchange="setEvtCount(this.value)">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6" selected>6</option>
-      </select>
-    </span>
   </div>
   <div class="evt-board" id="evtBoard"><div class="text-muted">Lade…</div></div>
 </div>
@@ -565,6 +554,9 @@ function fmtDur(isoA, isoB) {
 
 /* ── EVT helpers ─────────────────────────────────────────── */
 function evtList() {
+  // Gibt die tatsächlichen Team-Namen aus der DB zurück
+  if (teams && teams.length > 0) return teams.map(t => t.name);
+  // Fallback solange teams noch nicht geladen
   const out = [];
   for (let i = 1; i <= evtCount; i++) out.push('EVT ' + i);
   return out;
@@ -579,24 +571,8 @@ function updateDatalistOptions() {
   if (rList) rList.innerHTML = opts;
 }
 
-async function setEvtCount(n) {
-  const res = await fetch('/api/exercise/config', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({evt_count: parseInt(n)}),
-  });
-  if (res.ok) {
-    const c = await res.json();
-    evtCount = c.evt_count || 6;
-    applyEvtCount();
-    renderAlarmGrid();
-    renderCaseGrid();
-    if (sectionOpen.tp) renderTeamProgress();
-  }
-}
-
 function applyEvtCount() {
-  const sel = document.getElementById('evtCountSel');
-  if (sel) sel.value = evtCount;
+  evtCount = teams.length || evtCount;
   updateDatalistOptions();
 }
 
@@ -899,9 +875,14 @@ function renderTeamProgress() {
   if (!panel) return;
   const allCases = ['P1','P2','P3','P4','P5','P6'];
 
-  const rows = evtList().map(evtName => {
-    const teamData = teams.find(t => t.name === evtName);
-    const rs = teamData?.radio_status ?? null;
+  if (!teams.length) {
+    panel.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Keine Trupps angelegt.</div>';
+    return;
+  }
+
+  const rows = teams.map(teamData => {
+    const evtName = teamData.name;
+    const rs = teamData.radio_status ?? null;
     const rsCls = rs !== null ? ([0,5].includes(rs) ? 's0' : `s${rs}`) : '';
 
     // Cases done by this team (assigned + completed)
@@ -942,7 +923,7 @@ function renderTeamProgress() {
     return `<div class="tp-card ${done.length>0&&inProg.length===0&&open.length===0?'all-done':''}">
       <div class="evt-card ${rsCls}" style="padding:.35rem .5rem;border:none;background:transparent;">
         <div class="name">${esc(evtName)}</div>
-        ${rs!==null?`<div class="sbadge">${FMS_LABELS[rs]||'S'+rs}</div>`:'<div class="sbadge" style="background:transparent;color:var(--muted)">nicht in DB</div>'}
+        <div class="sbadge">${FMS_LABELS[rs]||'S'+rs}</div>
       </div>
       <div>
         <div class="tp-section-label">Erledigt ${done.length>0?'('+done.length+')':''}</div>
@@ -1172,13 +1153,12 @@ async function doReset() {
 
 /* ── Data & Render ───────────────────────────────────────── */
 async function fetchAll() {
-  const [docsRes,teamsRes,logRes,cfgRes]=await Promise.all([
-    fetch('/api/casedocs'), fetch('/api/teams'), fetch('/api/radiolog'), fetch('/api/exercise/config'),
+  const [docsRes,teamsRes,logRes]=await Promise.all([
+    fetch('/api/casedocs'), fetch('/api/teams'), fetch('/api/radiolog'),
   ]);
   if(docsRes.ok)  { const arr=await docsRes.json();  arr.forEach(d=>{caseDocs[d.id]=d;}); }
-  if(teamsRes.ok) { teams=await teamsRes.json(); }
+  if(teamsRes.ok) { teams=await teamsRes.json(); evtCount=teams.length||evtCount; }
   if(logRes.ok)   { logEntries=await logRes.json(); }
-  if(cfgRes.ok)   { const c=await cfgRes.json(); evtCount=c.evt_count||6; }
 }
 
 async function refreshAll() {

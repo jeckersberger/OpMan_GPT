@@ -959,10 +959,32 @@ function wireUI(){
 // Vollständiger Refresh: Sidebar-Listen + Marker + Übungs-Layer
 setInterval(() => refreshAll(false).catch(() => {}), 10000);
 
+// ---------------- LAN-Info (Handy-Zugang) ----------------
+let _lanInfo = null;
+
+async function loadLanInfo() {
+  try {
+    const res = await fetch("/api/server-info");
+    if (!res.ok) return;
+    _lanInfo = await res.json();
+    const el = document.getElementById("lanInfo");
+    if (el) el.textContent = `📡 ${_lanInfo.ip}:${_lanInfo.port}`;
+  } catch (_) { /* silent */ }
+}
+
+function showLanModal() {
+  if (!_lanInfo) return;
+  document.getElementById("lanUrl").textContent = _lanInfo.evt_url;
+  document.getElementById("lanQr").src =
+    `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(_lanInfo.evt_url)}`;
+  document.getElementById("lanModal").style.display = "flex";
+}
+
 // ---------------- Boot ----------------
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();
   wireUI();
   await refreshAll(true);
   await loadExerciseLayer();
+  loadLanInfo();
 });

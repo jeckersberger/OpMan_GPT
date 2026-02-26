@@ -131,6 +131,25 @@ def create_app():
     def protokoll():
         return render_template("protokoll.html", cases=EXERCISE_CASES)
 
+    @app.get("/api/server-info")
+    def server_info():
+        """Gibt die LAN-IP-Adresse des Servers zurück (für Handy-QR-Code)."""
+        import socket as _socket
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            lan_ip = "127.0.0.1"
+        port = 5000
+        return jsonify({
+            "ip": lan_ip,
+            "port": port,
+            "base_url": f"http://{lan_ip}:{port}",
+            "evt_url":  f"http://{lan_ip}:{port}/evt",
+        })
+
     @app.get("/evt")
     def evt_mobile():
         return render_template("evt.html", cases=EXERCISE_CASES)

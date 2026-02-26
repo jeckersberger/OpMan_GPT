@@ -23,8 +23,23 @@
       <a href="/evt" class="navbtn" style="text-decoration:none;">📱 EVT Mobile</a>
       <div class="divider"></div>
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
+      <div class="divider"></div>
+      <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
     </nav>
   </header>
+
+  <!-- LAN-Info Modal -->
+  <div id="lanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:360px;width:90%;text-align:center;">
+      <h3 style="margin-bottom:.75rem;font-size:1rem;">📱 EVT Mobile – Handy-Zugang</h3>
+      <p style="font-size:.82rem;color:#a6b3d1;margin-bottom:.75rem;">Handy ins gleiche WLAN → Browser öffnen → URL eingeben:</p>
+      <div id="lanUrl" style="font-family:monospace;font-size:1rem;background:#0b1220;border:1px solid #4ea1ff;border-radius:8px;padding:.6rem 1rem;color:#4ea1ff;word-break:break-all;margin-bottom:1rem;"></div>
+      <p style="font-size:.75rem;color:#a6b3d1;margin-bottom:.75rem;">Oder QR-Code scannen:</p>
+      <img id="lanQr" src="" alt="QR" style="width:180px;height:180px;border-radius:8px;border:2px solid #223152;background:#fff;"/>
+      <br><br>
+      <button onclick="document.getElementById('lanModal').style.display='none'" style="padding:.5rem 1.2rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+    </div>
+  </div>
 
   <!-- Sprechwunsch-Panel (erscheint nur bei aktivem S0/S5) -->
   <div id="swPanel" class="sw-panel" style="display:none;"></div>

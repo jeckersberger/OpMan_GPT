@@ -314,6 +314,31 @@
     }
     .alarm-detail .alarm-w3w { color: var(--accent); font-family: monospace; font-weight: 700; }
     .alarm-detail .alarm-patient { font-weight: 700; }
+
+    /* ── GPS Status ── */
+    .gps-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      font-size: .72rem;
+      color: var(--muted);
+      white-space: nowrap;
+      cursor: pointer;
+      padding: .2rem .4rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: border-color .2s;
+    }
+    .gps-dot:hover { border-color: var(--border); }
+    .gps-dot .gps-circle {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .gps-dot.active   .gps-circle { background: var(--green); animation: blink 2s ease-in-out infinite; }
+    .gps-dot.error    .gps-circle { background: var(--red); }
+    .gps-dot.waiting  .gps-circle { background: var(--yellow); animation: blink 1s ease-in-out infinite; }
   </style>
 </head>
 <body>
@@ -335,6 +360,10 @@
   <a class="back" href="/">← EL</a>
   <h1>📱 EVT Mobile</h1>
   <span class="clock" id="clock"></span>
+  <span class="gps-dot" id="gpsDot" title="Standort-Tracking ein/aus">
+    <span class="gps-circle"></span>
+    <span id="gpsLabel">GPS</span>
+  </span>
   <span class="pulse-dot" id="pulseDot" title="Live-Verbindung"></span>
 </div>
 
@@ -410,6 +439,7 @@ evtSelect.addEventListener('change', () => {
   selectedEvt   = v;
   currentTeamId = null;
   currentRs     = null;
+  stopGps();  // GPS stoppen bis Team-ID aus Poll bekannt
   if (pollHandle) clearInterval(pollHandle);
   if (v) {
     poll();
@@ -437,6 +467,7 @@ async function poll() {
     if (data.team) {
       currentTeamId = data.team.id;
       currentRs     = data.team.radio_status;
+      maybeStartGps();
     }
 
     // Alarm erkennen
@@ -667,6 +698,109 @@ async function setFms(rs) {
     }
   } catch (e) {
     alert('Fehler: ' + e.message);
+  }
+}
+
+// ── GPS-Standort-Tracking ─────────────────────────────────────
+let _gpsWatchId   = null;
+let _gpsEnabled   = (localStorage.getItem('evt_gps') !== '0');  // default: ein
+let _lastGpsLat   = null;
+let _lastGpsLng   = null;
+let _lastGpsSent  = 0;
+
+const GPS_SEND_INTERVAL = 10000;  // mindestens alle 10 s senden
+const GPS_MIN_METERS    = 5;      // nur senden wenn >5 m Bewegung ODER Interval abgelaufen
+
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function _setGpsDot(state, label) {
+  const dot = document.getElementById('gpsDot');
+  const lbl = document.getElementById('gpsLabel');
+  if (!dot) return;
+  dot.className = 'gps-dot ' + (state || '');
+  if (lbl) lbl.textContent = label || 'GPS';
+}
+
+async function _sendGps(lat, lng) {
+  if (!currentTeamId) return;
+  try {
+    await fetch(`/api/teams/${currentTeamId}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ lat, lng }),
+    });
+    _lastGpsLat  = lat;
+    _lastGpsLng  = lng;
+    _lastGpsSent = Date.now();
+  } catch (_) { /* silent */ }
+}
+
+function _onGpsPosition(pos) {
+  const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+  const acc = Math.round(accuracy);
+  _setGpsDot('active', `±${acc}m`);
+
+  const moved = (_lastGpsLat == null)
+    ? 999
+    : haversineM(_lastGpsLat, _lastGpsLng, lat, lng);
+  const timeDue = (Date.now() - _lastGpsSent) >= GPS_SEND_INTERVAL;
+
+  if (moved >= GPS_MIN_METERS || timeDue) {
+    _sendGps(lat, lng);
+  }
+}
+
+function _onGpsError(err) {
+  const msgs = { 1: 'keine Berechtigung', 2: 'kein Signal', 3: 'Timeout' };
+  _setGpsDot('error', msgs[err.code] || 'GPS-Fehler');
+}
+
+function startGps() {
+  if (!navigator.geolocation) {
+    _setGpsDot('error', 'nicht unterstützt');
+    return;
+  }
+  _setGpsDot('waiting', 'Suche…');
+  _gpsWatchId = navigator.geolocation.watchPosition(
+    _onGpsPosition,
+    _onGpsError,
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+}
+
+function stopGps() {
+  if (_gpsWatchId != null) {
+    navigator.geolocation.clearWatch(_gpsWatchId);
+    _gpsWatchId = null;
+  }
+  _setGpsDot('', 'GPS aus');
+}
+
+// Initialer GPS-Dot-Status beim Laden
+_setGpsDot(_gpsEnabled ? 'waiting' : '', _gpsEnabled ? 'GPS' : 'GPS aus');
+
+// Toggle per Klick auf GPS-Dot
+document.getElementById('gpsDot').addEventListener('click', () => {
+  _gpsEnabled = !_gpsEnabled;
+  localStorage.setItem('evt_gps', _gpsEnabled ? '1' : '0');
+  if (_gpsEnabled && currentTeamId) {
+    startGps();
+  } else {
+    stopGps();
+  }
+});
+
+// GPS automatisch starten wenn EVT ausgewählt und Tracking aktiviert
+function maybeStartGps() {
+  if (_gpsEnabled && currentTeamId) {
+    if (_gpsWatchId == null) startGps();
   }
 }
 </script>

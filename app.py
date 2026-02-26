@@ -202,6 +202,36 @@ def create_app():
         return jsonify({"ok": True})
 
     # ---------------------------
+    # Reset
+    # ---------------------------
+    @app.post("/api/reset")
+    def reset_exercise():
+        """Setzt alle CaseDoc-Einträge zurück. Optional auch den Funklog."""
+        data = request.get_json(force=True) or {}
+        include_log = bool(data.get("include_log", False))
+
+        for doc in CaseDoc.query.all():
+            doc.assigned_evt  = None
+            doc.alarm_time    = None
+            doc.status3_time  = None
+            doc.status4_time  = None
+            doc.status7_time  = None
+            doc.status8_time  = None
+            doc.rmi_reported  = None
+            doc.sk_reported   = None
+            doc.pzc_reported  = None
+            doc.zielklinik    = None
+            doc.notes         = None
+            doc.completed     = False
+            doc.updated_at    = datetime.utcnow()
+
+        if include_log:
+            RadioLogEntry.query.delete()
+
+        db.session.commit()
+        return jsonify({"ok": True})
+
+    # ---------------------------
     # Teams
     # ---------------------------
     @app.get("/api/teams")

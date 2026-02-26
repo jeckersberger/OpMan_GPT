@@ -127,3 +127,69 @@ button.full{ width:100%; }
   font-size:12px;
   color:var(--muted);
 }
+/* ── Sprechwunsch-Panel ── */
+.sw-panel{
+  position:fixed;
+  top:56px; /* unterhalb der Topbar */
+  left:50%;
+  transform:translateX(-50%);
+  z-index:500;
+  min-width:340px;
+  max-width:620px;
+  width:max-content;
+  background:var(--panel);
+  border:2px solid #f5c842;
+  border-radius:0 0 10px 10px;
+  box-shadow:0 4px 24px rgba(0,0,0,.5);
+  overflow:hidden;
+}
+.sw-panel.has-s0{
+  border-color:#ff4f4f;
+  animation:swPulse .8s ease-in-out infinite alternate;
+}
+@keyframes swPulse{
+  from{ box-shadow:0 4px 20px rgba(255,79,79,.3); }
+  to  { box-shadow:0 4px 32px rgba(255,79,79,.65); }
+}
+.sw-header{
+  display:flex; align-items:center; gap:.5rem;
+  padding:.4rem .8rem;
+  font-size:.78rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  background:rgba(245,200,66,.12);
+  color:#f5c842;
+  border-bottom:1px solid rgba(245,200,66,.2);
+}
+.sw-panel.has-s0 .sw-header{
+  background:rgba(255,79,79,.14);
+  color:#ff4f4f;
+  border-bottom-color:rgba(255,79,79,.25);
+}
+.sw-list{ list-style:none; margin:0; padding:0; }
+.sw-item{
+  display:flex; align-items:center; gap:.6rem;
+  padding:.45rem .8rem;
+  border-bottom:1px solid var(--border);
+}
+.sw-item:last-child{ border-bottom:none; }
+.sw-item.s0{ background:rgba(255,79,79,.08); }
+.sw-item.s5{ background:rgba(245,200,66,.05); }
+.sw-badge{
+  font-size:.75rem; font-weight:800;
+  padding:.15rem .45rem; border-radius:5px; white-space:nowrap;
+}
+.sw-badge.s0{ background:#3a1212; color:#ff4f4f; border:1px solid rgba(255,79,79,.4); }
+.sw-badge.s5{ background:#2e2600; color:#f5c842; border:1px solid rgba(245,200,66,.4); }
+.sw-name { font-weight:700; font-size:.88rem; flex:1; }
+.sw-time { font-size:.75rem; color:var(--muted); white-space:nowrap; }
+.sw-quit{
+  padding:.3rem .65rem;
+  background:transparent;
+  border:1px solid var(--border);
+  border-radius:6px;
+  color:var(--text);
+  font-size:.75rem; font-weight:700;
+  cursor:pointer; font-family:inherit;
+  white-space:nowrap;
+  transition:background .12s;
+}
+.sw-quit:hover{ background:rgba(78,161,255,.15); border-color:var(--accent); color:var(--accent); }

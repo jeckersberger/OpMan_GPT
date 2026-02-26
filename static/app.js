@@ -783,6 +783,56 @@ async function refreshAll(rebuild = true){
   }
 
   if (exerciseGeodata) refreshExerciseLayer();
+  renderSprechwunschPanel();
+}
+
+// ---------------- Sprechwunsch-Panel ----------------
+function renderSprechwunschPanel() {
+  const panel = document.getElementById("swPanel");
+  if (!panel) return;
+
+  // Teams mit S0 oder S5, sortiert: S0 zuerst, dann nach updated_at aufsteigend
+  const sw = teams
+    .filter(t => t.radio_status === 0 || t.radio_status === 5)
+    .sort((a, b) => {
+      if (a.radio_status !== b.radio_status)
+        return a.radio_status === 0 ? -1 : 1;           // S0 vor S5
+      return new Date(a.updated_at) - new Date(b.updated_at); // ältester zuerst
+    });
+
+  if (sw.length === 0) {
+    panel.style.display = "none";
+    return;
+  }
+
+  const hasS0 = sw.some(t => t.radio_status === 0);
+  panel.className = "sw-panel" + (hasS0 ? " has-s0" : "");
+  panel.style.display = "";
+
+  const label = hasS0 ? "🚨 Dringender Sprechwunsch" : "📻 Sprechwunsch";
+  const rows = sw.map(t => {
+    const rs    = t.radio_status;
+    const name  = t.callsign ? `${t.name} (${t.callsign})` : t.name;
+    const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
+                    {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    const cls   = rs === 0 ? "s0" : "s5";
+    const badge = rs === 0 ? "S0 DRINGEND" : "S5 SW";
+    return `<li class="sw-item ${cls}">
+      <span class="sw-badge ${cls}">${badge}</span>
+      <span class="sw-name">${t.name}${t.callsign ? ` <span style="font-weight:400;color:var(--muted)">(${t.callsign})</span>` : ""}</span>
+      <span class="sw-time">${time}</span>
+      <button class="sw-quit" onclick="quittieren(${t.id})">✓ Quittieren</button>
+    </li>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="sw-header">${label} (${sw.length})</div>
+    <ul class="sw-list">${rows}</ul>`;
+}
+
+async function quittieren(teamId) {
+  await api(`/api/teams/${teamId}/quittieren`, { method: "POST" });
+  await refreshAll(false);
 }
 
 // ---------------- UI Wiring ----------------

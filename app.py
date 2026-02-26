@@ -380,6 +380,21 @@ def create_app():
                         mission.updated_at = datetime.utcnow()
                 team.availability = "verfügbar"
 
+            # Status 3/4/7/8 → CaseDoc-Zeitstempel automatisch setzen
+            # (falls dieses Team als assigned_evt in einem Fall eingetragen ist)
+            elif rs in {3, 4, 7, 8}:
+                _stamp_map = {3: "status3_time", 4: "status4_time",
+                              7: "status7_time",  8: "status8_time"}
+                _field = _stamp_map[rs]
+                _identifiers = {team.name}
+                if team.callsign:
+                    _identifiers.add(team.callsign)
+                for _ident in _identifiers:
+                    _doc = CaseDoc.query.filter_by(assigned_evt=_ident).first()
+                    if _doc and getattr(_doc, _field) is None:
+                        setattr(_doc, _field, datetime.utcnow())
+                        _doc.updated_at = datetime.utcnow()
+
         if "color" in data:
             team.color = (data["color"] or team.color).strip() or team.color
 

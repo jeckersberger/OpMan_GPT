@@ -671,6 +671,11 @@ async function alarmCase(pid) {
   if (doc.alarm_time && !confirm(`${pid} wurde bereits um ${fmtTime(doc.alarm_time)} alarmiert. Erneut stempeln?`)) return;
 
   const evt = document.getElementById('aevt_'+pid)?.value || null;
+  if (!evt) {
+    alert(`Bitte zuerst ein EVT für ${pid} auswählen, bevor alarmiert wird.`);
+    document.getElementById('aevt_'+pid)?.focus();
+    return;
+  }
 
   // Zeitstempel setzen
   const stampRes = await fetch(`/api/casedocs/${pid}/stamp`,{

@@ -511,11 +511,18 @@ def create_app():
                     if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
-                    # S1 nach S4 oder S8 → Fall abschließen
+                    # S1 nach S4 oder S8 → CaseDoc zurücksetzen
+                    # (Zeitstempel + EVT löschen, bereit für nächsten Trupp)
                     if rs == 1 and (_doc.status4_time is not None
                                     or _doc.status8_time is not None):
-                        _doc.completed = True
-                        _doc.updated_at = datetime.utcnow()
+                        _doc.assigned_evt = None
+                        _doc.alarm_time   = None
+                        _doc.status3_time = None
+                        _doc.status4_time = None
+                        _doc.status7_time = None
+                        _doc.status8_time = None
+                        _doc.completed    = False
+                        _doc.updated_at   = datetime.utcnow()
                     break
             _auto_log(team, rs, case_ref=_case_ref)
 
@@ -555,9 +562,10 @@ def create_app():
         # case_ref für den Log-Eintrag
         _case_ref = None
         for _i in _ident:
-            _doc = CaseDoc.query.filter_by(assigned_evt=_i).filter(
-                CaseDoc.alarm_time.isnot(None)
-            ).order_by(CaseDoc.id.desc()).first()
+            _doc = (CaseDoc.query.filter_by(assigned_evt=_i)
+                    .filter(CaseDoc.alarm_time.isnot(None),
+                            CaseDoc.completed == False)  # noqa: E712
+                    .order_by(CaseDoc.alarm_time.desc()).first())
             if _doc:
                 _case_ref = _doc.id
                 break

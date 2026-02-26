@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#0b1220"/>
+  <title>EVT Mobile – BRK Feucht</title>
+  <style>
+    :root {
+      --bg:     #0b1220;
+      --panel:  #111b2e;
+      --panel2: #162035;
+      --text:   #e7eefc;
+      --accent: #4ea1ff;
+      --green:  #3ddc84;
+      --yellow: #f5c842;
+      --red:    #ff4f4f;
+      --orange: #ff9f43;
+      --muted:  #a6b3d1;
+      --border: #223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .65rem .9rem;
+      background: var(--panel);
+      border-bottom: 2px solid var(--accent);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header a.back {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: .8rem;
+      padding: .3rem .6rem;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .header h1 { font-size: .95rem; font-weight: 700; flex: 1; }
+    .header .clock { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+    .pulse-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.6s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* ── Content ── */
+    .content { padding: .75rem; display: flex; flex-direction: column; gap: .75rem; }
+
+    /* ── EVT Selector ── */
+    .evt-selector {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .7rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    .evt-selector label { font-weight: 700; font-size: .9rem; white-space: nowrap; }
+    .evt-selector select {
+      flex: 1;
+      padding: .55rem .75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      font-size: 1rem;
+      font-family: inherit;
+      font-weight: 700;
+    }
+
+    /* ── Team Status ── */
+    .team-status {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: .7rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    .team-status.c-1,.team-status.c-2 { border-color: var(--green); }
+    .team-status.c-3 { border-color: var(--yellow); }
+    .team-status.c-4 { border-color: var(--accent); }
+    .team-status.c-7,.team-status.c-8 { border-color: var(--orange); }
+    .team-status.c-0,.team-status.c-5 { border-color: var(--red); }
+
+    .team-name { font-weight: 800; font-size: 1.1rem; flex: 1; }
+    .fms-badge {
+      padding: .3rem .7rem;
+      border-radius: 20px;
+      font-size: .8rem;
+      font-weight: 700;
+      background: var(--panel2);
+      color: var(--muted);
+    }
+    .c-1 .fms-badge,.c-2 .fms-badge { background: #1a3a20; color: var(--green); }
+    .c-3 .fms-badge  { background: #2e2300; color: var(--yellow); }
+    .c-4 .fms-badge  { background: #1a2a3a; color: var(--accent); }
+    .c-7 .fms-badge,.c-8 .fms-badge { background: #2e1a00; color: var(--orange); }
+    .c-0 .fms-badge,.c-5 .fms-badge { background: #3a1a1a; color: var(--red); }
+
+    /* ── Case Card ── */
+    .case-card {
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .case-card.active { border-color: var(--accent); }
+    .case-card.done   { border-color: var(--green);  opacity: .8; }
+
+    .case-header {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .65rem 1rem;
+      background: var(--panel2);
+      border-bottom: 1px solid var(--border);
+    }
+    .case-pid {
+      font-weight: 900;
+      font-size: 1.1rem;
+      background: var(--accent);
+      color: #fff;
+      padding: .1rem .55rem;
+      border-radius: 6px;
+    }
+    .case-pid.done { background: var(--green); color: #000; }
+    .case-schlagwort { font-size: .9rem; font-weight: 700; flex: 1; }
+    .done-badge { color: var(--green); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+
+    .case-body { padding: .75rem 1rem; display: flex; flex-direction: column; gap: .65rem; }
+    .case-patient { font-size: 1.05rem; font-weight: 700; }
+    .case-age     { font-size: .85rem; color: var(--muted); }
+
+    .w3w-block { display: flex; flex-direction: column; gap: .25rem; }
+    .w3w-link {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      font-size: .95rem;
+    }
+    .w3w-link a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+      font-family: monospace;
+      letter-spacing: -.01em;
+    }
+    .w3w-link a:active { opacity: .7; }
+    .w3w-alarm-note {
+      font-size: .78rem;
+      color: var(--yellow);
+      background: rgba(245,200,66,.08);
+      border: 1px solid rgba(245,200,66,.2);
+      border-radius: 5px;
+      padding: .25rem .55rem;
+    }
+
+    .hint-box {
+      font-size: .82rem;
+      background: rgba(245,200,66,.07);
+      border: 1px solid rgba(245,200,66,.22);
+      border-radius: 6px;
+      padding: .4rem .65rem;
+      color: #c8a800;
+      line-height: 1.6;
+    }
+
+    /* Timestamp row */
+    .ts-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: .3rem;
+      margin-top: .1rem;
+    }
+    .ts-chip {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .3rem .15rem;
+      text-align: center;
+    }
+    .ts-chip .tl { font-size: .62rem; color: var(--muted); display: block; }
+    .ts-chip .tv { font-size: .7rem;  font-weight: 700;   display: block; }
+    .ts-chip .tv.empty { color: var(--border); }
+
+    /* No case */
+    .no-case {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--muted);
+    }
+    .no-case .icon { font-size: 2.2rem; margin-bottom: .5rem; }
+
+    /* ── FMS Buttons ── */
+    .fms-section { display: flex; flex-direction: column; gap: .5rem; }
+    .fms-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+    .fms-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .5rem;
+    }
+    .fms-btn {
+      padding: 1.1rem .4rem .9rem;
+      border: 2px solid;
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.3;
+      transition: opacity .12s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+      background: transparent;
+    }
+    .fms-btn:active { opacity: .75; transform: scale(.96); }
+    .fms-btn.is-active { box-shadow: 0 0 0 3px rgba(255,255,255,.55); }
+    .fms-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .fms-btn .fs-code { font-size: 1.25rem; display: block; }
+    .fms-btn .fs-sub  { font-size: .72rem;  display: block; font-weight: 600; }
+
+    .fms-btn.b-s1 { border-color: var(--green);  color: var(--green);  background: #0e2a18; }
+    .fms-btn.b-s3 { border-color: var(--yellow); color: var(--yellow); background: #2e2300; }
+    .fms-btn.b-s4 { border-color: var(--accent); color: var(--accent); background: #0d2240; }
+    .fms-btn.b-s7 { border-color: var(--orange); color: var(--orange); background: #2e1a00; }
+    .fms-btn.b-s8 { border-color: #5de89a;       color: #5de89a;       background: #0a2215; }
+
+    /* ── Warning box ── */
+    .warn-box {
+      background: rgba(255,79,79,.08);
+      border: 1px solid rgba(255,79,79,.28);
+      border-radius: 8px;
+      padding: .6rem .85rem;
+      font-size: .82rem;
+      color: var(--red);
+      line-height: 1.6;
+    }
+
+    /* ── Alarm Overlay ── */
+    .alarm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.87);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 1.5rem;
+    }
+    .alarm-overlay.show { display: flex; }
+
+    .alarm-box {
+      background: #1a0800;
+      border: 3px solid var(--orange);
+      border-radius: 16px;
+      padding: 1.75rem 1.5rem;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      animation: alarmPulse .75s ease-in-out infinite alternate;
+    }
+    @keyframes alarmPulse {
+      from { border-color: var(--orange); box-shadow: 0 0 18px rgba(255,159,67,.3); }
+      to   { border-color: var(--red);    box-shadow: 0 0 40px rgba(255,79,79,.5); }
+    }
+    .alarm-icon      { font-size: 3rem; margin-bottom: .5rem; }
+    .alarm-title     { font-size: 1.2rem; font-weight: 800; color: var(--orange); margin-bottom: .5rem; }
+    .alarm-pid-big   { font-size: 3rem; font-weight: 900; color: #fff; line-height: 1; margin-bottom: .2rem; }
+    .alarm-schlw     { font-size: 1rem; color: var(--text); margin-bottom: 1.25rem; font-weight: 600; }
+    .alarm-dismiss {
+      width: 100%;
+      padding: 1rem;
+      background: var(--orange);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .alarm-dismiss:active { opacity: .8; }
+  </style>
+</head>
+<body>
+
+<!-- ══ ALARM OVERLAY ══ -->
+<div class="alarm-overlay" id="alarmOverlay">
+  <div class="alarm-box">
+    <div class="alarm-icon">🚨</div>
+    <div class="alarm-title">NEUER EINSATZ!</div>
+    <div class="alarm-pid-big" id="alarmPid">–</div>
+    <div class="alarm-schlw" id="alarmSchlw">–</div>
+    <button class="alarm-dismiss" id="alarmDismiss">✓ Quittieren</button>
+  </div>
+</div>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <a class="back" href="/">← EL</a>
+  <h1>📱 EVT Mobile</h1>
+  <span class="clock" id="clock"></span>
+  <span class="pulse-dot" id="pulseDot" title="Live-Verbindung"></span>
+</div>
+
+<!-- ══ CONTENT ══ -->
+<div class="content">
+
+  <!-- EVT Auswahl -->
+  <div class="evt-selector">
+    <label for="evtSelect">Ich bin:</label>
+    <select id="evtSelect">
+      <option value="">– EVT wählen –</option>
+      {% for case_id in cases %}
+      <option value="EVT {{ loop.index }}">EVT {{ loop.index }} ({{ case_id }})</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Dynamischer Bereich -->
+  <div id="mainContent"></div>
+
+</div>
+
+<script>
+// ── Daten aus Jinja ──────────────────────────────────────────
+const CASES_META = {{ cases | tojson }};
+
+const FMS_LABELS = {
+  0: 'S0 Notruf',     1: 'S1 Frei Funk',   2: 'S2 Frei Wache',
+  3: 'S3 Unterwegs',  4: 'S4 Einsatzort',  5: 'S5 Sprechwunsch',
+  6: 'S6 Außer Dienst', 7: 'S7 Transport', 8: 'S8 Ziel'
+};
+
+// ── State ────────────────────────────────────────────────────
+let selectedEvt   = '';
+let currentTeamId = null;
+let currentRs     = null;
+let pollHandle    = null;
+let seenAlarms    = new Set();  // in-memory; resets on page load → EVT sieht Alarm erneut
+
+// ── HTML escaping ────────────────────────────────────────────
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Uhrzeiten formatieren ─────────────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+// ── Uhr ──────────────────────────────────────────────────────
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+tick();
+setInterval(tick, 1000);
+
+// ── EVT-Auswahl ───────────────────────────────────────────────
+const evtSelect = document.getElementById('evtSelect');
+
+// Gespeicherte Auswahl laden
+const savedEvt = localStorage.getItem('evt_selected') || '';
+if (savedEvt) evtSelect.value = savedEvt;
+
+evtSelect.addEventListener('change', () => {
+  const v = evtSelect.value;
+  localStorage.setItem('evt_selected', v);
+  selectedEvt   = v;
+  currentTeamId = null;
+  currentRs     = null;
+  if (pollHandle) clearInterval(pollHandle);
+  if (v) {
+    poll();
+    pollHandle = setInterval(poll, 5000);
+  } else {
+    document.getElementById('mainContent').innerHTML = '';
+  }
+});
+
+if (savedEvt) {
+  selectedEvt = savedEvt;
+  poll();
+  pollHandle = setInterval(poll, 5000);
+}
+
+// ── Polling ──────────────────────────────────────────────────
+async function poll() {
+  if (!selectedEvt) return;
+  try {
+    const res = await fetch(`/api/evt-status/${encodeURIComponent(selectedEvt)}`);
+    if (!res.ok) { setDot(false); return; }
+    const data = await res.json();
+    setDot(true);
+
+    if (data.team) {
+      currentTeamId = data.team.id;
+      currentRs     = data.team.radio_status;
+    }
+
+    // Alarm erkennen
+    const doc = data.case;
+    if (doc && doc.alarm_time && !doc.completed) {
+      const key = `${doc.id}:${doc.alarm_time}`;
+      if (!seenAlarms.has(key)) {
+        triggerAlarm(doc, data.case_meta);
+      }
+    }
+
+    renderMain(data.team, data.case, data.case_meta);
+  } catch (e) {
+    setDot(false);
+  }
+}
+
+function setDot(ok) {
+  const d = document.getElementById('pulseDot');
+  if (d) d.style.background = ok ? 'var(--green)' : 'var(--red)';
+}
+
+// ── Alarm ────────────────────────────────────────────────────
+let _alarmDoc = null;
+
+function triggerAlarm(doc, meta) {
+  const key = `${doc.id}:${doc.alarm_time}`;
+  seenAlarms.add(key);  // schon jetzt als gesehen markieren, verhindert Doppelt-Anzeige
+
+  if (navigator.vibrate) navigator.vibrate([400, 120, 400, 120, 800]);
+
+  _alarmDoc = doc;
+  document.getElementById('alarmPid').textContent  = doc.id || '–';
+  document.getElementById('alarmSchlw').textContent = (meta && meta.schlagwort) ? meta.schlagwort : '–';
+  document.getElementById('alarmOverlay').classList.add('show');
+}
+
+document.getElementById('alarmDismiss').addEventListener('click', () => {
+  document.getElementById('alarmOverlay').classList.remove('show');
+  _alarmDoc = null;
+});
+
+// ── Render ───────────────────────────────────────────────────
+function renderMain(team, doc, meta) {
+  if (!selectedEvt) { document.getElementById('mainContent').innerHTML = ''; return; }
+
+  const rs      = team ? team.radio_status : null;
+  const rsCls   = rs !== null ? `c-${[0,5].includes(rs) ? 0 : rs}` : '';
+  const rsLabel = rs !== null ? (FMS_LABELS[rs] || 'S' + rs) : '–';
+  const notFound = !team;
+
+  // Team-Status-Block
+  let teamHtml = '';
+  if (notFound) {
+    teamHtml = `<div class="warn-box">
+      ⚠ Team <strong>${esc(selectedEvt)}</strong> nicht in der DB gefunden.<br>
+      Im Einsatzleiter anlegen → dann FMS-Tasten aktiviert.
+    </div>`;
+  } else {
+    teamHtml = `<div class="team-status ${rsCls}">
+      <div class="team-name">${esc(team.name)}</div>
+      <div class="fms-badge">${esc(rsLabel)}</div>
+      <span class="pulse-dot"></span>
+    </div>`;
+  }
+
+  // Fall-Karte
+  let caseHtml = '';
+  if (doc) {
+    const done  = !!doc.completed;
+    const m     = meta || {};
+    const w3wRaw = m.w3w || '';
+    const w3wClean = w3wRaw.replace('///', '');
+
+    const ts = [
+      { l: 'Alarm', v: doc.alarm_time   },
+      { l: 'S3',    v: doc.status3_time },
+      { l: 'S4',    v: doc.status4_time },
+      { l: 'S7',    v: doc.status7_time },
+      { l: 'S8',    v: doc.status8_time },
+    ].map(({l,v}) => {
+      const t = v ? fmtTime(v) : '–';
+      return `<div class="ts-chip">
+        <span class="tl">${l}</span>
+        <span class="tv${v?'':' empty'}">${t}</span>
+      </div>`;
+    }).join('');
+
+    let ageGender = '';
+    if (m.alter)    ageGender += m.alter + ' J.';
+    if (m.geschlecht === 'm') ageGender += ' (m)';
+    if (m.geschlecht === 'w') ageGender += ' (w)';
+
+    caseHtml = `<div class="case-card ${done ? 'done' : 'active'}">
+      <div class="case-header">
+        <span class="case-pid${done?' done':''}">${esc(doc.id)}</span>
+        <span class="case-schlagwort">${esc(m.schlagwort || '–')}</span>
+        ${done ? '<span class="done-badge">✓ Abgeschlossen</span>' : ''}
+      </div>
+      <div class="case-body">
+        <div>
+          <div class="case-patient">${esc(m.patient || '–')}</div>
+          ${ageGender ? `<div class="case-age">${esc(ageGender)}</div>` : ''}
+        </div>
+        ${w3wClean ? `<div class="w3w-block">
+          <div class="w3w-link">📍
+            <a href="https://what3words.com/${esc(w3wClean)}" target="_blank">${esc(w3wRaw)}</a>
+          </div>
+          ${m.w3w_alarm ? `<div class="w3w-alarm-note">⚠ Alarmadresse: ${esc(m.w3w_alarm)}</div>` : ''}
+        </div>` : ''}
+        ${m.besonderheit ? `<div class="hint-box">⚠ ${esc(m.besonderheit)}</div>` : ''}
+        <div class="ts-row">${ts}</div>
+      </div>
+    </div>`;
+  } else {
+    caseHtml = `<div class="case-card">
+      <div class="no-case">
+        <div class="icon">📡</div>
+        Kein aktiver Einsatz.<br>Warte auf Alarmierung…
+      </div>
+    </div>`;
+  }
+
+  // FMS-Tasten
+  const btnDefs = [
+    { rs: 1, cls: 'b-s1', code: 'S1', sub: 'Frei Funk'  },
+    { rs: 3, cls: 'b-s3', code: 'S3', sub: 'Anfahrt'    },
+    { rs: 4, cls: 'b-s4', code: 'S4', sub: 'Einsatzort' },
+    { rs: 7, cls: 'b-s7', code: 'S7', sub: 'Transport'  },
+    { rs: 8, cls: 'b-s8', code: 'S8', sub: 'Ziel'       },
+  ];
+  const fmsBtns = btnDefs.map(b => {
+    const active  = currentRs === b.rs ? ' is-active' : '';
+    const dis     = notFound ? ' disabled' : '';
+    return `<button class="fms-btn ${b.cls}${active}" onclick="setFms(${b.rs})"${dis}>
+      <span class="fs-code">${b.code}</span>
+      <span class="fs-sub">${b.sub}</span>
+    </button>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    ${teamHtml}
+    ${caseHtml}
+    <div class="fms-section">
+      <div class="fms-label">FMS-Status setzen</div>
+      <div class="fms-grid">${fmsBtns}</div>
+    </div>
+  `;
+}
+
+// ── FMS setzen ───────────────────────────────────────────────
+async function setFms(rs) {
+  if (!currentTeamId) {
+    alert(`Team "${selectedEvt}" nicht in DB. Bitte im Einsatzleiter anlegen.`);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/teams/${currentTeamId}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ radio_status: rs }),
+    });
+    if (res.ok) {
+      const t = await res.json();
+      currentRs = t.radio_status;
+      await poll();
+    }
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

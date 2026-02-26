@@ -131,6 +131,38 @@ def create_app():
     def protokoll():
         return render_template("protokoll.html", cases=EXERCISE_CASES)
 
+    @app.get("/evt")
+    def evt_mobile():
+        return render_template("evt.html", cases=EXERCISE_CASES)
+
+    # ---------------------------
+    # EVT Mobile Status API
+    # ---------------------------
+    @app.get("/api/evt-status/<string:evt_name>")
+    def get_evt_status(evt_name: str):
+        """Liefert Team-Status + aktiver Fall für ein EVT-Team (Mobile-App)."""
+        team = Team.query.filter(
+            (Team.name == evt_name) | (Team.callsign == evt_name)
+        ).first()
+
+        docs = CaseDoc.query.filter_by(assigned_evt=evt_name).all()
+        active_doc = None
+        if docs:
+            active = [d for d in docs if d.alarm_time and not d.completed]
+            if active:
+                active_doc = max(active, key=lambda d: d.alarm_time)
+            else:
+                with_alarm = [d for d in docs if d.alarm_time]
+                if with_alarm:
+                    active_doc = max(with_alarm, key=lambda d: d.alarm_time)
+
+        case_meta = EXERCISE_CASES.get(active_doc.id) if active_doc else None
+        return jsonify({
+            "team": serialize_team(team) if team else None,
+            "case": serialize_casedoc(active_doc) if active_doc else None,
+            "case_meta": case_meta,
+        })
+
     # ---------------------------
     # CaseDoc API
     # ---------------------------
@@ -267,8 +299,10 @@ def create_app():
     # ---------------------------
     @app.get("/api/exercise/geodata")
     def exercise_geodata():
-        """Resolve all exercise location w3w addresses to coordinates (cached)."""
-        if os.path.exists(W3W_CACHE_FILE):
+        """Resolve all exercise location w3w addresses to coordinates (cached).
+        Pass ?refresh=1 to force fresh resolution from the API."""
+        force_refresh = request.args.get("refresh") == "1"
+        if not force_refresh and os.path.exists(W3W_CACHE_FILE):
             try:
                 with open(W3W_CACHE_FILE) as f:
                     return jsonify(json.load(f))

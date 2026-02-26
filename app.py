@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry
+from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig
 
 # ---------------------------
 # Funkstatus (Code -> Text)
@@ -118,6 +118,9 @@ def create_app():
         for case_id in EXERCISE_CASES:
             if CaseDoc.query.get(case_id) is None:
                 db.session.add(CaseDoc(id=case_id))
+        # ExerciseConfig Singleton
+        if ExerciseConfig.query.get(1) is None:
+            db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
 
     @app.get("/")
@@ -297,6 +300,63 @@ def create_app():
         return jsonify(result)
 
     # ---------------------------
+    # Exercise Config
+    # ---------------------------
+    @app.get("/api/exercise/config")
+    def get_exercise_config():
+        cfg = ExerciseConfig.query.get(1)
+        return jsonify({"evt_count": cfg.evt_count if cfg else 6})
+
+    @app.post("/api/exercise/config")
+    def update_exercise_config():
+        cfg = ExerciseConfig.query.get_or_404(1)
+        data = request.get_json(force=True)
+        if "evt_count" in data:
+            n = int(data["evt_count"])
+            if not (1 <= n <= 6):
+                return jsonify({"error": "evt_count must be 1-6"}), 400
+            cfg.evt_count = n
+        db.session.commit()
+        return jsonify({"evt_count": cfg.evt_count})
+
+    @app.post("/api/exercise/import-missions")
+    def import_exercise_missions():
+        """Erstellt Missions aus den Übungsfällen (mit w3w-Koordinaten aus Cache)."""
+        if not os.path.exists(W3W_CACHE_FILE):
+            return jsonify({"error": "Geodaten noch nicht gecacht. Zuerst /api/exercise/geodata aufrufen."}), 400
+        try:
+            with open(W3W_CACHE_FILE) as f:
+                geodata = json.load(f)
+        except Exception:
+            return jsonify({"error": "Geodaten-Cache konnte nicht gelesen werden."}), 500
+
+        created = []
+        for case_id, cd in EXERCISE_CASES.items():
+            geo = (geodata.get("cases") or {}).get(case_id, {})
+            lat = geo.get("lat")
+            lng = geo.get("lng")
+            title = f"{case_id}: {cd['schlagwort']}"
+            # Nicht doppelt anlegen
+            existing = Mission.query.filter_by(title=title).first()
+            if existing:
+                created.append({"id": existing.id, "title": title, "skipped": True})
+                continue
+            m = Mission(
+                title=title,
+                description=cd.get("besonderheit") or None,
+                priority=1 if cd.get("sk_soll") == "1" else 3,
+                status="offen",
+                lat=lat,
+                lng=lng,
+                updated_at=datetime.utcnow(),
+            )
+            db.session.add(m)
+            db.session.flush()
+            created.append({"id": m.id, "title": title, "skipped": False})
+        db.session.commit()
+        return jsonify({"created": created})
+
+    # ---------------------------
     # Teams
     # ---------------------------
     @app.get("/api/teams")
@@ -379,6 +439,16 @@ def create_app():
                         mission.status = "offen"
                         mission.updated_at = datetime.utcnow()
                 team.availability = "verfügbar"
+
+                # Auto-complete CaseDoc: wenn S4 erreicht wurde, Station als fertig markieren
+                _identifiers = {team.name}
+                if team.callsign:
+                    _identifiers.add(team.callsign)
+                for _ident in _identifiers:
+                    _doc = CaseDoc.query.filter_by(assigned_evt=_ident).first()
+                    if _doc and _doc.status4_time is not None and not _doc.completed:
+                        _doc.completed = True
+                        _doc.updated_at = datetime.utcnow()
 
             # Status 3/4/7/8 → CaseDoc-Zeitstempel automatisch setzen
             # (falls dieses Team als assigned_evt in einem Fall eingetragen ist)

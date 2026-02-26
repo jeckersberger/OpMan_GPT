@@ -89,3 +89,10 @@ class Assignment(db.Model):
 
     team = db.relationship("Team", backref=db.backref("assignments", cascade="all, delete-orphan"))
     mission = db.relationship("Mission", backref=db.backref("assignments", cascade="all, delete-orphan"))
+
+
+class ExerciseConfig(db.Model):
+    """Globale Übungskonfiguration (Singleton, id=1)."""
+    __tablename__ = "exercise_config"
+    id = db.Column(db.Integer, primary_key=True)
+    evt_count = db.Column(db.Integer, nullable=False, default=6)

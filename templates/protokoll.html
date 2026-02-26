@@ -255,6 +255,32 @@
     .modal-box p  { font-size:.84rem; color:var(--muted); line-height:1.5; }
     .modal-actions { display:flex; gap:.6rem; justify-content:flex-end; flex-wrap:wrap; }
 
+    /* ── Team Progress ── */
+    .tp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.5rem; }
+    .tp-card {
+      background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:.55rem .75rem;
+      display:flex; flex-direction:column; gap:.35rem;
+    }
+    .tp-card.all-done { border-color:var(--green); background:rgba(61,220,132,.04); }
+    .tp-name { font-weight:700; font-size:.88rem; }
+    .tp-section-label { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.2rem; }
+    .station-chips { display:flex; flex-wrap:wrap; gap:.25rem; min-height:18px; }
+    .station-chip { display:inline-block; padding:.1rem .42rem; border-radius:10px; font-size:.72rem; font-weight:600; white-space:nowrap; }
+    .station-chip.done      { background:rgba(61,220,132,.12); color:var(--green);  border:1px solid rgba(61,220,132,.3); }
+    .station-chip.inprogress{ background:rgba(78,161,255,.1);  color:var(--accent); border:1px solid rgba(78,161,255,.3); }
+    .station-chip.open      { background:rgba(166,179,209,.07); color:var(--muted); border:1px solid var(--border); }
+
+    /* ── Alarm completed row ── */
+    .alarm-pid.completed  { background:#1a4a2a; color:var(--green); text-decoration:line-through; }
+    .alarm-row.done-row   { border-color:var(--green); opacity:.8; }
+    .alarm-done-label     { font-size:.68rem; color:var(--green); white-space:nowrap; }
+
+    /* ── EVT count selector ── */
+    .evt-count-sel {
+      display:flex; align-items:center; gap:.4rem; font-size:.78rem; color:var(--muted); margin-left:auto;
+    }
+    .evt-count-sel select { width:56px; padding:.15rem .3rem; }
+
     /* ── Print ── */
     @media print {
       body { background:#fff; color:#000; }
@@ -316,8 +342,33 @@
 
 <!-- ═══ EVT STATUS ═══ -->
 <div class="section no-print">
-  <div class="section-title">EVT-Status (Live – alle 10 s)</div>
+  <div class="section-title" style="display:flex;align-items:center;">
+    EVT-Status (Live – alle 10 s)
+    <span class="evt-count-sel">
+      Anzahl EVTs:
+      <select id="evtCountSel" onchange="setEvtCount(this.value)">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6" selected>6</option>
+      </select>
+    </span>
+  </div>
   <div class="evt-board" id="evtBoard"><div class="text-muted">Lade…</div></div>
+</div>
+
+<hr class="divider no-print">
+
+<!-- ═══ TEAM PROGRESS ═══ -->
+<div class="section no-print">
+  <div class="section-title collapsible" onclick="toggleSection('tp')">
+    <span class="collapse-arrow" id="arr-tp">▶</span> Trupps – Stationsübersicht
+  </div>
+  <div class="collapsible-body" id="sec-tp" style="max-height:0;">
+    <div id="teamProgressPanel" style="padding-top:.5rem;"></div>
+  </div>
 </div>
 
 <hr class="divider no-print">
@@ -493,6 +544,7 @@ const AUTO_FMS = { alarm_time:null, status3_time:3, status4_time:4, status7_time
 let caseDocs  = {};
 let teams     = [];
 let logEntries = [];
+let evtCount  = 6;  // Anzahl der teilnehmenden EVT-Teams (konfigurierbar)
 
 /* ── Helpers ─────────────────────────────────────────────── */
 function esc(s) {
@@ -510,12 +562,49 @@ function fmtDur(isoA, isoB) {
   return Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';
 }
 
+/* ── EVT helpers ─────────────────────────────────────────── */
+function evtList() {
+  const out = [];
+  for (let i = 1; i <= evtCount; i++) out.push('EVT ' + i);
+  return out;
+}
+
+function updateDatalistOptions() {
+  const opts = ['<option value="Äskulap Feucht"/>',
+    ...evtList().map(v => `<option value="${v}"/>`)].join('');
+  const sList = document.getElementById('sList');
+  const rList = document.getElementById('rList');
+  if (sList) sList.innerHTML = opts;
+  if (rList) rList.innerHTML = opts;
+}
+
+async function setEvtCount(n) {
+  const res = await fetch('/api/exercise/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({evt_count: parseInt(n)}),
+  });
+  if (res.ok) {
+    const c = await res.json();
+    evtCount = c.evt_count || 6;
+    applyEvtCount();
+    renderAlarmGrid();
+    renderCaseGrid();
+    if (sectionOpen.tp) renderTeamProgress();
+  }
+}
+
+function applyEvtCount() {
+  const sel = document.getElementById('evtCountSel');
+  if (sel) sel.value = evtCount;
+  updateDatalistOptions();
+}
+
 /* ── Clock ───────────────────────────────────────────────── */
 setInterval(()=>{ document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-DE'); },1000);
 document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-DE');
 
 /* ── Collapsible Sections ────────────────────────────────── */
-const sectionOpen = { nbr:false, tl:false };
+const sectionOpen = { nbr:false, tl:false, tp:false };
 function toggleSection(id) {
   sectionOpen[id] = !sectionOpen[id];
   const body  = document.getElementById('sec-'+id);
@@ -525,6 +614,7 @@ function toggleSection(id) {
     arrow.classList.add('open');
     if (id==='nbr') { renderNachbesprechung(); renderEvtBewertung(); }
     if (id==='tl')  { renderTimeline(); }
+    if (id==='tp')  { renderTeamProgress(); }
   } else {
     body.style.maxHeight = '0';
     arrow.classList.remove('open');
@@ -554,17 +644,23 @@ function renderEvtBoard() {
 function renderAlarmGrid() {
   const grid = document.getElementById('alarmGrid');
   grid.innerHTML = ['P1','P2','P3','P4','P5','P6'].map(pid=>{
-    const doc  = caseDocs[pid]||{};
-    const done = !!doc.alarm_time;
-    const evtOpts = ['','EVT 1','EVT 2','EVT 3','EVT 4','EVT 5','EVT 6']
+    const doc       = caseDocs[pid]||{};
+    const alarmed   = !!doc.alarm_time;
+    const completed = !!doc.completed;
+    const evtOpts   = ['',...evtList()]
       .map(v=>`<option value="${v}" ${doc.assigned_evt===v?'selected':''}>${v||'– EVT wählen –'}</option>`)
       .join('');
-    return `<div class="alarm-row" id="arow_${pid}">
-      <span class="alarm-pid${done?' alarmed':''}" id="apid_${pid}">${pid}</span>
-      <select id="aevt_${pid}">${evtOpts}</select>
-      <button class="btn ${done?'btn-ghost':'btn-warn'} btn-sm" onclick="alarmCase('${pid}')">
-        ${done?'✓ '+esc(fmtTime(doc.alarm_time)):'🔔 Alarm'}
+    let pidCls = 'alarm-pid';
+    if (completed) pidCls += ' completed';
+    else if (alarmed) pidCls += ' alarmed';
+    return `<div class="alarm-row${completed?' done-row':''}" id="arow_${pid}">
+      <span class="${pidCls}" id="apid_${pid}">${pid}</span>
+      <select id="aevt_${pid}"${completed?' disabled':''}>${evtOpts}</select>
+      <button class="btn ${completed?'btn-success':alarmed?'btn-ghost':'btn-warn'} btn-sm"
+        onclick="alarmCase('${pid}')">
+        ${completed?'✓ Fertig':alarmed?'✓ '+esc(fmtTime(doc.alarm_time)):'🔔 Alarm'}
       </button>
+      ${completed?`<span class="alarm-done-label">⛔ Station erledigt</span>`:''}
     </div>`;
   }).join('');
 }
@@ -626,7 +722,7 @@ function buildCaseCard(pid) {
   const meta=CASES_META[pid]||{};
   const doc =caseDocs[pid]||{};
   const done=doc.completed;
-  const evtOpts=['','EVT 1','EVT 2','EVT 3','EVT 4','EVT 5','EVT 6']
+  const evtOpts=['',...evtList()]
     .map(v=>`<option value="${v}" ${doc.assigned_evt===v?'selected':''}>${v||'– nicht zugewiesen –'}</option>`)
     .join('');
 
@@ -789,6 +885,71 @@ function refreshEvalRow(pid) {
   }
   const el=document.getElementById('eval_'+pid);
   if(el) el.innerHTML=[eb('RMI',doc.rmi_reported,meta.rmi_soll),eb('SK',doc.sk_reported,meta.sk_soll),eb('PZC',doc.pzc_reported,meta.pzc_soll)].join('');
+}
+
+/* ── Team Progress ───────────────────────────────────────── */
+function renderTeamProgress() {
+  const panel = document.getElementById('teamProgressPanel');
+  if (!panel) return;
+  const allCases = ['P1','P2','P3','P4','P5','P6'];
+
+  const rows = evtList().map(evtName => {
+    const teamData = teams.find(t => t.name === evtName);
+    const rs = teamData?.radio_status ?? null;
+    const rsCls = rs !== null ? ([0,5].includes(rs) ? 's0' : `s${rs}`) : '';
+
+    // Cases done by this team (assigned + completed)
+    const done = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      return d.assigned_evt === evtName && d.completed;
+    });
+    // Cases in progress (assigned to this team, not completed, has activity)
+    const inProg = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      return d.assigned_evt === evtName && !d.completed && (d.alarm_time || d.status3_time || d.status4_time);
+    });
+    // All globally unfinished cases (not yet completed, not assigned to this team)
+    const open = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      return !d.completed && d.assigned_evt !== evtName;
+    });
+
+    const allDone = done.length === allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      return d.assigned_evt === evtName;
+    }).length && inProg.length === 0 && open.length === 0;
+
+    const doneChips = done.length
+      ? done.map(p=>`<span class="station-chip done">${p} ✓</span>`).join('')
+      : `<span style="font-size:.72rem;color:var(--muted)">–</span>`;
+
+    const progChips = inProg.map(p=>{
+      const d = caseDocs[p]||{};
+      const s = d.status4_time ? 'S4' : d.status3_time ? 'S3' : 'Alarm';
+      return `<span class="station-chip inprogress">${p} (${s})</span>`;
+    }).join('');
+
+    const openChips = open.length
+      ? open.map(p=>`<span class="station-chip open">${p}</span>`).join('')
+      : `<span style="font-size:.72rem;color:var(--green)">Alle abgeschlossen ✓</span>`;
+
+    return `<div class="tp-card ${done.length>0&&inProg.length===0&&open.length===0?'all-done':''}">
+      <div class="evt-card ${rsCls}" style="padding:.35rem .5rem;border:none;background:transparent;">
+        <div class="name">${esc(evtName)}</div>
+        ${rs!==null?`<div class="sbadge">${FMS_LABELS[rs]||'S'+rs}</div>`:'<div class="sbadge" style="background:transparent;color:var(--muted)">nicht in DB</div>'}
+      </div>
+      <div>
+        <div class="tp-section-label">Erledigt ${done.length>0?'('+done.length+')':''}</div>
+        <div class="station-chips">${doneChips}${progChips}</div>
+      </div>
+      <div>
+        <div class="tp-section-label">Noch offen (global)</div>
+        <div class="station-chips">${openChips}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `<div class="tp-grid">${rows || '<div class="text-muted">Keine EVTs konfiguriert.</div>'}</div>`;
 }
 
 /* ── Nachbesprechung ─────────────────────────────────────── */
@@ -1005,22 +1166,25 @@ async function doReset() {
 
 /* ── Data & Render ───────────────────────────────────────── */
 async function fetchAll() {
-  const [docsRes,teamsRes,logRes]=await Promise.all([
-    fetch('/api/casedocs'), fetch('/api/teams'), fetch('/api/radiolog'),
+  const [docsRes,teamsRes,logRes,cfgRes]=await Promise.all([
+    fetch('/api/casedocs'), fetch('/api/teams'), fetch('/api/radiolog'), fetch('/api/exercise/config'),
   ]);
   if(docsRes.ok)  { const arr=await docsRes.json();  arr.forEach(d=>{caseDocs[d.id]=d;}); }
   if(teamsRes.ok) { teams=await teamsRes.json(); }
   if(logRes.ok)   { logEntries=await logRes.json(); }
+  if(cfgRes.ok)   { const c=await cfgRes.json(); evtCount=c.evt_count||6; }
 }
 
 async function refreshAll() {
   await fetchAll();
+  applyEvtCount();
   renderEvtBoard();
   renderAlarmGrid();
   renderCaseGrid();
   renderLogList();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tp)  renderTeamProgress();
 }
 
 /* ── Auto-Refresh ────────────────────────────────────────── */
@@ -1062,6 +1226,7 @@ async function softRefreshCaseDocs() {
   renderAlarmGrid();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tp)  renderTeamProgress();
 }
 setInterval(softRefreshCaseDocs, 10000);
 

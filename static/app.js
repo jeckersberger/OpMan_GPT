@@ -200,8 +200,9 @@ function missionColor(m){
 
 // ---------------- Exercise Layer helpers ----------------
 
-// Color by CaseDoc status: grey → yellow → orange → blue → green
+// Color by CaseDoc status: grey → yellow → orange → blue → green → dark (done)
 function exerciseCaseColor(doc) {
+  if (doc?.completed) return "#444444";                    // dark: station done, don't dispatch
   if (!doc || !doc.alarm_time) return "#777777";           // grey: not alarmed
   if (doc.status8_time || doc.status7_time) return "#22cc66"; // green: S7/S8
   if (doc.status4_time) return "#2299ff";                  // blue: S4 on scene
@@ -226,11 +227,20 @@ function walkingTimeStr(km) {
   return `${Math.floor(mins / 60)}h ${mins % 60}min`;
 }
 
-function makeExerciseIcon(color, label) {
+function makeExerciseIcon(color, label, completed) {
   const bg = color || "#777777";
-  const html = `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;` +
-    `border:2px solid rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;` +
-    `font-weight:bold;font-size:11px;box-shadow:0 2px 5px rgba(0,0,0,0.5);font-family:monospace;">${label}</div>`;
+  const border = completed ? "2px dashed #3ddc84" : "2px solid rgba(0,0,0,0.55)";
+  const strike = completed ? "text-decoration:line-through;opacity:0.85;" : "";
+  const check = completed
+    ? `<div style="position:absolute;top:-5px;right:-5px;background:#3ddc84;color:#000;` +
+      `border-radius:50%;width:14px;height:14px;display:flex;align-items:center;` +
+      `justify-content:center;font-size:8px;font-weight:bold;line-height:1;">✓</div>`
+    : "";
+  const html = `<div style="position:relative;width:30px;height:30px;">` +
+    `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;` +
+    `border:${border};display:flex;align-items:center;justify-content:center;` +
+    `font-weight:bold;font-size:11px;box-shadow:0 2px 5px rgba(0,0,0,0.5);font-family:monospace;${strike}">${label}</div>` +
+    `${check}</div>`;
   return L.divIcon({ className: "", html, iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -17] });
 }
 
@@ -255,11 +265,12 @@ function refreshExerciseLayer() {
 
     const doc = casedocData.find(d => d.id === id);
     const color = exerciseCaseColor(doc);
+    const completed = !!doc?.completed;
     const ll = [data.lat, data.lng];
 
-    // Draw dashed line from assigned EVT team to this case
+    // Draw dashed line from assigned EVT team to this case (skip if completed)
     let walkExtra = "";
-    if (doc?.assigned_evt) {
+    if (doc?.assigned_evt && !completed) {
       const team = teams.find(t => t.name === doc.assigned_evt || t.callsign === doc.assigned_evt);
       if (team?.lat != null) {
         const km = haversine(team.lat, team.lng, data.lat, data.lng);
@@ -271,13 +282,14 @@ function refreshExerciseLayer() {
       }
     }
 
-    const tooltipText = `${id}: ${data.schlagwort}${walkExtra}`;
-    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}`;
+    const tooltipText = `${completed ? "✓ FERTIG | " : ""}${id}: ${data.schlagwort}${walkExtra}`;
+    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}` +
+      (completed ? `<br><b style="color:#3ddc84">✓ Station abgeschlossen</b>` : "");
 
     if (exerciseMarkers.has(id)) {
       const marker = exerciseMarkers.get(id);
       marker.setLatLng(ll);
-      marker.setIcon(makeExerciseIcon(color, id));
+      marker.setIcon(makeExerciseIcon(color, id, completed));
       if (marker.getTooltip()) {
         marker.setTooltipContent(tooltipText);
       } else {
@@ -285,7 +297,7 @@ function refreshExerciseLayer() {
       }
       marker.setPopupContent(popupHtml);
     } else {
-      const marker = L.marker(ll, { icon: makeExerciseIcon(color, id) })
+      const marker = L.marker(ll, { icon: makeExerciseIcon(color, id, completed) })
         .addTo(map)
         .bindTooltip(tooltipText, { permanent: true, direction: "right", offset: [18, 0], opacity: 0.9 })
         .bindPopup(popupHtml);
@@ -375,7 +387,25 @@ function upsertMissionMarker(m){
   }
 }
 
+function cleanupMarkers(){
+  const currentMissionIds = new Set(missions.map(m => m.id));
+  for (const [id, marker] of missionMarkers.entries()) {
+    if (!currentMissionIds.has(id)) {
+      marker.remove();
+      missionMarkers.delete(id);
+    }
+  }
+  const currentTeamIds = new Set(teams.map(t => t.id));
+  for (const [id, marker] of teamMarkers.entries()) {
+    if (!currentTeamIds.has(id)) {
+      marker.remove();
+      teamMarkers.delete(id);
+    }
+  }
+}
+
 function rebuildMarkers(){
+  cleanupMarkers();
   for (const t of teams) upsertTeamMarker(t);
   for (const m of missions) upsertMissionMarker(m);
 }
@@ -747,6 +777,7 @@ async function refreshAll(rebuild = true){
   if (rebuild){
     rebuildMarkers();
   } else {
+    cleanupMarkers();
     for (const t of teams) upsertTeamMarker(t);
     for (const m of missions) upsertMissionMarker(m);
   }
@@ -816,6 +847,30 @@ function wireUI(){
     $("missionDesc").value = "";
     await refreshAll();
   });
+
+  const btnImport = $("btnImportExercise");
+  if (btnImport) {
+    btnImport.addEventListener("click", async () => {
+      btnImport.disabled = true;
+      btnImport.textContent = "Importiere…";
+      try {
+        // Sicherstellen, dass Geodaten gecacht sind
+        await api("/api/exercise/geodata");
+        const result = await api("/api/exercise/import-missions", { method: "POST" });
+        const created = result.created || [];
+        const newOnes = created.filter(c => !c.skipped).length;
+        const skipped = created.filter(c => c.skipped).length;
+        alert(`Import abgeschlossen: ${newOnes} neu angelegt, ${skipped} bereits vorhanden (übersprungen).`);
+        await refreshAll(true);
+        if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
+      } catch (e) {
+        // error already shown by api()
+      } finally {
+        btnImport.disabled = false;
+        btnImport.textContent = "📥 Übungsfälle als Einsätze importieren (P1–P6)";
+      }
+    });
+  }
 
   // global Assign (links+rechts auswählen)
   const btnAssign = $("btnAssign");

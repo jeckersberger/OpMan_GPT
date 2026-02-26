@@ -787,6 +787,29 @@ async function refreshAll(rebuild = true){
 }
 
 // ---------------- Sprechwunsch-Panel ----------------
+// Web Audio API – Benachrichtigungston erzeugen (kein Audio-Datei-Download nötig)
+function _playSWTone(prio) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const schedule = prio
+      ? [[440, 0.00, 0.12], [550, 0.13, 0.12], [660, 0.26, 0.18]]   // S0: 3 aufsteigende Töne
+      : [[520, 0.00, 0.10], [520, 0.12, 0.10]];                       // S5: 2 kurze gleiche Töne
+    schedule.forEach(([freq, start, dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.05);
+    });
+  } catch (_) { /* AudioContext nicht verfügbar */ }
+}
+
+const _swKnownIds = new Set();  // IDs der bereits bekannten Sprechwunsch-Teams
+
 function renderSprechwunschPanel() {
   const panel = document.getElementById("swPanel");
   if (!panel) return;
@@ -799,8 +822,20 @@ function renderSprechwunschPanel() {
 
   if (sw.length === 0) {
     panel.classList.remove("sw-visible");
+    _swKnownIds.clear();
     return;
   }
+
+  // Ton abspielen für neu hinzugekommene Einträge
+  sw.forEach(t => {
+    if (!_swKnownIds.has(t.id)) {
+      _swKnownIds.add(t.id);
+      _playSWTone(t.radio_status === 0);
+    }
+  });
+  // Quittierte entfernen
+  const swIds = new Set(sw.map(t => t.id));
+  for (const id of _swKnownIds) { if (!swIds.has(id)) _swKnownIds.delete(id); }
 
   const label = s0.length > 0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
   panel.className = "sw-panel sw-visible";

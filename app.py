@@ -496,21 +496,25 @@ def create_app():
                 team.availability = "verfügbar"
 
             # Aktiven CaseDoc suchen → Zeitstempel spiegeln + ggf. abschließen
+            # Neuester nicht-abgeschlossener Fall mit alarm_time hat Vorrang
             _stamp_map = {3: "status3_time", 4: "status4_time",
                           7: "status7_time", 8: "status8_time"}
             _ident = {team.name, team.callsign} - {None}
             _case_ref = None
             for _i in _ident:
-                _doc = CaseDoc.query.filter_by(assigned_evt=_i).filter(
-                    CaseDoc.alarm_time.isnot(None)
-                ).first()
+                _doc = (CaseDoc.query
+                        .filter_by(assigned_evt=_i)
+                        .filter(CaseDoc.alarm_time.isnot(None),
+                                CaseDoc.completed == False)  # noqa: E712
+                        .order_by(CaseDoc.alarm_time.desc())
+                        .first())
                 if _doc:
                     _case_ref = _doc.id
                     _field = _stamp_map.get(rs)
                     if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
-                    if rs == 1 and _doc.status4_time is not None and not _doc.completed:
+                    if rs == 1 and _doc.status4_time is not None:
                         _doc.completed = True
                         _doc.updated_at = datetime.utcnow()
                     break

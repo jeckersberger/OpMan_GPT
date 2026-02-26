@@ -180,16 +180,6 @@
       padding: .25rem .55rem;
     }
 
-    .hint-box {
-      font-size: .82rem;
-      background: rgba(245,200,66,.07);
-      border: 1px solid rgba(245,200,66,.22);
-      border-radius: 6px;
-      padding: .4rem .65rem;
-      color: #c8a800;
-      line-height: 1.6;
-    }
-
     /* Timestamp row */
     .ts-row {
       display: grid;
@@ -474,9 +464,11 @@ function triggerAlarm(doc, meta) {
   document.getElementById('alarmOverlay').classList.add('show');
 }
 
-document.getElementById('alarmDismiss').addEventListener('click', () => {
+document.getElementById('alarmDismiss').addEventListener('click', async () => {
   document.getElementById('alarmOverlay').classList.remove('show');
   _alarmDoc = null;
+  // Alarm quittieren = S3 (Einsatz übernommen) senden
+  await setFms(3);
 });
 
 // ── Render ───────────────────────────────────────────────────
@@ -547,7 +539,6 @@ function renderMain(team, doc, meta) {
           </div>
           ${m.w3w_alarm ? `<div class="w3w-alarm-note">⚠ Alarmadresse: ${esc(m.w3w_alarm)}</div>` : ''}
         </div>` : ''}
-        ${m.besonderheit ? `<div class="hint-box">⚠ ${esc(m.besonderheit)}</div>` : ''}
         <div class="ts-row">${ts}</div>
       </div>
     </div>`;

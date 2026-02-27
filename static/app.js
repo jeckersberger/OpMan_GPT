@@ -492,7 +492,7 @@ function renderTeams(){
     btn.addEventListener("click", () => {
       const id = parseInt(btn.getAttribute("data-team-pan"), 10);
       const t = teams.find(x => x.id === id);
-      if (t?.lat != null) map.setView([t.lat, t.lng], 15);
+      if (t?.lat != null) map.setView([t.lat, t.lng], map.getZoom());
       if (teamMarkers.has(id)) teamMarkers.get(id).openPopup();
     });
   });
@@ -653,7 +653,7 @@ function renderMissions(){
     btn.addEventListener("click", () => {
       const id = parseInt(btn.getAttribute("data-mission-pan"), 10);
       const m = missions.find(x => x.id === id);
-      if (m?.lat != null) map.setView([m.lat, m.lng], 15);
+      if (m?.lat != null) map.setView([m.lat, m.lng], map.getZoom());
       if (missionMarkers.has(id)) missionMarkers.get(id).openPopup();
     });
   });

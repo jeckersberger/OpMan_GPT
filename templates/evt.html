@@ -566,47 +566,35 @@ function _showNotification(title, body) {
   } catch (_) { /* Notification nicht verfügbar */ }
 }
 
-// ── Looping Alarm Sound ──────────────────────────────────────
-let _alarmLoopHandle = null;
-
-function _playAlarmBurst() {
+// ── Alarm Sound (~3 Sekunden) ────────────────────────────────
+function _playAlarmTone() {
   if (!_audioCtx) return;
   try {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
-    const seq = [
+    // 3-Sekunden Alarm: 3 Durchgänge à ~1s
+    const base = [
       { freq: 880, start: 0.0, dur: 0.18 },
-      { freq: 660, start: 0.2, dur: 0.18 },
-      { freq: 880, start: 0.4, dur: 0.18 },
-      { freq: 660, start: 0.6, dur: 0.18 },
-      { freq: 880, start: 0.8, dur: 0.25 },
+      { freq: 660, start: 0.22, dur: 0.18 },
+      { freq: 880, start: 0.44, dur: 0.18 },
+      { freq: 660, start: 0.66, dur: 0.18 },
+      { freq: 880, start: 0.88, dur: 0.12 },
     ];
-    seq.forEach(({ freq, start, dur }) => {
-      const osc  = _audioCtx.createOscillator();
-      const gain = _audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(_audioCtx.destination);
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.45, _audioCtx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
-      osc.start(_audioCtx.currentTime + start);
-      osc.stop(_audioCtx.currentTime + start + dur + 0.02);
-    });
+    for (let round = 0; round < 3; round++) {
+      const offset = round * 1.1;
+      base.forEach(({ freq, start, dur }) => {
+        const osc  = _audioCtx.createOscillator();
+        const gain = _audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(_audioCtx.destination);
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.45, _audioCtx.currentTime + offset + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + offset + start + dur);
+        osc.start(_audioCtx.currentTime + offset + start);
+        osc.stop(_audioCtx.currentTime + offset + start + dur + 0.02);
+      });
+    }
   } catch (e) { /* kein Audio-Support */ }
-}
-
-function _playAlarmTone() {
-  _stopAlarmTone();  // vorherigen Loop stoppen
-  _playAlarmBurst(); // sofort abspielen
-  // Alle 1.5 Sekunden wiederholen bis quittiert
-  _alarmLoopHandle = setInterval(_playAlarmBurst, 1500);
-}
-
-function _stopAlarmTone() {
-  if (_alarmLoopHandle) {
-    clearInterval(_alarmLoopHandle);
-    _alarmLoopHandle = null;
-  }
 }
 
 // ── Alarm ────────────────────────────────────────────────────
@@ -644,7 +632,6 @@ function triggerAlarm(doc, meta) {
 }
 
 document.getElementById('alarmDismiss').addEventListener('click', async () => {
-  _stopAlarmTone();  // Alarm-Sound stoppen
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('alarmOverlay').classList.remove('show');
   _alarmDoc = null;
@@ -655,45 +642,34 @@ document.getElementById('alarmDismiss').addEventListener('click', async () => {
 // ── Testalarm ────────────────────────────────────────────────
 let _testAlarmShown = null;  // timestamp-string des aktuellen Testalarms
 
-let _testAlarmLoopHandle = null;
-
-function _playTestAlarmBurst() {
+// ── Testalarm Sound (~3 Sekunden) ────────────────────────────
+function _playTestAlarmTone() {
   if (!_audioCtx) return;
   try {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
-    const seq = [
+    const base = [
       { freq: 440, start: 0.0,  dur: 0.10 },
       { freq: 550, start: 0.15, dur: 0.10 },
       { freq: 660, start: 0.30, dur: 0.10 },
       { freq: 550, start: 0.45, dur: 0.10 },
       { freq: 440, start: 0.60, dur: 0.15 },
     ];
-    seq.forEach(({ freq, start, dur }) => {
-      const osc  = _audioCtx.createOscillator();
-      const gain = _audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(_audioCtx.destination);
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.35, _audioCtx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
-      osc.start(_audioCtx.currentTime + start);
-      osc.stop(_audioCtx.currentTime + start + dur + 0.05);
-    });
+    for (let round = 0; round < 3; round++) {
+      const offset = round * 0.9;
+      base.forEach(({ freq, start, dur }) => {
+        const osc  = _audioCtx.createOscillator();
+        const gain = _audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(_audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.35, _audioCtx.currentTime + offset + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + offset + start + dur);
+        osc.start(_audioCtx.currentTime + offset + start);
+        osc.stop(_audioCtx.currentTime + offset + start + dur + 0.05);
+      });
+    }
   } catch (_) { /* kein Audio-Support */ }
-}
-
-function _playTestAlarmTone() {
-  _stopTestAlarmTone();
-  _playTestAlarmBurst();
-  _testAlarmLoopHandle = setInterval(_playTestAlarmBurst, 1200);
-}
-
-function _stopTestAlarmTone() {
-  if (_testAlarmLoopHandle) {
-    clearInterval(_testAlarmLoopHandle);
-    _testAlarmLoopHandle = null;
-  }
 }
 
 function showTestAlarm(team) {
@@ -710,7 +686,6 @@ function showTestAlarm(team) {
 }
 
 document.getElementById('testAlarmDismiss').addEventListener('click', async () => {
-  _stopTestAlarmTone();  // Sound stoppen
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('testAlarmOverlay').classList.remove('show');
   if (currentTeamId) {

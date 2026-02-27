@@ -780,8 +780,6 @@ function buildCaseCard(pid) {
     </div>
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
     <div class="soll-row">
-      <span class="soll-chip">RMI: ${esc(meta.rmi_soll||'–')}</span>
-      <span class="soll-chip">SK: ${esc(meta.sk_soll||'–')}</span>
       <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
     </div>
     <hr class="divider" style="margin:0;">
@@ -794,12 +792,6 @@ function buildCaseCard(pid) {
       <div class="ts-row">${tsRow}</div>
     </div>
     <div class="form-row">
-      <div><label class="form-label">RMI (ist)</label>
-        <input id="rmi_${pid}" type="text" placeholder="${esc(meta.rmi_soll||'–')}"
-          value="${esc(doc.rmi_reported||'')}" oninput="debounceSave('${pid}')"></div>
-      <div><label class="form-label">SK (ist)</label>
-        <input id="sk_${pid}" type="text" placeholder="${esc(meta.sk_soll||'–')}"
-          value="${esc(doc.sk_reported||'')}" oninput="debounceSave('${pid}')"></div>
       <div><label class="form-label">PZC (ist)</label>
         <input id="pzc_${pid}" type="text" placeholder="${esc(meta.pzc_soll||'–')}"
           value="${esc(doc.pzc_reported||'')}" oninput="debounceSave('${pid}')"></div>
@@ -810,8 +802,6 @@ function buildCaseCard(pid) {
     <div><label class="form-label">Notizen / Beobachtungen</label>
       <textarea id="notes_${pid}" oninput="debounceSave('${pid}')">${esc(doc.notes||'')}</textarea></div>
     <div class="eval-row" id="eval_${pid}">
-      ${eb('RMI',doc.rmi_reported,meta.rmi_soll)}
-      ${eb('SK', doc.sk_reported, meta.sk_soll)}
       ${eb('PZC',doc.pzc_reported,meta.pzc_soll)}
     </div>
     <div style="display:flex;justify-content:flex-end;">
@@ -873,8 +863,6 @@ async function toggleDone(pid) {
 async function saveCase(pid) {
   const payload={
     assigned_evt: document.getElementById('evt_'+pid)?.value||null,
-    rmi_reported: document.getElementById('rmi_'+pid)?.value||null,
-    sk_reported:  document.getElementById('sk_'+pid)?.value||null,
     pzc_reported: document.getElementById('pzc_'+pid)?.value||null,
     zielklinik:   document.getElementById('klinik_'+pid)?.value||null,
     notes:        document.getElementById('notes_'+pid)?.value||null,
@@ -894,11 +882,13 @@ function refreshEvalRow(pid) {
   function eb(l,r,s){
     if(!s||s==='—') return `<span class="eval-badge na">${l}: n/a</span>`;
     if(!r) return `<span class="eval-badge na">${l}: –</span>`;
-    const ok=r.trim()===s.trim();
-    return `<span class="eval-badge ${ok?'ok':'fail'}">${l}: ${esc(r)} ${ok?'✓':'≠'+s}</span>`;
+    // Mehrere Soll-Werte (kommasepariert) unterstützen
+    const opts=s.split(',').map(v=>v.trim());
+    const ok=opts.some(v=>r.trim()===v);
+    return `<span class="eval-badge ${ok?'ok':'fail'}">${l}: ${esc(r)} ${ok?'✓':'≠'+opts[0]}</span>`;
   }
   const el=document.getElementById('eval_'+pid);
-  if(el) el.innerHTML=[eb('RMI',doc.rmi_reported,meta.rmi_soll),eb('SK',doc.sk_reported,meta.sk_soll),eb('PZC',doc.pzc_reported,meta.pzc_soll)].join('');
+  if(el) el.innerHTML=eb('PZC',doc.pzc_reported,meta.pzc_soll);
 }
 
 /* ── Team Progress ───────────────────────────────────────── */

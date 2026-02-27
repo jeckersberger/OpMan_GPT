@@ -1105,21 +1105,81 @@ if __name__ == "__main__":
     # Hinweis: Wenn du von der alten DB-Struktur kommst,
     # lösche einmal die Datei "einsatzleiter.db", damit die neuen Spalten
     # (availability etc.) sauber erstellt werden.
-    #
-    # Startet mit HTTPS (Auto-Zertifikat). Benötigt: pip install cryptography
-    from run import ensure_cert, get_lan_ip, CERT, KEY
+    import os as _os, socket as _socket, subprocess as _subprocess, sys as _sys
+
+    _INST = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "instance")
+    _CERT = _os.path.join(_INST, "cert.pem")
+    _KEY  = _os.path.join(_INST, "key.pem")
+
+    def _lan_ip():
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80)); ip = s.getsockname()[0]; s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def _make_cert():
+        if _os.path.exists(_CERT) and _os.path.exists(_KEY):
+            return True
+        lip = _lan_ip()
+        _os.makedirs(_INST, exist_ok=True)
+        print(f"Generiere SSL-Zertifikat für {lip} ...")
+        # cryptography auto-installieren falls nötig
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            print("  'cryptography' nicht installiert – installiere automatisch ...")
+            r = _subprocess.run([_sys.executable, "-m", "pip", "install", "cryptography"],
+                                capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"  Installation fehlgeschlagen. Starte ohne HTTPS.")
+                return False
+            print("  cryptography erfolgreich installiert.")
+        try:
+            from cryptography import x509
+            from cryptography.x509.oid import NameOID
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            import datetime, ipaddress
+            key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            san = [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+            if lip != "127.0.0.1":
+                san.append(x509.IPAddress(ipaddress.ip_address(lip)))
+            cert = (x509.CertificateBuilder()
+                    .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
+                    .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
+                    .public_key(key.public_key())
+                    .serial_number(x509.random_serial_number())
+                    .not_valid_before(datetime.datetime.utcnow())
+                    .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=825))
+                    .add_extension(x509.SubjectAlternativeName(san), critical=False)
+                    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+                    .sign(key, hashes.SHA256()))
+            with open(_KEY, "wb") as f:
+                f.write(key.private_bytes(serialization.Encoding.PEM,
+                        serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
+            with open(_CERT, "wb") as f:
+                f.write(cert.public_bytes(serialization.Encoding.PEM))
+            print(f"  Zertifikat erstellt: {_CERT}")
+            return True
+        except Exception as e:
+            print(f"  Zertifikat-Erstellung fehlgeschlagen: {e}")
+            return False
 
     app = create_app()
-    lan_ip = get_lan_ip()
-    ssl_ctx = (CERT, KEY) if ensure_cert() else None
+    lip = _lan_ip()
+    ssl_ctx = (_CERT, _KEY) if _make_cert() else None
     proto = "https" if ssl_ctx else "http"
     print()
     print("=" * 60)
     print(f"  OpMan-GPT startet mit {proto.upper()}")
-    print(f"  {proto}://{lan_ip}:5000        ← LAN (Handy)")
+    print(f"  {proto}://{lip}:5000        ← LAN (Handy)")
     print(f"  {proto}://localhost:5000        ← lokal")
-    if not ssl_ctx:
+    if ssl_ctx:
+        print("  Beim ersten Öffnen: Sicherheitswarnung → 'Trotzdem öffnen'")
+    else:
         print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
     print("=" * 60)
     print()
-    app.run(debug=True, host="0.0.0.0", port=5000, ssl_context=ssl_ctx)
+    app.run(host="0.0.0.0", port=5000, debug=False, ssl_context=ssl_ctx)

@@ -1189,12 +1189,16 @@ async function doReset() {
 
 /* ── Data & Render ───────────────────────────────────────── */
 async function fetchAll() {
-  const [docsRes,teamsRes,logRes]=await Promise.all([
-    fetch('/api/casedocs'), fetch('/api/teams'), fetch('/api/radiolog'),
+  // Dashboard + Radiolog in 2 Requests (statt 3)
+  const [dashRes,logRes]=await Promise.all([
+    fetch('/api/dashboard'), fetch('/api/radiolog'),
   ]);
-  if(docsRes.ok)  { const arr=await docsRes.json();  arr.forEach(d=>{caseDocs[d.id]=d;}); }
-  if(teamsRes.ok) { teams=await teamsRes.json(); evtCount=teams.length||evtCount; }
-  if(logRes.ok)   { logEntries=await logRes.json(); }
+  if(dashRes.ok) {
+    const d=await dashRes.json();
+    d.casedocs.forEach(c=>{caseDocs[c.id]=c;});
+    teams=d.teams; evtCount=teams.length||evtCount;
+  }
+  if(logRes.ok) { logEntries=await logRes.json(); }
 }
 
 async function refreshAll() {

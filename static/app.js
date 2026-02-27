@@ -838,12 +838,11 @@ function normalizeRadioLabels(){
 }
 
 async function refreshAll(rebuild = true){
-  [teams, missions, assignments, casedocData] = await Promise.all([
-    api("/api/teams"),
-    api("/api/missions"),
-    api("/api/assignments"),
-    api("/api/casedocs"),
-  ]);
+  const data = await api("/api/dashboard");
+  teams = data.teams;
+  missions = data.missions;
+  assignments = data.assignments;
+  casedocData = data.casedocs;
 
   normalizeRadioLabels();
   computeAssignedTeamIds();
@@ -1110,15 +1109,14 @@ function _showConnBanner(ok) {
 }
 
 async function _silentRefreshAll() {
-  // Wie refreshAll(false), aber ohne alert() bei Fehlern
-  const [tRes, mRes, aRes, cRes] = await Promise.all([
-    fetch("/api/teams"), fetch("/api/missions"),
-    fetch("/api/assignments"), fetch("/api/casedocs"),
-  ]);
-  if (!tRes.ok || !mRes.ok || !aRes.ok || !cRes.ok) throw new Error("API error");
-  [teams, missions, assignments, casedocData] = await Promise.all([
-    tRes.json(), mRes.json(), aRes.json(), cRes.json(),
-  ]);
+  // Ein einziger Request statt 4 (schneller über HTTPS)
+  const res = await fetch("/api/dashboard");
+  if (!res.ok) throw new Error("API error");
+  const data = await res.json();
+  teams = data.teams;
+  missions = data.missions;
+  assignments = data.assignments;
+  casedocData = data.casedocs;
   normalizeRadioLabels();
   computeAssignedTeamIds();
   renderTeams(); renderMissions(); renderAssignments(); setSelectionLabel();

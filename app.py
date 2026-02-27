@@ -186,6 +186,36 @@ def create_app():
         """Health-Check Endpoint für Monitoring."""
         return jsonify({"status": "ok", "timestamp": _fmt_dt(_utcnow())})
 
+    @app.get("/api/dashboard")
+    def dashboard_data():
+        """Alle Dashboard-Daten in einem einzigen Request (statt 4 einzelner)."""
+        teams_list = Team.query.order_by(Team.updated_at.desc()).all()
+        _pending_evts = {
+            d.assigned_evt for d in CaseDoc.query.filter(
+                CaseDoc.alarm_time.isnot(None),
+                CaseDoc.status3_time.is_(None),
+                CaseDoc.completed == False  # noqa: E712
+            ).all() if d.assigned_evt
+        }
+        teams_out = []
+        for t in teams_list:
+            _ident = {t.name, t.callsign} - {None}
+            teams_out.append(serialize_team(
+                t, include_missions=True,
+                pending_alarm=bool(_ident & _pending_evts)
+            ))
+        missions_out = [serialize_mission(m, include_teams=True)
+                        for m in Mission.query.order_by(Mission.updated_at.desc()).all()]
+        assigns_out = [serialize_assignment(a)
+                       for a in Assignment.query.order_by(Assignment.created_at.desc()).all()]
+        docs_out = [serialize_casedoc(d) for d in CaseDoc.query.order_by(CaseDoc.id).all()]
+        return jsonify({
+            "teams": teams_out,
+            "missions": missions_out,
+            "assignments": assigns_out,
+            "casedocs": docs_out,
+        })
+
     @app.get("/")
     def index():
         return render_template("index.html")

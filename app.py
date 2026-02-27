@@ -96,8 +96,24 @@ def create_app():
     app = Flask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///einsatzleiter.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    # WAL-Modus für SQLite: mehrere gunicorn-Worker können gleichzeitig lesen
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"check_same_thread": False},
+        "pool_pre_ping": True,
+    }
 
     db.init_app(app)
+
+    # SQLite WAL-Modus aktivieren (wichtig für Multi-Worker gunicorn)
+    with app.app_context():
+        from sqlalchemy import event
+
+        @event.listens_for(db.engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, _rec):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=5000")
+            cur.close()
 
     # Übungs-Falldaten (statisch, aus Übungsleiterunterlagen)
     EXERCISE_CASES = {
@@ -1218,8 +1234,8 @@ if __name__ == "__main__":
                     .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
                     .public_key(key.public_key())
                     .serial_number(x509.random_serial_number())
-                    .not_valid_before(datetime._utcnow())
-                    .not_valid_after(datetime._utcnow() + datetime.timedelta(days=825))
+                    .not_valid_before(datetime.datetime.utcnow())
+                    .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=825))
                     .add_extension(x509.SubjectAlternativeName(san), critical=False)
                     .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                     .sign(key, hashes.SHA256()))
@@ -1236,13 +1252,49 @@ if __name__ == "__main__":
 
     app = create_app()
     lip = _lan_ip()
-    proto = "http"
+    has_cert = _make_cert()
+
+    # ── gunicorn für Production (schnell, stabil, 10+ Geräte) ──
+    _use_gunicorn = True
+    try:
+        import gunicorn  # noqa: F401
+    except ImportError:
+        _use_gunicorn = False
+        print("  gunicorn nicht installiert – Fallback auf Flask Dev-Server")
+        print("  Installiere mit: pip install gunicorn")
+
+    proto = "https" if has_cert else "http"
     print()
     print("=" * 60)
     print(f"  OpMan-GPT startet mit {proto.upper()}")
+    if _use_gunicorn:
+        print(f"  Server: gunicorn (Production, 4 Worker)")
+    else:
+        print(f"  Server: Flask Dev-Server (nur zum Testen!)")
     print(f"  {proto}://{lip}:5000        ← LAN (Handy)")
     print(f"  {proto}://localhost:5000        ← lokal")
-    print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
+    if has_cert:
+        print("  Beim ersten Öffnen: Sicherheitswarnung → 'Trotzdem öffnen'")
+    else:
+        print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
     print("=" * 60)
     print()
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+
+    if _use_gunicorn:
+        # gunicorn per subprocess starten (damit __main__ sauber bleibt)
+        _cmd = [
+            _sys.executable, "-m", "gunicorn",
+            "--bind", "0.0.0.0:5000",
+            "--workers", "4",
+            "--threads", "2",
+            "--timeout", "120",
+            "--access-logfile", "-",
+            "app:create_app()",
+        ]
+        if has_cert:
+            _cmd += ["--certfile", _CERT, "--keyfile", _KEY]
+        _subprocess.run(_cmd)
+    else:
+        ssl_ctx = (_CERT, _KEY) if has_cert else None
+        app.run(host="0.0.0.0", port=5000, debug=False,
+                ssl_context=ssl_ctx, threaded=True)

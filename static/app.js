@@ -991,7 +991,6 @@ function wireUI(){
 
   $("btnCreateTeam").addEventListener("click", async () => {
     const payload = {
-      name: $("teamName").value.trim() || undefined,
       callsign: $("teamCallsign").value.trim() || undefined,
       color: $("teamColor").value,
     };
@@ -1003,7 +1002,6 @@ function wireUI(){
     });
 
     selectedTeamId = t.id;
-    $("teamName").value = "";
     $("teamCallsign").value = "";
     await refreshAll();
   });

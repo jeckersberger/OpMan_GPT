@@ -6,6 +6,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
+from sqlalchemy import text
 from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig
 
 # ---------------------------
@@ -132,6 +133,15 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        # Auto-migration: add new columns to existing tables
+        with db.engine.connect() as _conn:
+            try:
+                _conn.execute(text(
+                    "ALTER TABLE teams ADD COLUMN radio_group VARCHAR(30) NOT NULL DEFAULT 'regelfunk'"
+                ))
+                _conn.commit()
+            except Exception:
+                pass  # Column already exists
         # CaseDoc-Einträge initialisieren (nur beim ersten Start)
         for case_id in EXERCISE_CASES:
             if CaseDoc.query.get(case_id) is None:

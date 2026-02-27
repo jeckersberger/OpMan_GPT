@@ -55,16 +55,22 @@
     <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:640px;width:95%;margin:2rem auto;">
       <h3 style="margin-bottom:.5rem;font-size:1rem;">📍 Koordinaten manuell eingeben</h3>
       <p style="font-size:.75rem;color:#a6b3d1;margin-bottom:.3rem;">
-        w3w-Link öffnen (Handy mit Internet) → Koordinaten ablesen → hier eintragen.
+        „Automatisch auflösen" nutzt die w3w API direkt aus deinem Browser (Internet nötig).<br>
+        Alternativ: w3w-Link öffnen → Koordinaten manuell eintragen.
       </p>
       <p style="font-size:.72rem;color:#777;margin-bottom:1rem;">
         Format: Dezimalgrad, z.B. lat=48.1234 lng=11.5678
       </p>
       <div id="coordRows"></div>
-      <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:flex-end;">
+      <div id="coordResolveStatus" style="font-size:.75rem;color:#f5c842;min-height:1.2rem;margin-top:.5rem;"></div>
+      <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;justify-content:flex-end;">
         <button onclick="document.getElementById('coordModal').style.display='none'"
           style="padding:.4rem 1rem;background:#223152;color:#a6b3d1;border:1px solid #334;border-radius:6px;cursor:pointer;font-family:inherit;">
           Abbrechen
+        </button>
+        <button id="btnAutoResolve"
+          style="padding:.4rem 1rem;background:#1a2a1a;color:#7ddf8a;border:1px solid #3ddc84;border-radius:6px;cursor:pointer;font-family:inherit;">
+          🌐 Automatisch auflösen
         </button>
         <button id="btnSaveCoords"
           style="padding:.4rem 1rem;background:#4ea1ff;color:#000;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-family:inherit;">

@@ -1029,7 +1029,7 @@ function wireUI(){
         html += `<div style="${rowStyle}">
           <span style="${labelStyle};font-weight:700;">${esc(cid)}</span>
           <a href="${w3wUrl}" target="_blank" rel="noopener" style="${linkStyle}" title="${esc(w3w)}">${esc(w3w) || "–"}</a>
-          <input class="coord-lat" data-case="${esc(cid)}" value="${lat}" placeholder="48.1234" style="${inputStyle}">
+          <input class="coord-lat" data-case="${esc(cid)}" data-w3w="${esc(w3w)}" value="${lat}" placeholder="48.1234" style="${inputStyle}">
           <input class="coord-lng" data-case="${esc(cid)}" value="${lng}" placeholder="11.5678" style="${inputStyle}">
         </div>`;
       }
@@ -1039,7 +1039,7 @@ function wireUI(){
       html += `<div style="${rowStyle}">
         <span style="${labelStyle};font-weight:700;">Start</span>
         <a href="${spUrl}" target="_blank" rel="noopener" style="${linkStyle}" title="${esc(spW3w)}">${esc(spW3w) || "–"}</a>
-        <input id="spLat" value="${sp.lat != null ? sp.lat : ""}" placeholder="48.1234" style="${inputStyle}">
+        <input id="spLat" data-w3w="${esc(spW3w)}" value="${sp.lat != null ? sp.lat : ""}" placeholder="48.1234" style="${inputStyle}">
         <input id="spLng" value="${sp.lng != null ? sp.lng : ""}" placeholder="11.5678" style="${inputStyle}">
       </div>`;
 
@@ -1083,6 +1083,80 @@ function wireUI(){
         btnSaveCoords.disabled = false;
         btnSaveCoords.textContent = "Speichern";
       }
+    });
+  }
+
+  // Auto-resolve w3w via browser (CORS-capable direct API call)
+  const btnAutoResolve = $("btnAutoResolve");
+  if (btnAutoResolve) {
+    btnAutoResolve.addEventListener("click", async () => {
+      const statusEl = $("coordResolveStatus");
+      btnAutoResolve.disabled = true;
+      btnAutoResolve.textContent = "Auflösen…";
+      if (statusEl) statusEl.textContent = "Rufe w3w API auf…";
+
+      // Collect all w3w addresses from current input rows
+      const latInputs = document.querySelectorAll(".coord-lat");
+      const allW3w = [];
+      latInputs.forEach(inp => {
+        const cid = inp.dataset.case;
+        const w3wAddr = inp.dataset.w3w || "";
+        allW3w.push({ cid, w3wAddr, latInp: inp,
+          lngInp: document.querySelector(`.coord-lng[data-case="${cid}"]`) });
+      });
+      // Also startpunkt
+      const spLat = $("spLat"), spLng = $("spLng");
+
+      let ok = 0, fail = 0;
+      const W3W_KEY = "2ZJ55EYB";
+
+      const resolveOne = async (words) => {
+        const clean = words.replace(/^\/+/, "");
+        const url = `https://api.what3words.com/v3/convert-to-coordinates` +
+          `?words=${encodeURIComponent(clean)}&key=${W3W_KEY}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        if (!d.coordinates) throw new Error(d.error?.message || "no coords");
+        return { lat: d.coordinates.lat, lng: d.coordinates.lng };
+      };
+
+      for (const { cid, w3wAddr, latInp, lngInp } of allW3w) {
+        if (!w3wAddr) continue;
+        try {
+          const { lat, lng } = await resolveOne(w3wAddr);
+          if (latInp) latInp.value = lat;
+          if (lngInp) lngInp.value = lng;
+          ok++;
+          if (statusEl) statusEl.textContent = `${cid}: ${lat}, ${lng}`;
+        } catch (e) {
+          fail++;
+          if (statusEl) statusEl.textContent = `${cid}: Fehler – ${e.message}`;
+        }
+      }
+
+      // Startpunkt
+      if (spLat && spLng) {
+        const spW3w = spLat.dataset.w3w || "";
+        if (spW3w) {
+          try {
+            const { lat, lng } = await resolveOne(spW3w);
+            spLat.value = lat; spLng.value = lng;
+            ok++;
+          } catch (e) { fail++; }
+        }
+      }
+
+      if (statusEl) {
+        if (fail === 0)
+          statusEl.style.color = "#7ddf8a", statusEl.textContent = `✓ Alle ${ok} Adressen aufgelöst. Speichern nicht vergessen!`;
+        else if (ok > 0)
+          statusEl.textContent = `${ok} aufgelöst, ${fail} fehlgeschlagen. Kein Internet?`;
+        else
+          statusEl.style.color = "#f87171", statusEl.textContent = `Fehlgeschlagen. Browser hat kein Internet oder API-Key ungültig.`;
+      }
+      btnAutoResolve.disabled = false;
+      btnAutoResolve.textContent = "🌐 Automatisch auflösen";
     });
   }
 

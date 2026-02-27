@@ -1091,6 +1091,51 @@ function showLanModal() {
   document.getElementById("lanModal").style.display = "flex";
 }
 
+// ---------------- Übungs-Timer ----------------
+let _timerStart   = null;   // Date when timer was started
+let _timerElapsed = 0;      // ms accumulated before last pause
+let _timerHandle  = null;
+
+function _timerFmt(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${String(h).padStart(2,"0")}:${String(m%60).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+
+function _timerTick() {
+  const el = $("timerDisplay");
+  if (!el) return;
+  const ms = _timerElapsed + (Date.now() - _timerStart);
+  el.textContent = _timerFmt(ms);
+}
+
+function timerToggle() {
+  if (_timerHandle) {
+    // Pause
+    _timerElapsed += Date.now() - _timerStart;
+    _timerStart = null;
+    clearInterval(_timerHandle);
+    _timerHandle = null;
+    $("timerDisplay").style.color = "#f5c842";
+  } else {
+    // Start / Resume
+    _timerStart = Date.now();
+    _timerHandle = setInterval(_timerTick, 500);
+    $("timerDisplay").style.color = "#3ddc84";
+  }
+}
+
+function timerReset() {
+  clearInterval(_timerHandle);
+  _timerHandle  = null;
+  _timerStart   = null;
+  _timerElapsed = 0;
+  const el = $("timerDisplay");
+  if (el) { el.textContent = "00:00"; el.style.color = "#3ddc84"; }
+}
+
 // ---------------- Übungs-Reset ----------------
 function showResetModal() {
   $("resetModal").style.display = "flex";

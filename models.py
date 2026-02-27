@@ -24,6 +24,8 @@ class CaseDoc(db.Model):
 
     notes          = db.Column(db.Text,        nullable=True)
     completed      = db.Column(db.Boolean,     nullable=False, default=False)
+    # JSON-Liste der EVT-Namen die diesen Fall bereits abgeschlossen haben, z.B. '["EVT 1","EVT 3"]'
+    completed_evts = db.Column(db.Text,        nullable=False, default="[]")
 
     updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
 

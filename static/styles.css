@@ -133,7 +133,7 @@ button.full{ width:100%; }
   bottom:1.25rem;
   right:1.25rem;
   z-index:500;
-  width:min(640px, 95vw);
+  width:min(780px, 98vw);
   background:var(--panel);
   border:1px solid var(--border);
   border-radius:10px;

@@ -706,7 +706,7 @@ async function alarmCase(pid) {
   await fetch('/api/radiolog',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      sender:'Äskulap Feucht', receiver:evt||null,
+      sender:'Führungsstelle', receiver:evt||null,
       fms_status:null, case_ref:pid, message:alarmTxt,
       timestamp:new Date().toISOString(),
     }),
@@ -770,11 +770,10 @@ function buildCaseCard(pid) {
   </div>
   <div class="case-body">
     <div class="case-meta">
-      <span><b>${esc(meta.patient||'–')}</b></span>
+      <span><b>${esc(meta.patient_alarm || meta.patient||'–')}</b></span>
       <span>${meta.alter||'–'} J., ${meta.geschlecht==='m'?'männl.':meta.geschlecht==='w'?'weibl.':'–'}</span>
       <span style="grid-column:1/-1;font-size:.7rem;">
-        📍 <a href="https://what3words.com/${(meta.w3w||'').replace('///','')}" style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w||'–')}</a>
-        ${meta.w3w_alarm?`<span style="color:var(--yellow);margin-left:.4rem;">⚠ Alarm: ${esc(meta.w3w_alarm)}</span>`:''}
+        📍 <a href="https://what3words.com/${(meta.w3w_alarm||meta.w3w||'').replace('///','')}" style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w_alarm||meta.w3w||'–')}</a>
       </span>
     </div>
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
@@ -826,8 +825,8 @@ async function stampTime(pid, field) {
   const doc=caseDocs[pid]||{};
   const evt=doc.assigned_evt||document.getElementById('evt_'+pid)?.value||'';
   const isSender=(field==='alarm_time');
-  const sender=isSender?'Äskulap Feucht':(evt||'EVT ?');
-  const receiver=isSender?(evt||'EVT ?'):'Äskulap Feucht';
+  const sender=isSender?'Führungsstelle':(evt||'EVT ?');
+  const receiver=isSender?(evt||'EVT ?'):'Führungsstelle';
 
   const res=await fetch(`/api/casedocs/${pid}/stamp`,{
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -916,20 +915,24 @@ function renderTeamProgress() {
     const rs = teamData.radio_status ?? null;
     const rsCls = rs !== null ? ([0,5].includes(rs) ? 's0' : `s${rs}`) : '';
 
-    // Cases done by this team (assigned + completed)
+    // Cases done by this team (in completed_evts list OR globally completed)
     const done = allCases.filter(pid => {
       const d = caseDocs[pid]||{};
-      return d.assigned_evt === evtName && d.completed;
+      const evts = d.completed_evts || [];
+      return evts.includes(evtName) || (d.completed && d.assigned_evt === evtName);
     });
-    // Cases in progress (assigned to this team, not completed, has activity)
+    // Cases in progress (assigned to this team, not yet completed by this team, has activity)
     const inProg = allCases.filter(pid => {
       const d = caseDocs[pid]||{};
-      return d.assigned_evt === evtName && !d.completed && (d.alarm_time || d.status3_time || d.status4_time);
+      const evts = d.completed_evts || [];
+      return d.assigned_evt === evtName && !evts.includes(evtName) && !d.completed
+        && (d.alarm_time || d.status3_time || d.status4_time);
     });
-    // All globally unfinished cases (not yet completed, not assigned to this team)
+    // Open cases: not globally done AND this EVT hasn't done them yet
     const open = allCases.filter(pid => {
       const d = caseDocs[pid]||{};
-      return !d.completed && d.assigned_evt !== evtName;
+      const evts = d.completed_evts || [];
+      return !d.completed && !evts.includes(evtName);
     });
 
     const allDone = done.length === allCases.filter(pid => {

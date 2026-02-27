@@ -134,14 +134,17 @@ def create_app():
     with app.app_context():
         db.create_all()
         # Auto-migration: add new columns to existing tables
+        _migrations = [
+            "ALTER TABLE teams ADD COLUMN radio_group VARCHAR(30) NOT NULL DEFAULT 'regelfunk'",
+            "ALTER TABLE case_docs ADD COLUMN completed_evts TEXT NOT NULL DEFAULT '[]'",
+        ]
         with db.engine.connect() as _conn:
-            try:
-                _conn.execute(text(
-                    "ALTER TABLE teams ADD COLUMN radio_group VARCHAR(30) NOT NULL DEFAULT 'regelfunk'"
-                ))
-                _conn.commit()
-            except Exception:
-                pass  # Column already exists
+            for _sql in _migrations:
+                try:
+                    _conn.execute(text(_sql))
+                    _conn.commit()
+                except Exception:
+                    pass  # Column already exists
         # CaseDoc-Einträge initialisieren (nur beim ersten Start)
         for case_id in EXERCISE_CASES:
             if CaseDoc.query.get(case_id) is None:
@@ -668,19 +671,33 @@ def create_app():
                     if _field and getattr(_doc, _field) is None:
                         setattr(_doc, _field, datetime.utcnow())
                         _doc.updated_at = datetime.utcnow()
-                    # S1 nach S4 oder S8 → CaseDoc abschließen + Mission schließen
+                    # S1 nach S4 oder S8 → diesen EVT als erledigt markieren
                     if rs == 1 and (_doc.status4_time is not None
                                     or _doc.status8_time is not None):
                         _done_case_id = _doc.id
-                        # CaseDoc: Zeitstempel zurücksetzen, als abgeschlossen markieren
-                        _doc.assigned_evt = None
-                        _doc.alarm_time   = None
-                        _doc.status3_time = None
-                        _doc.status4_time = None
-                        _doc.status7_time = None
-                        _doc.status8_time = None
-                        _doc.completed    = True
-                        _doc.updated_at   = datetime.utcnow()
+                        # EVT in completed_evts eintragen
+                        _evt_done = _doc.assigned_evt or ""
+                        _evts = json.loads(_doc.completed_evts or "[]")
+                        if _evt_done and _evt_done not in _evts:
+                            _evts.append(_evt_done)
+                        _doc.completed_evts = json.dumps(_evts)
+                        # Prüfen ob alle EVTs fertig sind
+                        _cfg = ExerciseConfig.query.get(1)
+                        _total = _cfg.evt_count if _cfg else 6
+                        _globally_done = len(_evts) >= _total
+                        if _globally_done:
+                            # Alle EVTs durch → global abschließen
+                            _doc.completed = True
+                        else:
+                            # Noch weitere EVTs → Felder zurücksetzen für nächsten Einsatz
+                            _doc.assigned_evt = None
+                            _doc.alarm_time   = None
+                            _doc.status3_time = None
+                            _doc.status4_time = None
+                            _doc.status7_time = None
+                            _doc.status8_time = None
+                            _doc.completed    = False
+                        _doc.updated_at = datetime.utcnow()
                         # Mission abschließen + Assignment dieses Teams aufheben
                         for _dm in Mission.query.filter(
                             Mission.title.like(f"{_done_case_id}:%")
@@ -972,6 +989,7 @@ def serialize_casedoc(d: CaseDoc):
         "zielklinik":    d.zielklinik,
         "notes":         d.notes,
         "completed":     d.completed,
+        "completed_evts": json.loads(getattr(d, "completed_evts", None) or "[]"),
         "updated_at":    fmt(d.updated_at),
     }
 

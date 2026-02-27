@@ -78,7 +78,7 @@ def _generate_cert_python(lan_ip):
             .not_valid_before(datetime.datetime.utcnow())
             .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=825))
             .add_extension(x509.SubjectAlternativeName(san_entries), critical=False)
-            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
             .sign(key, hashes.SHA256())
         )
 
@@ -113,8 +113,8 @@ CN = OpMan-GPT Local
 
 [v3_req]
 subjectAltName = @alt_names
-basicConstraints = CA:FALSE
-keyUsage = digitalSignature, keyEncipherment
+basicConstraints = CA:TRUE, pathlen:0
+keyUsage = digitalSignature, keyEncipherment, keyCertSign
 extendedKeyUsage = serverAuth
 
 [alt_names]

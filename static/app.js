@@ -1133,30 +1133,42 @@ function _showConnBanner(ok) {
 }
 
 async function _silentRefreshAll() {
-  // Ein einziger Request statt 4 (schneller über HTTPS)
-  const res = await fetch("/api/dashboard");
-  if (!res.ok) throw new Error("API error");
-  const data = await res.json();
-  teams = data.teams;
-  missions = data.missions;
-  assignments = data.assignments;
-  casedocData = data.casedocs;
-  normalizeRadioLabels();
-  computeAssignedTeamIds();
-  renderTeams(); renderMissions(); renderAssignments(); setSelectionLabel();
-  cleanupMarkers();
-  for (const t of teams) upsertTeamMarker(t);
-  for (const m of missions) upsertMissionMarker(m);
-  if (exerciseGeodata) refreshExerciseLayer();
-  renderSprechwunschPanel();
+  // Fetch mit 8s Timeout (Flask dev-server + HTTPS kann langsam sein)
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch("/api/dashboard", { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
+    teams = data.teams;
+    missions = data.missions;
+    assignments = data.assignments;
+    casedocData = data.casedocs;
+    normalizeRadioLabels();
+    computeAssignedTeamIds();
+    renderTeams(); renderMissions(); renderAssignments(); setSelectionLabel();
+    cleanupMarkers();
+    for (const t of teams) upsertTeamMarker(t);
+    for (const m of missions) upsertMissionMarker(m);
+    if (exerciseGeodata) refreshExerciseLayer();
+    renderSprechwunschPanel();
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
 }
 
+// Polling: Banner erst nach 3 aufeinanderfolgenden Fehlern anzeigen
+let _pollFailStreak = 0;
 setInterval(async () => {
   try {
     await _silentRefreshAll();
+    _pollFailStreak = 0;
     _showConnBanner(true);
   } catch (_) {
-    _showConnBanner(false);
+    _pollFailStreak++;
+    if (_pollFailStreak >= 3) _showConnBanner(false);
   }
 }, 10000);
 

@@ -193,4 +193,5 @@ if __name__ == "__main__":
         port=port,
         debug=False,
         ssl_context=ssl_ctx,
+        threaded=True,
     )

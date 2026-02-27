@@ -166,6 +166,7 @@ function upsertTeamMarker(t){
         ? ` | GPS ${new Date(t.gps_updated_at).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit", second:"2-digit"})}`
         : " | manuell");
   const tooltipText = `${t.name} | ${statusText}${gpsInfo}`;
+  const tooltipHtml = `<span style="background:${statusCol};color:#fff;padding:1px 5px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap;">${esc(t.name)} | ${esc(statusText)}</span>`;
   const popupHtml =
     `${esc(t.name)}${t.callsign ? " (" + esc(t.callsign) + ")" : ""}<br>` +
     `${esc(statusText)}<br>` +
@@ -176,11 +177,13 @@ function upsertTeamMarker(t){
         : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
 
   const statusCol = STATUS_COLORS.get(t.radio_status) || "#888";
+  // Punkt: GPS-Status (grau = kein GPS, blau = GPS aktiv/live)
+  const gpsCol = atStart ? "#888" : (isLiveGps ? "#2299ff" : "#888");
   const style = {
     radius: atStart ? 5 : 7,
-    color: atStart ? "#666" : (isLiveGps ? "#3ddc84" : statusCol),
+    color: atStart ? "#666" : (isLiveGps ? "#2299ff" : "#666"),
     weight: 3,
-    fillColor: atStart ? "#444" : statusCol,
+    fillColor: gpsCol,
     fillOpacity: atStart ? 0.45 : 0.95,
   };
 
@@ -194,24 +197,25 @@ function upsertTeamMarker(t){
     const el = marker.getElement();
     if (el) el.classList.toggle("gps-live", isLiveGps);
 
-    // Tooltip-Text aktualisieren (Leaflet: tooltip exists after bindTooltip)
+    // Tooltip aktualisieren (Leaflet: tooltip exists after bindTooltip)
     if (marker.getTooltip()){
-      marker.setTooltipContent(tooltipText);
-    } else {
-      marker.bindTooltip(tooltipText, {
-        permanent: true,
-        direction: "right",
-        offset: [10, 0],
-        opacity: 0.95,
-      });
+      marker.unbindTooltip();
     }
-  } else {
-    const marker = L.circleMarker(ll, style).addTo(map).bindPopup(popupHtml);
-    marker.bindTooltip(tooltipText, {
+    marker.bindTooltip(tooltipHtml, {
       permanent: true,
       direction: "right",
       offset: [10, 0],
       opacity: 0.95,
+      className: "team-tt",
+    });
+  } else {
+    const marker = L.circleMarker(ll, style).addTo(map).bindPopup(popupHtml);
+    marker.bindTooltip(tooltipHtml, {
+      permanent: true,
+      direction: "right",
+      offset: [10, 0],
+      opacity: 0.95,
+      className: "team-tt",
     });
 
     marker.on("click", () => {

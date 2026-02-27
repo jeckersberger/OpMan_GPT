@@ -19,6 +19,16 @@
     .leaflet-interactive.gps-live {
       animation: gps-pulse 2s ease-in-out infinite;
     }
+    /* Team-Tooltip: Standard-Leaflet-Hintergrund entfernen, Farbe kommt vom Label-Span */
+    .team-tt {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    .team-tt::before {
+      display: none !important;
+    }
   </style>
 </head>
 <body>

@@ -596,21 +596,38 @@ document.getElementById('alarmDismiss').addEventListener('click', async () => {
 // ── Testalarm ────────────────────────────────────────────────
 let _testAlarmShown = null;  // timestamp-string des aktuellen Testalarms
 
+function _playTestAlarmTone() {
+  if (!_audioCtx) return;
+  try {
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const seq = [
+      { freq: 440, start: 0.0,  dur: 0.10 },
+      { freq: 550, start: 0.15, dur: 0.10 },
+      { freq: 660, start: 0.30, dur: 0.10 },
+      { freq: 550, start: 0.45, dur: 0.10 },
+      { freq: 440, start: 0.60, dur: 0.15 },
+    ];
+    seq.forEach(({ freq, start, dur }) => {
+      const osc  = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.3, _audioCtx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
+      osc.start(_audioCtx.currentTime + start);
+      osc.stop(_audioCtx.currentTime + start + dur + 0.05);
+    });
+  } catch (_) { /* kein Audio-Support */ }
+}
+
 function showTestAlarm(team) {
   const key = team.test_alarm_at;
   if (_testAlarmShown === key) return;  // bereits angezeigt
   _testAlarmShown = key;
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [[440,0,.1],[550,.15,.1],[660,.3,.1],[550,.45,.1],[440,.6,.15]].forEach(([f,s,d])=>{
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = f; o.type = 'sine';
-      g.gain.setValueAtTime(0.3, ctx.currentTime+s);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+s+d);
-      o.start(ctx.currentTime+s); o.stop(ctx.currentTime+s+d+.05);
-    });
-  } catch(_) {}
+  _playTestAlarmTone();
+  if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
   document.getElementById('testAlarmText').textContent = team.test_alarm_text || 'Testalarm';
   document.getElementById('testAlarmOverlay').classList.add('show');
 }

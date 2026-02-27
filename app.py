@@ -486,12 +486,17 @@ def create_app():
         created = []
         for case_id, cd in EXERCISE_CASES.items():
             geo = (geodata.get("cases") or {}).get(case_id, {})
-            lat = geo.get("lat")
-            lng = geo.get("lng")
+            lat = geo.get("lat") or cd.get("lat")
+            lng = geo.get("lng") or cd.get("lng")
             title = f"{case_id}: {cd['schlagwort']}"
             # Nicht doppelt anlegen
             existing = Mission.query.filter_by(title=title).first()
             if existing:
+                # Koordinaten nachpflegen, falls sie fehlen oder sich geändert haben
+                if existing.lat != lat or existing.lng != lng:
+                    existing.lat = lat
+                    existing.lng = lng
+                    existing.updated_at = datetime.utcnow()
                 created.append({"id": existing.id, "title": title, "skipped": True})
                 continue
             m = Mission(

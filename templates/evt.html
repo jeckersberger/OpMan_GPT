@@ -891,8 +891,53 @@ function _onGpsPosition(pos) {
 }
 
 function _onGpsError(err) {
-  const msgs = { 1: 'keine Berechtigung', 2: 'kein Signal', 3: 'Timeout' };
-  _setGpsDot('error', msgs[err.code] || 'GPS-Fehler');
+  if (err.code === 1) {
+    // Permission denied – hilfreiche Anleitung zeigen
+    _setGpsDot('error', 'GPS blockiert');
+    _showGpsHelp();
+  } else {
+    const msgs = { 2: 'kein Signal', 3: 'Timeout' };
+    _setGpsDot('error', msgs[err.code] || 'GPS-Fehler');
+  }
+}
+
+function _showGpsHelp() {
+  // Nur einmal zeigen
+  if (document.getElementById('gpsHelpBanner')) return;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isChrome = /CriOS/.test(navigator.userAgent);
+  let steps;
+  if (isIOS && isChrome) {
+    steps = '<b>iPhone + Chrome:</b><br>'
+      + '1. <b>iOS Einstellungen</b> &rarr; <b>Datenschutz</b> &rarr; <b>Ortungsdienste</b> &rarr; einschalten<br>'
+      + '2. Runterscrollen zu <b>Chrome</b> &rarr; <b>"Beim Verwenden der App"</b><br>'
+      + '3. Hier zurueckkommen und Seite neu laden';
+  } else if (isIOS) {
+    steps = '<b>iPhone + Safari:</b><br>'
+      + '1. <b>iOS Einstellungen</b> &rarr; <b>Datenschutz</b> &rarr; <b>Ortungsdienste</b> &rarr; einschalten<br>'
+      + '2. Runterscrollen zu <b>Safari</b> &rarr; <b>"Beim Verwenden der App"</b><br>'
+      + '3. Hier zurueckkommen und Seite neu laden<br>'
+      + '<small>Falls Popup kam: "aA" in Adressleiste &rarr; Website-Einstellungen &rarr; Standort: Erlauben</small>';
+  } else {
+    steps = '<b>Android:</b><br>'
+      + '1. Schloss-Symbol in der Adressleiste tippen<br>'
+      + '2. <b>Website-Einstellungen</b> &rarr; Standort &rarr; <b>Erlauben</b><br>'
+      + '3. Seite neu laden';
+  }
+  const banner = document.createElement('div');
+  banner.id = 'gpsHelpBanner';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#e7eefc;'
+    + 'padding:16px;border-top:3px solid #f59e0b;z-index:9999;font-size:14px;line-height:1.6;'
+    + 'max-height:60vh;overflow-y:auto';
+  banner.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:start">'
+    + '<span style="color:#f59e0b;font-weight:700;font-size:15px">GPS-Berechtigung fehlt</span>'
+    + '<button onclick="this.parentElement.parentElement.remove()" '
+    + 'style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:0 0 0 12px">&times;</button></div>'
+    + '<div style="margin-top:8px">' + steps + '</div>'
+    + '<button onclick="location.reload()" style="margin-top:12px;width:100%;padding:10px;'
+    + 'background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer">'
+    + 'Seite neu laden</button>';
+  document.body.appendChild(banner);
 }
 
 // iOS Safari: watchPosition feuert oft nicht zuverlässig.

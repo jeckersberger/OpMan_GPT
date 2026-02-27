@@ -32,7 +32,7 @@ const RADIO_OPTIONS = [
   [6, "6 – nicht Einsatzbereit"],
   [7, "7 – gebunden"],
   [8, "8 – Bedingt Einsatzbereit"],
-  [9, "9 – Fremdanmeldung"],
+  [9, "9 – Sonderfunktion"],
   [0, "0 – prio. Sprechwunsch"],
 ];
 
@@ -935,16 +935,26 @@ function wireUI(){
   if (btnImport) {
     btnImport.addEventListener("click", async () => {
       btnImport.disabled = true;
-      btnImport.textContent = "Löse w3w-Adressen auf…";
+      btnImport.textContent = "Lade Koordinaten…";
       try {
-        // Immer frisch auflösen (refresh=1), damit keine veralteten Null-Koordinaten verwendet werden
-        const geo = await api("/api/exercise/geodata?refresh=1");
+        // Erst Cache prüfen; nur wenn keine Koordinaten im Cache → API (refresh=1)
+        let geo = await api("/api/exercise/geodata");
+        const cachedWithCoords = Object.values(geo.cases || {}).filter(c => c.lat != null).length;
+        if (cachedWithCoords === 0) {
+          btnImport.textContent = "Löse w3w-Adressen auf…";
+          geo = await api("/api/exercise/geodata?refresh=1");
+        }
         const cases = geo.cases || {};
         const withCoords = Object.values(cases).filter(c => c.lat != null).length;
         const total = Object.keys(cases).length;
         if (withCoords === 0) {
-          alert(`⚠ Keine w3w-Koordinaten konnten aufgelöst werden (${total} Fälle).\nPrüfe Internet-Verbindung und API-Key.`);
-          return;
+          const proceed = confirm(
+            `⚠ Keine Koordinaten vorhanden (${total} Fälle).\n\n` +
+            `Möglicherweise ist die w3w-API nicht erreichbar.\n` +
+            `Koordinaten können manuell über „📍 Koordinaten manuell eingeben" gesetzt werden.\n\n` +
+            `Trotzdem importieren (ohne Kartenposition)?`
+          );
+          if (!proceed) return;
         }
         btnImport.textContent = "Importiere…";
         const result = await api("/api/exercise/import-missions", { method: "POST" });
@@ -980,6 +990,98 @@ function wireUI(){
       } catch (e) { /* shown by api() */ } finally {
         btnRefreshGeo.disabled = false;
         btnRefreshGeo.textContent = "🗺 w3w-Koordinaten neu auflösen";
+      }
+    });
+  }
+
+  // Manual coordinate entry modal
+  const btnEditCoords = $("btnEditCoords");
+  if (btnEditCoords) {
+    btnEditCoords.addEventListener("click", async () => {
+      // Load current geodata (cached or null coords)
+      let geo = { cases: {}, startpunkt: null };
+      try { geo = await api("/api/exercise/geodata"); } catch (e) { /* use empty */ }
+
+      const cases = geo.cases || {};
+      const sp = geo.startpunkt || {};
+      const rowsDiv = $("coordRows");
+
+      // Build table rows
+      const rowStyle = "display:grid;grid-template-columns:3.5rem 1fr 5.5rem 5.5rem;gap:.35rem;align-items:center;margin-bottom:.4rem;";
+      const inputStyle = "background:#0b1220;border:1px solid #334;border-radius:4px;color:#e8edf8;padding:.25rem .4rem;font-size:.78rem;font-family:inherit;width:100%;";
+      const labelStyle = "font-size:.78rem;color:#a6b3d1;";
+      const linkStyle = "font-size:.75rem;color:#4ea1ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+
+      let html = `<div style="${rowStyle}font-weight:700;">
+        <span style="${labelStyle}">Fall</span>
+        <span style="${labelStyle}">w3w-Adresse</span>
+        <span style="${labelStyle}">Latitude</span>
+        <span style="${labelStyle}">Longitude</span>
+      </div>`;
+
+      const caseOrder = ["P1","P2","P3","P4","P5","P6"];
+      for (const cid of caseOrder) {
+        const c = cases[cid] || {};
+        const w3w = (c.w3w || "").replace(/^\/+/, "");
+        const w3wUrl = w3w ? `https://what3words.com/${encodeURIComponent(w3w)}` : "#";
+        const lat = c.lat != null ? c.lat : "";
+        const lng = c.lng != null ? c.lng : "";
+        html += `<div style="${rowStyle}">
+          <span style="${labelStyle};font-weight:700;">${esc(cid)}</span>
+          <a href="${w3wUrl}" target="_blank" rel="noopener" style="${linkStyle}" title="${esc(w3w)}">${esc(w3w) || "–"}</a>
+          <input class="coord-lat" data-case="${esc(cid)}" value="${lat}" placeholder="48.1234" style="${inputStyle}">
+          <input class="coord-lng" data-case="${esc(cid)}" value="${lng}" placeholder="11.5678" style="${inputStyle}">
+        </div>`;
+      }
+      // Startpunkt row
+      const spW3w = (sp.w3w || "").replace(/^\/+/, "");
+      const spUrl = spW3w ? `https://what3words.com/${encodeURIComponent(spW3w)}` : "#";
+      html += `<div style="${rowStyle}">
+        <span style="${labelStyle};font-weight:700;">Start</span>
+        <a href="${spUrl}" target="_blank" rel="noopener" style="${linkStyle}" title="${esc(spW3w)}">${esc(spW3w) || "–"}</a>
+        <input id="spLat" value="${sp.lat != null ? sp.lat : ""}" placeholder="48.1234" style="${inputStyle}">
+        <input id="spLng" value="${sp.lng != null ? sp.lng : ""}" placeholder="11.5678" style="${inputStyle}">
+      </div>`;
+
+      rowsDiv.innerHTML = html;
+      const modal = $("coordModal");
+      modal.style.display = "block";
+    });
+  }
+
+  const btnSaveCoords = $("btnSaveCoords");
+  if (btnSaveCoords) {
+    btnSaveCoords.addEventListener("click", async () => {
+      const payload = { cases: {}, startpunkt: {} };
+      document.querySelectorAll(".coord-lat").forEach(inp => {
+        const cid = inp.dataset.case;
+        const lat = parseFloat(inp.value);
+        const lngInp = document.querySelector(`.coord-lng[data-case="${cid}"]`);
+        const lng = parseFloat(lngInp ? lngInp.value : "");
+        payload.cases[cid] = {
+          lat: isNaN(lat) ? null : lat,
+          lng: isNaN(lng) ? null : lng,
+        };
+      });
+      const spLat = parseFloat(($("spLat") || {}).value);
+      const spLng = parseFloat(($("spLng") || {}).value);
+      payload.startpunkt = {
+        lat: isNaN(spLat) ? null : spLat,
+        lng: isNaN(spLng) ? null : spLng,
+      };
+
+      btnSaveCoords.disabled = true;
+      btnSaveCoords.textContent = "Speichern…";
+      try {
+        await api("/api/exercise/geodata", { method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload) });
+        $("coordModal").style.display = "none";
+        if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
+        alert("Koordinaten gespeichert. Jetzt ggf. Einsätze neu importieren.");
+      } catch (e) { /* shown */ } finally {
+        btnSaveCoords.disabled = false;
+        btnSaveCoords.textContent = "Speichern";
       }
     });
   }
@@ -1039,6 +1141,8 @@ function showLanModal() {
   document.getElementById("lanUrl").textContent = _lanInfo.evt_url;
   document.getElementById("lanQr").src =
     `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(_lanInfo.evt_url)}`;
+  const certLink = document.getElementById("certDownloadLink");
+  if (certLink) certLink.href = `${_lanInfo.base_url}/cert`;
   document.getElementById("lanModal").style.display = "flex";
 }
 

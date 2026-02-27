@@ -234,11 +234,14 @@
     .fms-btn .fs-sub  { font-size: .72rem;  display: block; font-weight: 600; }
 
     .fms-btn.b-s1 { border-color: var(--green);  color: var(--green);  background: #0e2a18; }
+    .fms-btn.b-s2 { border-color: #4ec97e;       color: #4ec97e;       background: #0b2216; }
     .fms-btn.b-s3 { border-color: var(--yellow); color: var(--yellow); background: #2e2300; }
     .fms-btn.b-s4 { border-color: var(--accent); color: var(--accent); background: #0d2240; }
     .fms-btn.b-s5 { border-color: var(--muted);  color: var(--muted);  background: #1a2030; }
+    .fms-btn.b-s6 { border-color: #6b7280;       color: #9ca3af;       background: #1a1a20; }
     .fms-btn.b-s7 { border-color: var(--orange); color: var(--orange); background: #2e1a00; }
     .fms-btn.b-s8 { border-color: #5de89a;       color: #5de89a;       background: #0a2215; }
+    .fms-btn.b-s9 { border-color: #c084fc;       color: #c084fc;       background: #1a0a2e; }
 
     /* S0 Notfall-Button – volle Breite, auffällig rot */
     .fms-btn.b-s0 {
@@ -393,7 +396,7 @@ const CASES_META = {{ cases | tojson }};
 const FMS_LABELS = {
   0: 'S0 Notruf',     1: 'S1 Frei Funk',   2: 'S2 Frei Wache',
   3: 'S3 Unterwegs',  4: 'S4 Einsatzort',  5: 'S5 Sprechwunsch',
-  6: 'S6 Außer Dienst', 7: 'S7 Transport', 8: 'S8 Ziel'
+  6: 'S6 n. einsatzber.', 7: 'S7 Transport', 8: 'S8 Ziel', 9: 'S9 Sonderfunktion'
 };
 
 // ── State ────────────────────────────────────────────────────
@@ -650,15 +653,18 @@ function renderMain(team, doc, meta) {
     </div>`;
   }
 
-  // FMS-Tasten
+  // FMS-Tasten (Ziffernblock-Reihenfolge: 1-2-3 / 4-5-6 / 7-8-9 / 0)
   const btnDefs = [
-    { rs: 1, cls: 'b-s1', code: 'S1', sub: 'Frei Funk'   },
-    { rs: 3, cls: 'b-s3', code: 'S3', sub: 'Anfahrt'     },
-    { rs: 4, cls: 'b-s4', code: 'S4', sub: 'Einsatzort'  },
-    { rs: 7, cls: 'b-s7', code: 'S7', sub: 'Transport'   },
-    { rs: 8, cls: 'b-s8', code: 'S8', sub: 'Ziel'        },
-    { rs: 5, cls: 'b-s5', code: 'S5', sub: 'Sprechwunsch'},
-    { rs: 0, cls: 'b-s0', code: '🚨 S0', sub: 'Dringender Sprechwunsch' },
+    { rs: 1, cls: 'b-s1', code: 'S1', sub: 'Frei Funk'    },
+    { rs: 2, cls: 'b-s2', code: 'S2', sub: 'Frei Wache'   },
+    { rs: 3, cls: 'b-s3', code: 'S3', sub: 'Anfahrt'      },
+    { rs: 4, cls: 'b-s4', code: 'S4', sub: 'Einsatzort'   },
+    { rs: 5, cls: 'b-s5', code: 'S5', sub: 'Sprechwunsch' },
+    { rs: 6, cls: 'b-s6', code: 'S6', sub: 'n. einsatzber.'},
+    { rs: 7, cls: 'b-s7', code: 'S7', sub: 'Transport'    },
+    { rs: 8, cls: 'b-s8', code: 'S8', sub: 'Ziel'         },
+    { rs: 9, cls: 'b-s9', code: 'S9', sub: 'Sonderfunkt.' },
+    { rs: 0, cls: 'b-s0', code: '🚨 S0', sub: 'Dringend Sprechwunsch' },
   ];
   const fmsBtns = btnDefs.map(b => {
     const active  = currentRs === b.rs ? ' is-active' : '';

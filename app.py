@@ -325,7 +325,8 @@ def create_app():
     @app.get("/api/exercise/geodata")
     def exercise_geodata():
         """Resolve all exercise location w3w addresses to coordinates (cached).
-        Pass ?refresh=1 to force fresh resolution from the API."""
+        Pass ?refresh=1 to attempt fresh resolution from the API.
+        Manually-set coordinates (via PUT) are preserved when the API is unreachable."""
         force_refresh = request.args.get("refresh") == "1"
         if not force_refresh and os.path.exists(W3W_CACHE_FILE):
             try:
@@ -334,10 +335,23 @@ def create_app():
             except Exception:
                 pass
 
+        # Load existing cache to preserve manually-set coords as fallback
+        existing: dict = {"cases": {}, "startpunkt": None}
+        if os.path.exists(W3W_CACHE_FILE):
+            try:
+                with open(W3W_CACHE_FILE) as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+
         result: dict = {"cases": {}, "startpunkt": None}
 
         for case_id, cd in EXERCISE_CASES.items():
-            lat, lng = resolve_w3w(cd["w3w"])
+            api_lat, api_lng = resolve_w3w(cd["w3w"])
+            # Preserve manually-set coords if API returns nothing
+            prev = (existing.get("cases") or {}).get(case_id, {})
+            lat = api_lat if api_lat is not None else prev.get("lat")
+            lng = api_lng if api_lng is not None else prev.get("lng")
             result["cases"][case_id] = {
                 "lat": lat,
                 "lng": lng,
@@ -346,7 +360,10 @@ def create_app():
                 "w3w": cd["w3w"],
             }
 
-        sp_lat, sp_lng = resolve_w3w(STARTPUNKT_W3W)
+        sp_api_lat, sp_api_lng = resolve_w3w(STARTPUNKT_W3W)
+        prev_sp = existing.get("startpunkt") or {}
+        sp_lat = sp_api_lat if sp_api_lat is not None else prev_sp.get("lat")
+        sp_lng = sp_api_lng if sp_api_lng is not None else prev_sp.get("lng")
         result["startpunkt"] = {"lat": sp_lat, "lng": sp_lng, "w3w": STARTPUNKT_W3W}
 
         try:
@@ -357,6 +374,60 @@ def create_app():
             pass
 
         return jsonify(result)
+
+    @app.put("/api/exercise/geodata")
+    def set_exercise_geodata():
+        """Manually set coordinates for exercise cases (offline fallback for w3w API)."""
+        data = request.get_json(force=True)
+        # Load existing cache or build fresh skeleton
+        if os.path.exists(W3W_CACHE_FILE):
+            try:
+                with open(W3W_CACHE_FILE) as f:
+                    current = json.load(f)
+            except Exception:
+                current = {"cases": {}, "startpunkt": None}
+        else:
+            current = {"cases": {}, "startpunkt": None}
+
+        # Merge submitted coordinates
+        for case_id, coords in (data.get("cases") or {}).items():
+            if case_id not in current.get("cases", {}):
+                cd = EXERCISE_CASES.get(case_id, {})
+                current.setdefault("cases", {})[case_id] = {
+                    "lat": None, "lng": None,
+                    "schlagwort": cd.get("schlagwort", ""),
+                    "patient": cd.get("patient", ""),
+                    "w3w": cd.get("w3w", ""),
+                }
+            if coords.get("lat") is not None:
+                current["cases"][case_id]["lat"] = float(coords["lat"])
+            if coords.get("lng") is not None:
+                current["cases"][case_id]["lng"] = float(coords["lng"])
+
+        if "startpunkt" in data and data["startpunkt"]:
+            sp = data["startpunkt"]
+            if not current.get("startpunkt"):
+                current["startpunkt"] = {"lat": None, "lng": None, "w3w": STARTPUNKT_W3W}
+            if sp.get("lat") is not None:
+                current["startpunkt"]["lat"] = float(sp["lat"])
+            if sp.get("lng") is not None:
+                current["startpunkt"]["lng"] = float(sp["lng"])
+
+        os.makedirs(os.path.dirname(W3W_CACHE_FILE), exist_ok=True)
+        with open(W3W_CACHE_FILE, "w") as f:
+            json.dump(current, f, indent=2)
+        return jsonify(current)
+
+    @app.get("/cert")
+    def download_cert():
+        """Serve self-signed certificate for iOS/Android installation."""
+        cert_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "instance", "cert.pem")
+        if not os.path.exists(cert_path):
+            return "Kein Zertifikat vorhanden. Zuerst gen_cert.py ausführen.", 404
+        from flask import send_file
+        return send_file(cert_path, mimetype="application/x-pem-file",
+                         as_attachment=True, download_name="OpManGPT.pem")
 
     # ---------------------------
     # Exercise Config
@@ -380,14 +451,14 @@ def create_app():
 
     @app.post("/api/exercise/import-missions")
     def import_exercise_missions():
-        """Erstellt Missions aus den Übungsfällen (mit w3w-Koordinaten aus Cache)."""
-        if not os.path.exists(W3W_CACHE_FILE):
-            return jsonify({"error": "Geodaten noch nicht gecacht. Zuerst /api/exercise/geodata aufrufen."}), 400
-        try:
-            with open(W3W_CACHE_FILE) as f:
-                geodata = json.load(f)
-        except Exception:
-            return jsonify({"error": "Geodaten-Cache konnte nicht gelesen werden."}), 500
+        """Erstellt Missions aus den Übungsfällen (Koordinaten aus Cache, falls vorhanden)."""
+        geodata: dict = {"cases": {}, "startpunkt": None}
+        if os.path.exists(W3W_CACHE_FILE):
+            try:
+                with open(W3W_CACHE_FILE) as f:
+                    geodata = json.load(f)
+            except Exception:
+                pass
 
         created = []
         for case_id, cd in EXERCISE_CASES.items():

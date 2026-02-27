@@ -467,6 +467,18 @@ function cleanupMarkers(){
       missionMarkers.delete(id);
     }
   }
+  // Mission-Marker entfernen die jetzt als Exercise-Marker dargestellt werden
+  if (exerciseGeodata) {
+    for (const [id, marker] of missionMarkers.entries()) {
+      const m = missions.find(x => x.id === id);
+      if (!m) continue;
+      const caseMatch = m.title.match(/^(P\d+):/);
+      if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) {
+        marker.remove();
+        missionMarkers.delete(id);
+      }
+    }
+  }
   const currentTeamIds = new Set(teams.map(t => t.id));
   for (const [id, marker] of teamMarkers.entries()) {
     if (!currentTeamIds.has(id)) {
@@ -1313,7 +1325,25 @@ async function sendTestAlarm() {
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();
   wireUI();
+  // Exercise-Geodaten VOR dem ersten Marker-Aufbau laden,
+  // damit upsertMissionMarker() doppelte Pins sofort erkennt.
+  try {
+    [exerciseGeodata, casedocData] = await Promise.all([
+      api("/api/exercise/geodata"),
+      api("/api/casedocs"),
+    ]);
+  } catch (_) { /* kein Übungsbetrieb aktiv */ }
   await refreshAll(true);
-  await loadExerciseLayer();
+  if (exerciseGeodata) refreshExerciseLayer();
+  // Auto-fit map bounds to exercise locations
+  if (exerciseGeodata) {
+    const pts = [];
+    for (const data of Object.values(exerciseGeodata.cases || {})) {
+      if (data.lat != null) pts.push([data.lat, data.lng]);
+    }
+    const sp = exerciseGeodata.startpunkt;
+    if (sp?.lat != null) pts.push([sp.lat, sp.lng]);
+    if (pts.length > 0) map.fitBounds(L.latLngBounds(pts).pad(0.15));
+  }
   loadLanInfo();
 });

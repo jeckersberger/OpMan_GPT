@@ -829,10 +829,15 @@ function _swRows(teamList) {
     const hasCallsign = t.callsign && t.callsign !== t.name;
     const mainLine  = hasCallsign ? t.callsign : t.name;
     const subLine   = hasCallsign ? t.name : null;
+    const isBetten  = (t.radio_group || "regelfunk") === "bettenkanal";
+    const groupTag  = isBetten
+      ? `<span class="sw-group betten">🏥 Bettenkanal</span>`
+      : `<span class="sw-group regel">📻 Regelfunk</span>`;
     return `<li class="sw-item ${cls}">
       <div class="sw-names">
         <span class="sw-callsign">${esc(mainLine)}</span>
         ${subLine ? `<span class="sw-subname">${esc(subLine)}</span>` : ""}
+        ${groupTag}
       </div>
       <div class="sw-meta">
         <span class="sw-badge ${cls}">${badge}</span>

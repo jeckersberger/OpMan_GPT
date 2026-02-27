@@ -188,6 +188,13 @@ button.full{ width:100%; }
   font-size:.75rem; color:var(--muted);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+.sw-group{
+  font-size:.7rem; font-weight:700;
+  padding:.08rem .35rem; border-radius:4px;
+  white-space:nowrap; width:fit-content; margin-top:.05rem;
+}
+.sw-group.regel{ background:rgba(78,161,255,.12); color:#4ea1ff; border:1px solid rgba(78,161,255,.3); }
+.sw-group.betten{ background:rgba(192,132,252,.12); color:#c084fc; border:1px solid rgba(192,132,252,.3); }
 /* Right-side meta: badge + time + button */
 .sw-meta{
   display:flex; flex-direction:column; align-items:flex-end; gap:.25rem; flex-shrink:0;

@@ -30,8 +30,28 @@ def get_lan_ip():
         return "127.0.0.1"
 
 
+def _ensure_cryptography():
+    """Installiert cryptography automatisch falls nicht vorhanden."""
+    try:
+        import cryptography  # noqa: F401
+        return True
+    except ImportError:
+        print("  'cryptography' nicht installiert – installiere automatisch ...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "cryptography"],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            print("  cryptography erfolgreich installiert.")
+            return True
+        print(f"  Installation fehlgeschlagen: {result.stderr.strip()}")
+        return False
+
+
 def _generate_cert_python(lan_ip):
     """Generiert ein selbstsigniertes Zertifikat mit reinem Python (kein openssl nötig)."""
+    if not _ensure_cryptography():
+        return False
     try:
         from cryptography import x509
         from cryptography.x509.oid import NameOID

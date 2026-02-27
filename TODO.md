@@ -70,21 +70,6 @@ ermöglichen.
 
 ---
 
-### [ENHANCEMENT] Mehrere Übungskurse parallel
-**Label:** `enhancement`
-
-Aktuell können nur alle EVTs denselben Übungssatz P1–P6 bearbeiten.
-Für größere Ausbildungsveranstaltungen wäre paralleler Betrieb mehrerer
-Kurse nützlich.
-
-**Konzept:**
-- Kurse als separate Namespaces (Kurs A, Kurs B, …)
-- Jeder Kurs hat eigene Trupps, Falldokus und Protokoll
-- Leitstellenansicht kann zwischen Kursen wechseln
-- Größere Datenbankänderung notwendig
-
----
-
 ## Erledigt
 
 - [x] Übungsfälle P1–P6 mit eingebetteten GPS-Koordinaten (kein w3w-API nötig)

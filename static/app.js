@@ -156,6 +156,7 @@ function upsertTeamMarker(t){
   const ll = atStart ? [sp.lat, sp.lng] : [t.lat, t.lng];
 
   const statusText = radioText(t.radio_status, t.radio_status_label);
+  const statusCol = STATUS_COLORS.get(t.radio_status) || "#888";
   const age = gpsAgeSec(t);
   const isLiveGps = !atStart && age !== null && age < 120;  // live = GPS-Update vor < 2 Min
   const gpsInfo = atStart
@@ -173,8 +174,6 @@ function upsertTeamMarker(t){
       : isLiveGps
         ? `<span style="color:#3ddc84">● Live-GPS (${Math.round(age)}s)</span>`
         : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
-
-  const statusCol = STATUS_COLORS.get(t.radio_status) || "#888";
   // Punkt: GPS-Status (grau = kein GPS, blau = GPS aktiv/live)
   const gpsCol = atStart ? "#888" : (isLiveGps ? "#2299ff" : "#888");
   const style = {
@@ -1145,9 +1144,9 @@ function _showConnBanner(ok) {
 }
 
 async function _silentRefreshAll() {
-  // Fetch mit 8s Timeout (Flask dev-server + HTTPS kann langsam sein)
+  // Fetch mit 15s Timeout (Flask dev-server + HTTPS kann langsam sein)
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
     const res = await fetch("/api/dashboard", { signal: ctrl.signal });
     clearTimeout(timer);
@@ -1183,7 +1182,7 @@ setInterval(async () => {
     _showConnBanner(true);
   } catch (_) {
     _pollFailStreak++;
-    if (_pollFailStreak >= 5) _showConnBanner(false);
+    if (_pollFailStreak >= 8) _showConnBanner(false);
   } finally {
     _pollBusy = false;
   }

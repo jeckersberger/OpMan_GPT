@@ -1105,5 +1105,74 @@ if __name__ == "__main__":
     # Hinweis: Wenn du von der alten DB-Struktur kommst,
     # lösche einmal die Datei "einsatzleiter.db", damit die neuen Spalten
     # (availability etc.) sauber erstellt werden.
+    #
+    # Nutze 'python run.py' für HTTPS mit Auto-Zertifikat (empfohlen).
+    # 'python app.py' startet ebenfalls mit HTTPS falls möglich.
+    import os, subprocess, socket
+
+    INSTANCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance")
+    CERT = os.path.join(INSTANCE_DIR, "cert.pem")
+    KEY  = os.path.join(INSTANCE_DIR, "key.pem")
+
+    def _get_lan_ip():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def _ensure_cert():
+        if os.path.exists(CERT) and os.path.exists(KEY):
+            return True
+        lan_ip = _get_lan_ip()
+        os.makedirs(INSTANCE_DIR, exist_ok=True)
+        cnf_path = os.path.join(INSTANCE_DIR, "san.cnf")
+        with open(cnf_path, "w") as f:
+            f.write(f"""[req]
+default_bits       = 2048
+prompt             = no
+distinguished_name = dn
+x509_extensions    = v3_req
+
+[dn]
+CN = OpMan-GPT Local
+
+[v3_req]
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[alt_names]
+IP.1 = {lan_ip}
+IP.2 = 127.0.0.1
+DNS.1 = localhost
+""")
+        print(f"Generiere SSL-Zertifikat für {lan_ip} ...")
+        result = subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", KEY, "-out", CERT, "-days", "825", "-config", cnf_path,
+        ], capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  Warnung: openssl fehlgeschlagen – Fallback auf HTTP")
+            return False
+        print(f"  Zertifikat erstellt: {CERT}")
+        return True
+
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    lan_ip = _get_lan_ip()
+    ssl_ctx = (CERT, KEY) if _ensure_cert() else None
+    proto = "https" if ssl_ctx else "http"
+    print()
+    print("=" * 60)
+    print(f"  OpMan-GPT startet mit {proto.upper()}")
+    print(f"  {proto}://{lan_ip}:5000        ← LAN (Handy)")
+    print(f"  {proto}://localhost:5000        ← lokal")
+    if not ssl_ctx:
+        print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
+    print("=" * 60)
+    print()
+    app.run(debug=True, host="0.0.0.0", port=5000, ssl_context=ssl_ctx)

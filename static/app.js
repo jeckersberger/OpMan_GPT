@@ -1109,9 +1109,29 @@ function _showConnBanner(ok) {
   _connOk = ok;
 }
 
+async function _silentRefreshAll() {
+  // Wie refreshAll(false), aber ohne alert() bei Fehlern
+  const [tRes, mRes, aRes, cRes] = await Promise.all([
+    fetch("/api/teams"), fetch("/api/missions"),
+    fetch("/api/assignments"), fetch("/api/casedocs"),
+  ]);
+  if (!tRes.ok || !mRes.ok || !aRes.ok || !cRes.ok) throw new Error("API error");
+  [teams, missions, assignments, casedocData] = await Promise.all([
+    tRes.json(), mRes.json(), aRes.json(), cRes.json(),
+  ]);
+  normalizeRadioLabels();
+  computeAssignedTeamIds();
+  renderTeams(); renderMissions(); renderAssignments(); setSelectionLabel();
+  cleanupMarkers();
+  for (const t of teams) upsertTeamMarker(t);
+  for (const m of missions) upsertMissionMarker(m);
+  if (exerciseGeodata) refreshExerciseLayer();
+  renderSprechwunschPanel();
+}
+
 setInterval(async () => {
   try {
-    await refreshAll(false);
+    await _silentRefreshAll();
     _showConnBanner(true);
   } catch (_) {
     _showConnBanner(false);

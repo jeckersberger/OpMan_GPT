@@ -42,17 +42,34 @@ STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
 
 
 def resolve_w3w(words: str):
-    """Resolve a what3words address to (lat, lng). Returns (None, None) on error."""
+    """Resolve a what3words address to (lat, lng). Returns (None, None) on error.
+
+    Uses a direct connection (proxy bypassed) so that system proxy env-vars set
+    by development environments (e.g. Claude Code sandbox) don't interfere.
+    Falls back to the system default if the direct attempt fails with a DNS error.
+    """
     clean = words.lstrip("/")
     url = (
         "https://api.what3words.com/v3/convert-to-coordinates"
         f"?words={urllib.parse.quote(clean)}&key={W3W_API_KEY}"
     )
+    # Try 1: direct connection (bypass HTTP_PROXY / HTTPS_PROXY env vars)
     try:
-        with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=8) as resp:
             data = json.loads(resp.read().decode())
         if "coordinates" in data:
             return data["coordinates"]["lat"], data["coordinates"]["lng"]
+    except OSError as e:
+        # DNS failure → server has no direct internet, try via system proxy
+        if "Name or service not known" in str(e) or "Temporary failure" in str(e) or getattr(e, 'errno', None) == -3:
+            try:
+                with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
+                    data = json.loads(resp.read().decode())
+                if "coordinates" in data:
+                    return data["coordinates"]["lat"], data["coordinates"]["lng"]
+            except Exception:
+                pass
     except Exception:
         pass
     return None, None
@@ -154,6 +171,37 @@ def create_app():
             "base_url": f"{proto}://{lan_ip}:{port}",
             "evt_url":  f"{proto}://{lan_ip}:{port}/evt",
         })
+
+    @app.get("/api/test-internet")
+    def test_internet():
+        """Quick connectivity check: tries to reach api.what3words.com directly."""
+        import time
+        results = {}
+        test_url = (
+            f"https://api.what3words.com/v3/convert-to-coordinates"
+            f"?words=filled.count.soap&key={W3W_API_KEY}"
+        )
+        # Direct (no proxy)
+        t0 = time.time()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(test_url, timeout=6) as r:
+                data = json.loads(r.read().decode())
+            results["direct"] = {"ok": True, "ms": int((time.time()-t0)*1000),
+                                  "coords": data.get("coordinates")}
+        except Exception as e:
+            results["direct"] = {"ok": False, "error": str(e), "ms": int((time.time()-t0)*1000)}
+        # Via system proxy
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(test_url, timeout=6) as r:  # noqa: S310
+                data = json.loads(r.read().decode())
+            results["proxy"] = {"ok": True, "ms": int((time.time()-t0)*1000),
+                                 "coords": data.get("coordinates")}
+        except Exception as e:
+            results["proxy"] = {"ok": False, "error": str(e), "ms": int((time.time()-t0)*1000)}
+        ok = results["direct"]["ok"] or results["proxy"]["ok"]
+        return jsonify({"internet": ok, "results": results})
 
     @app.get("/evt")
     def evt_mobile():

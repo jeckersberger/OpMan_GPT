@@ -590,9 +590,14 @@ function renderMain(team, doc, meta) {
     const badgeStyle = pending
       ? ' style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;"'
       : '';
+    const rg = team.radio_group || 'regelfunk';
+    const rgLabel = rg === 'bettenkanal'
+      ? `<span style="font-size:.7rem;color:#c084fc;font-weight:700;margin-top:.25rem;display:block;">🏥 Bettenkanal</span>`
+      : `<span style="font-size:.7rem;color:#4ea1ff;font-weight:700;margin-top:.25rem;display:block;">📻 Regelfunk</span>`;
     teamHtml = `<div class="team-status ${rsCls}${pending ? ' c-0' : ''}">
       <div class="team-name">${esc(team.name)}</div>
       <div class="fms-badge"${badgeStyle}>${esc(rsLabel)}</div>
+      ${rgLabel}
       <span class="pulse-dot"></span>
     </div>`;
   }

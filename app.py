@@ -528,7 +528,10 @@ def create_app():
     @app.get("/setup")
     def setup_page():
         """Handy-Setup: Zertifikat installieren mit Schritt-fuer-Schritt-Anleitung."""
-        return """<!doctype html>
+        back = request.args.get("back", "")
+        back_url = "/evt" if back == "evt" else "/"
+        back_label = "Zurueck zur EVT-App" if back == "evt" else "Fertig - zur App"
+        return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpMan-GPT Handy-Setup</title>
@@ -574,7 +577,7 @@ def create_app():
       <li>Schalter bei <b>"OpMan-GPT Local CA"</b> aktivieren</li>
     </ol>
   </div>
-  <a href="/" class="btn done">Fertig - zur App</a>
+  <a href="{back_url}" class="btn done">{back_label}</a>
 </div>
 
 <div id="android" class="panel">
@@ -588,7 +591,7 @@ def create_app():
       <li>Bestaetigen</li>
     </ol>
   </div>
-  <a href="/" class="btn done">Fertig - zur App</a>
+  <a href="{back_url}" class="btn done">{back_label}</a>
 </div>
 
 <script>

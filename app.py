@@ -36,13 +36,18 @@ DISPATCHABLE_RADIO_STATUSES: set[int] | None = {1, 2}  # frei auf Funk / frei au
 
 
 def _utcnow():
-    """Timezone-aware UTC now (ersetzt deprecated _utcnow())."""
-    return datetime.now(timezone.utc)
+    """UTC now als naive datetime (kompatibel mit bestehender DB)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _fmt_dt(dt):
     """ISO 8601 Format mit Z-Suffix, oder None."""
-    return dt.isoformat() + "Z" if dt else None
+    if dt is None:
+        return None
+    # Naive datetime → direkt Z anhängen; aware → offset entfernen
+    if dt.tzinfo is not None:
+        dt = dt.replace(tzinfo=None)
+    return dt.isoformat() + "Z"
 
 
 # ---------------------------

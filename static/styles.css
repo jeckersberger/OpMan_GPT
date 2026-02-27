@@ -160,7 +160,6 @@ button.full{ width:100%; }
 }
 .sw-list{ list-style:none; margin:0; padding:0; max-height:320px; overflow-y:auto; }
 .sw-item{
-  display:flex; align-items:center; gap:.55rem;
   padding:.42rem .8rem;
   border-bottom:1px solid var(--border);
   transition:background .15s;
@@ -176,16 +175,18 @@ button.full{ width:100%; }
   background:rgba(245,200,66,.04);
   border-left:3px solid transparent;
 }
+.sw-body{ display:flex; flex-direction:column; gap:.18rem; }
+.sw-top{ display:flex; align-items:center; justify-content:space-between; gap:.4rem; }
+.sw-bot{ display:flex; align-items:center; gap:.4rem; }
+.sw-callsign{ font-size:1rem; font-weight:800; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sw-badge{
-  font-size:.72rem; font-weight:800;
-  padding:.12rem .4rem; border-radius:4px; white-space:nowrap; flex-shrink:0;
+  font-size:.68rem; font-weight:800;
+  padding:.1rem .35rem; border-radius:4px; white-space:nowrap; flex-shrink:0;
 }
 .sw-badge.s0{ background:#3a1212; color:#ff4f4f; border:1px solid rgba(255,79,79,.45); }
 .sw-badge.s5{ background:#2e2600; color:#f5c842; border:1px solid rgba(245,200,66,.4); }
-.sw-name{ font-weight:700; font-size:.85rem; flex:1; min-width:0; overflow:hidden; line-height:1.25; }
-.sw-callsign{ display:block; font-size:.92rem; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.sw-subname{ display:block; font-size:.72rem; font-weight:400; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.sw-time{ font-size:.72rem; color:var(--muted); white-space:nowrap; flex-shrink:0; }
+.sw-subname{ font-size:.7rem; font-weight:400; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.sw-time{ font-size:.68rem; color:var(--muted); white-space:nowrap; flex-shrink:0; margin-left:auto; }
 .sw-quit{
   padding:.1rem .25rem;
   background:transparent;

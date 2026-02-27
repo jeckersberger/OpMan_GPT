@@ -828,14 +828,17 @@ function _swRows(teamList) {
     const primary   = t.callsign || t.name;
     const secondary = t.callsign && t.callsign !== t.name ? t.name : null;
     return `<li class="sw-item ${cls}">
-      <span class="sw-badge ${cls}">${badge}</span>
-      <span class="sw-name">
-        <span class="sw-callsign">${esc(primary)}</span>${secondary
-          ? `<br><span class="sw-subname">${esc(secondary)}</span>`
-          : ""}
-      </span>
-      <span class="sw-time">${time}</span>
-      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+      <div class="sw-body">
+        <div class="sw-top">
+          <span class="sw-callsign">${esc(primary)}</span>
+          <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+        </div>
+        <div class="sw-bot">
+          <span class="sw-badge ${cls}">${badge}</span>
+          ${secondary ? `<span class="sw-subname">${esc(secondary)}</span>` : ""}
+          <span class="sw-time">${time}</span>
+        </div>
+      </div>
     </li>`;
   }).join("") || `<li style="padding:.5rem .8rem;font-size:.75rem;color:var(--muted);">–</li>`;
 }

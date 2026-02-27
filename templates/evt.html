@@ -607,7 +607,7 @@ function renderMain(team, doc, meta) {
   if (doc) {
     const done  = !!doc.completed;
     const m     = meta || {};
-    const w3wRaw = m.w3w || '';
+    const w3wRaw = m.w3w_alarm || m.w3w || '';
     const w3wClean = w3wRaw.replace('///', '');
 
     const ts = [
@@ -637,14 +637,13 @@ function renderMain(team, doc, meta) {
       </div>
       <div class="case-body">
         <div>
-          <div class="case-patient">${esc(m.patient || '–')}</div>
+          <div class="case-patient">${esc(m.patient_alarm || m.patient || '–')}</div>
           ${ageGender ? `<div class="case-age">${esc(ageGender)}</div>` : ''}
         </div>
         ${w3wClean ? `<div class="w3w-block">
           <div class="w3w-link">📍
             <a href="https://what3words.com/${esc(w3wClean)}" target="_blank">${esc(w3wRaw)}</a>
           </div>
-          ${m.w3w_alarm ? `<div class="w3w-alarm-note">⚠ Alarmadresse: ${esc(m.w3w_alarm)}</div>` : ''}
         </div>` : ''}
         <div class="ts-row">${ts}</div>
       </div>

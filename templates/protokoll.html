@@ -770,11 +770,13 @@ function buildCaseCard(pid) {
   </div>
   <div class="case-body">
     <div class="case-meta">
-      <span><b>${esc(meta.patient_alarm || meta.patient||'–')}</b></span>
+      <span><b>${esc(meta.patient||'–')}</b></span>
       <span>${meta.alter||'–'} J., ${meta.geschlecht==='m'?'männl.':meta.geschlecht==='w'?'weibl.':'–'}</span>
       <span style="grid-column:1/-1;font-size:.7rem;">
-        📍 <a href="https://what3words.com/${(meta.w3w_alarm||meta.w3w||'').replace('///','')}" style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w_alarm||meta.w3w||'–')}</a>
+        📍 <a href="https://what3words.com/${(meta.w3w||'').replace('///','')}" style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w||'–')}</a>
+        ${meta.w3w_alarm?`<span style="color:var(--yellow);margin-left:.4rem;">⚠ Alarm: ${esc(meta.w3w_alarm)}</span>`:''}
       </span>
+      ${meta.patient_alarm?`<span style="grid-column:1/-1;font-size:.7rem;color:var(--yellow);">⚠ Alarmname: ${esc(meta.patient_alarm)}</span>`:''}
     </div>
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
     <div class="soll-row">

@@ -89,6 +89,7 @@ def create_app():
             "schlagwort": "VU (schwer) – Radfahrer vs. PKW",
             "patient": "Lennart Voigt", "alter": 27, "geschlecht": "m",
             "w3w": "///erstes.arbeitswelt.spülmittel", "w3w_alarm": None,
+            "lat": 49.377493, "lng": 11.206863,
             "rmi_soll": "211", "sk_soll": "1", "pzc_soll": "211271",
             "besonderheit": "Pflichtfall ABCD-Schema (SK1). RD + POL auf Anfahrt.",
         },
@@ -97,6 +98,7 @@ def create_app():
             "patient": "Elzbieta Szczepaniak", "alter": 19, "geschlecht": "w",
             "patient_alarm": "Lisa Schneider",   # falscher Name in der Alarmierung
             "w3w": "///vorweisen.kanone.möchte", "w3w_alarm": None,
+            "lat": 49.377035, "lng": 11.202390,
             "rmi_soll": "272", "sk_soll": "3", "pzc_soll": "272193",
             "besonderheit": "Name in Alarmierung falsch (Lisa Schneider). Buchstabieren erforderlich.",
         },
@@ -105,6 +107,7 @@ def create_app():
             "patient": "Hakan Yilmaz", "alter": 62, "geschlecht": "m",
             "w3w": "///wunder.untersuchen.lacke",
             "w3w_alarm": "///geiger.kerzen.besonders",
+            "lat": 49.379595, "lng": 11.208106,
             "rmi_soll": "312", "sk_soll": "2", "pzc_soll": "312622",
             "besonderheit": "Adressfalle: Alarmadresse falsch. Korrektur erst nach Rückmeldung 'keine Lage'.",
         },
@@ -112,6 +115,7 @@ def create_app():
             "schlagwort": "VU (leicht) – Auffahrunfall",
             "patient": "Kevin Schäfer", "alter": 31, "geschlecht": "m",
             "w3w": "///zumal.genügt.hellbraun", "w3w_alarm": None,
+            "lat": 49.381131, "lng": 11.202597,
             "rmi_soll": "—", "sk_soll": "—", "pzc_soll": "—",
             "besonderheit": "Fokus: Lagemeldung + Nachforderung (Gefahrenlage erkennen). Patient lehnt Transport ab.",
         },
@@ -119,17 +123,21 @@ def create_app():
             "schlagwort": "Schlaganfall – neurologischer Ausfall",
             "patient": "Jürgen Krämer", "alter": 72, "geschlecht": "m",
             "w3w": "///familienname.haltung.aufdeckung", "w3w_alarm": None,
+            "lat": 49.373262, "lng": 11.201692,
             "rmi_soll": "421", "sk_soll": "2", "pzc_soll": "421722",
             "besonderheit": "Stroke-Klinik. Fokus auf PZC / Klinikwahl. Antikoagulation beachten.",
         },
         "P6": {
             "schlagwort": "Brustschmerz – V.a. ACS",
             "patient": "Sabine Lutz", "alter": 56, "geschlecht": "w",
-            "w3w": "///obernum.kranz.wählen", "w3w_alarm": None,
+            "w3w": "///obenrum.kranz.wählen", "w3w_alarm": None,
+            "lat": 49.375283, "lng": 11.204709,
             "rmi_soll": "331", "sk_soll": "2", "pzc_soll": "331562",
             "besonderheit": "ASS-Allergie! Fokus auf PZC / Klinikwahl.",
         },
     }
+    STARTPUNKT_LAT = 49.378328
+    STARTPUNKT_LNG = 11.204336
 
     with app.app_context():
         db.create_all()
@@ -409,10 +417,10 @@ def create_app():
 
         for case_id, cd in EXERCISE_CASES.items():
             api_lat, api_lng = resolve_w3w(cd["w3w"])
-            # Preserve manually-set coords if API returns nothing
+            # Fallback priority: API → manually-cached → built-in coords
             prev = (existing.get("cases") or {}).get(case_id, {})
-            lat = api_lat if api_lat is not None else prev.get("lat")
-            lng = api_lng if api_lng is not None else prev.get("lng")
+            lat = api_lat if api_lat is not None else prev.get("lat") or cd.get("lat")
+            lng = api_lng if api_lng is not None else prev.get("lng") or cd.get("lng")
             result["cases"][case_id] = {
                 "lat": lat,
                 "lng": lng,
@@ -423,8 +431,8 @@ def create_app():
 
         sp_api_lat, sp_api_lng = resolve_w3w(STARTPUNKT_W3W)
         prev_sp = existing.get("startpunkt") or {}
-        sp_lat = sp_api_lat if sp_api_lat is not None else prev_sp.get("lat")
-        sp_lng = sp_api_lng if sp_api_lng is not None else prev_sp.get("lng")
+        sp_lat = sp_api_lat if sp_api_lat is not None else prev_sp.get("lat") or STARTPUNKT_LAT
+        sp_lng = sp_api_lng if sp_api_lng is not None else prev_sp.get("lng") or STARTPUNKT_LNG
         result["startpunkt"] = {"lat": sp_lat, "lng": sp_lng, "w3w": STARTPUNKT_W3W}
 
         try:

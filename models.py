@@ -65,7 +65,10 @@ class Team(db.Model):
 
     lat = db.Column(db.Float, nullable=True)
     lng = db.Column(db.Float, nullable=True)
-    gps_updated_at = db.Column(db.DateTime, nullable=True)   # gesetzt wenn GPS vom EVT-Gerät kommt
+    gps_updated_at  = db.Column(db.DateTime, nullable=True)   # gesetzt wenn GPS vom EVT-Gerät kommt
+
+    test_alarm_at   = db.Column(db.DateTime,   nullable=True)   # Testalarm-Zeitpunkt
+    test_alarm_text = db.Column(db.String(200), nullable=True)   # Testalarm-Nachricht
 
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 

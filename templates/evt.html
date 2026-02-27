@@ -358,6 +358,19 @@
   </div>
 </div>
 
+<!-- ══ TESTALARM OVERLAY ══ -->
+<div class="alarm-overlay" id="testAlarmOverlay" style="background:rgba(180,120,0,0.82);">
+  <div class="alarm-box" style="border-color:#f5c842;box-shadow:0 0 40px rgba(245,200,66,0.5);">
+    <div class="alarm-icon">🔔</div>
+    <div class="alarm-title" style="color:#f5c842;">TESTALARM</div>
+    <div class="alarm-pid-big" style="font-size:1.4rem;margin-bottom:.8rem;" id="testAlarmText">–</div>
+    <div style="font-size:.8rem;color:#ccc;margin-bottom:1.2rem;">
+      Dies ist kein echter Einsatz.<br>Quittiere zur Bestätigung.
+    </div>
+    <button class="alarm-dismiss" id="testAlarmDismiss" style="background:#f5c842;color:#000;">✓ Quittieren</button>
+  </div>
+</div>
+
 <!-- ══ HEADER ══ -->
 <div class="header">
   <a class="back" href="/">← EL</a>
@@ -473,13 +486,18 @@ async function poll() {
       maybeStartGps();
     }
 
-    // Alarm erkennen
+    // Echter Alarm erkennen
     const doc = data.case;
     if (doc && doc.alarm_time && !doc.completed) {
       const key = `${doc.id}:${doc.alarm_time}`;
       if (!seenAlarms.has(key)) {
         triggerAlarm(doc, data.case_meta);
       }
+    }
+
+    // Testalarm erkennen
+    if (data.team && data.team.test_alarm_at) {
+      showTestAlarm(data.team);
     }
 
     renderMain(data.team, data.case, data.case_meta);
@@ -567,6 +585,40 @@ document.getElementById('alarmDismiss').addEventListener('click', async () => {
   _alarmDoc = null;
   // Alarm quittieren = S3 (Einsatz übernommen) senden
   await setFms(3);
+});
+
+// ── Testalarm ────────────────────────────────────────────────
+let _testAlarmShown = null;  // timestamp-string des aktuellen Testalarms
+
+function showTestAlarm(team) {
+  const key = team.test_alarm_at;
+  if (_testAlarmShown === key) return;  // bereits angezeigt
+  _testAlarmShown = key;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [[440,0,.1],[550,.15,.1],[660,.3,.1],[550,.45,.1],[440,.6,.15]].forEach(([f,s,d])=>{
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.3, ctx.currentTime+s);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+s+d);
+      o.start(ctx.currentTime+s); o.stop(ctx.currentTime+s+d+.05);
+    });
+  } catch(_) {}
+  document.getElementById('testAlarmText').textContent = team.test_alarm_text || 'Testalarm';
+  document.getElementById('testAlarmOverlay').classList.add('show');
+}
+
+document.getElementById('testAlarmDismiss').addEventListener('click', async () => {
+  document.getElementById('testAlarmOverlay').classList.remove('show');
+  if (currentTeamId) {
+    // Testalarm löschen + S3 setzen (Einsatz übernommen)
+    await Promise.all([
+      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
+      setFms(3),
+    ]);
+  }
+  _testAlarmShown = null;
 });
 
 // ── Render ───────────────────────────────────────────────────

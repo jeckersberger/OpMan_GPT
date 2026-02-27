@@ -33,11 +33,36 @@
       <div class="divider"></div>
       <a href="/evt" class="navbtn" style="text-decoration:none;">📱 EVT Mobile</a>
       <div class="divider"></div>
+      <button id="btnTestAlarm" class="navbtn" style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;" onclick="showTestAlarmModal()">🔔 Testalarm</button>
+      <div class="divider"></div>
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
       <div class="divider"></div>
       <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
     </nav>
   </header>
+
+  <!-- Testalarm Modal -->
+  <div id="testAlarmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1a1200;border:2px solid #f5c842;border-radius:12px;padding:1.5rem;max-width:420px;width:90%;">
+      <h3 style="margin-bottom:.75rem;font-size:1rem;color:#f5c842;">🔔 Testalarm senden</h3>
+      <div style="margin-bottom:.75rem;">
+        <label style="font-size:.8rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Nachricht:</label>
+        <input id="taText" value="Testalarm – bitte quittieren" style="width:100%;box-sizing:border-box;padding:.5rem;background:#0b1220;border:1px solid #f5c842;color:#fff;border-radius:6px;font-family:inherit;font-size:.9rem;" />
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:.8rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Empfänger:</label>
+        <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
+          <button id="taBtnAll" onclick="taSelectAll()" style="padding:.35rem .8rem;background:#3a2800;color:#f5c842;border:1px solid #f5c842;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">Alle wählen</button>
+          <button id="taBtnNone" onclick="taSelectNone()" style="padding:.35rem .8rem;background:#111;color:#888;border:1px solid #444;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">Keine</button>
+        </div>
+        <div id="taTeamList" style="display:flex;flex-direction:column;gap:.3rem;max-height:200px;overflow-y:auto;"></div>
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('testAlarmModal').style.display='none'" style="padding:.5rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Abbrechen</button>
+        <button id="taSendBtn" onclick="sendTestAlarm()" style="padding:.5rem 1.2rem;background:#f5c842;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">🔔 Senden</button>
+      </div>
+    </div>
+  </div>
 
   <!-- LAN-Info Modal -->
   <div id="lanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">

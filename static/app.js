@@ -1079,6 +1079,45 @@ function showLanModal() {
   document.getElementById("lanModal").style.display = "flex";
 }
 
+// ---------------- Testalarm ----------------
+function showTestAlarmModal() {
+  const list = $("taTeamList");
+  list.innerHTML = "";
+  teams.forEach(t => {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem;padding:.2rem .3rem;border-radius:4px;";
+    row.innerHTML = `<input type="checkbox" value="${esc(t.id)}" checked style="accent-color:#f5c842;" />`
+      + `${colorDot(t.color)}${esc(t.name)}`
+      + (t.callsign ? ` <span style="color:#aaa;font-size:.8rem;">(${esc(t.callsign)})</span>` : "");
+    list.appendChild(row);
+  });
+  $("testAlarmModal").style.display = "flex";
+}
+
+function taSelectAll()  { $("taTeamList").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = true); }
+function taSelectNone() { $("taTeamList").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = false); }
+
+async function sendTestAlarm() {
+  const text = $("taText").value.trim() || "Testalarm";
+  const checked = [...$("taTeamList").querySelectorAll("input[type=checkbox]:checked")];
+  const team_ids = checked.map(c => parseInt(c.value, 10));
+  if (!team_ids.length) { alert("Bitte mindestens ein Team auswählen."); return; }
+  const btn = $("taSendBtn");
+  btn.disabled = true;
+  btn.textContent = "Sende…";
+  try {
+    await api("/api/testalarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team_ids, text }),
+    });
+    $("testAlarmModal").style.display = "none";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔔 Senden";
+  }
+}
+
 // ---------------- Boot ----------------
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();

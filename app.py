@@ -565,9 +565,21 @@ def create_app():
     def create_team():
         data = request.get_json(force=True)
 
+        # Auto-Name: "EVT 1", "EVT 2", ... wenn kein Name übergeben
         name = (data.get("name") or "").strip()
         if not name:
-            return jsonify({"error": "name is required"}), 400
+            existing = Team.query.all()
+            used_nums = set()
+            for t in existing:
+                if t.name.startswith("EVT "):
+                    try:
+                        used_nums.add(int(t.name[4:]))
+                    except ValueError:
+                        pass
+            n = 1
+            while n in used_nums:
+                n += 1
+            name = f"EVT {n}"
 
         availability = (data.get("availability") or "verfügbar").strip()
         if availability not in ALLOWED_AVAILABILITY:

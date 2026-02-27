@@ -130,8 +130,6 @@ function initMap(){
     $("lastClick").textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
 
     // quick-fill create forms
-    $("teamLat").value = e.latlng.lat.toFixed(6);
-    $("teamLng").value = e.latlng.lng.toFixed(6);
     $("missionLat").value = e.latlng.lat.toFixed(6);
     $("missionLng").value = e.latlng.lng.toFixed(6);
   });
@@ -987,12 +985,8 @@ function wireUI(){
 
   $("btnCreateTeam").addEventListener("click", async () => {
     const payload = {
-      name: $("teamName").value.trim(),
-      callsign: $("teamCallsign").value.trim(),
-      radio_status: parseInt($("teamRadioStatus").value, 10),
+      callsign: $("teamCallsign").value.trim() || undefined,
       color: $("teamColor").value,
-      lat: $("teamLat").value ? parseFloat($("teamLat").value) : null,
-      lng: $("teamLng").value ? parseFloat($("teamLng").value) : null,
     };
 
     const t = await api("/api/teams", {
@@ -1002,7 +996,6 @@ function wireUI(){
     });
 
     selectedTeamId = t.id;
-    $("teamName").value = "";
     $("teamCallsign").value = "";
     await refreshAll();
   });

@@ -138,37 +138,15 @@
       <h2>Einsatztrupps</h2>
 
       <section class="panel">
-        <h3>Trupp erstellen</h3>
+        <h3>Neues EVT</h3>
         <div class="formrow">
-          <input id="teamName" placeholder="Name (z.B. Trupp 1)" />
-          <input id="teamCallsign" placeholder="Rufname (optional)" />
-        </div>
-
-        <div class="formrow">
-          <select id="teamRadioStatus" title="Funkstatus">
-            <option value="1" selected>S1 – Frei auf Funk</option>
-            <option value="2">S2 – Frei auf Wache</option>
-            <option value="3">S3 – Einsatz übernommen</option>
-            <option value="4">S4 – Am Einsatzort</option>
-            <option value="5">S5 – Sprechwunsch</option>
-            <option value="6">S6 – nicht Einsatzbereit</option>
-            <option value="7">S7 – Patient aufgenommen</option>
-            <option value="8">S8 – Am Transportziel</option>
-            <option value="9">S9 – Sonderfunktion</option>
-            <option value="0">S0 – prio. Sprechwunsch</option>
-          </select>
-        </div>
-
-        <div class="formrow">
+          <input id="teamCallsign" placeholder="Funkrufname (optional)" style="flex:1" />
           <input id="teamColor" type="color" value="#4ea1ff" title="Trupp-Farbe" />
-          <button id="btnCreateTeam">Anlegen</button>
         </div>
-
-        <div class="formrow small">
-          <input id="teamLat" placeholder="lat" />
-          <input id="teamLng" placeholder="lng" />
+        <div class="formrow">
+          <button id="btnCreateTeam" style="width:100%">+ Neues EVT anlegen</button>
         </div>
-        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
+        <div class="tiny" style="margin-top:2px">Name wird automatisch vergeben (EVT 1, EVT 2, …). Rufname nur bei Bedarf.</div>
       </section>
 
       <section class="panel">

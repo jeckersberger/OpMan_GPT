@@ -24,20 +24,34 @@ const $ = (id) => document.getElementById(id);
 
 // ---- Funkstatus (nur 0-9) ----
 const RADIO_OPTIONS = [
-  [1, "1 – Frei auf Funk"],
-  [2, "2 – Frei auf Wache"],
-  [3, "3 – Auf Anfahrt"],
-  [4, "4 – Am Einsatzort"],
-  [5, "5 – Sprechwunsch"],
-  [6, "6 – nicht Einsatzbereit"],
-  [7, "7 – gebunden"],
-  [8, "8 – Bedingt Einsatzbereit"],
-  [9, "9 – Sonderfunktion"],
-  [0, "0 – prio. Sprechwunsch"],
+  [1, "S1 – Frei auf Funk"],
+  [2, "S2 – Frei auf Wache"],
+  [3, "S3 – Einsatz übernommen"],
+  [4, "S4 – Am Einsatzort"],
+  [5, "S5 – Sprechwunsch"],
+  [6, "S6 – nicht Einsatzbereit"],
+  [7, "S7 – Patient aufgenommen"],
+  [8, "S8 – Am Transportziel"],
+  [9, "S9 – Sonderfunktion"],
+  [0, "S0 – prio. Sprechwunsch"],
 ];
 
-const RADIO_LABELS = new Map(RADIO_OPTIONS.map(([c, t]) => [c, t.replace(/^\d+\s–\s/, "")]));
-const DISPATCHABLE_CODES = new Set([1, 2]); // "frei" = nur Funk 1/2
+const RADIO_LABELS = new Map(RADIO_OPTIONS.map(([c, t]) => [c, t.replace(/^S\d+\s–\s/, "")]));
+const DISPATCHABLE_CODES = new Set([1, 2]); // "frei" = nur S1/S2
+
+// Statusfarben (einheitlich für Marker, Badges, etc.)
+const STATUS_COLORS = new Map([
+  [1, "#22cc66"],   // grün
+  [2, "#0d7a3a"],   // dunkelgrün
+  [3, "#f5c842"],   // gelb
+  [4, "#2299ff"],   // blau
+  [5, "#888888"],   // grau
+  [6, "#888888"],   // grau
+  [7, "#ff8800"],   // orange
+  [8, "#9b59b6"],   // lila
+  [9, "#888888"],   // grau
+  [0, "#ff3333"],   // rot
+]);
 
 function esc(s){
   return String(s ?? "")
@@ -52,13 +66,14 @@ function priorityBadge(p){ return `<span class="badge">P${esc(p)}</span>`; }
 
 function radioText(code, label, pending=false){
   const l = label || RADIO_LABELS.get(code) || "";
-  return `Funk ${code}${l ? " – " + l : ""}${pending ? " ·P" : ""}`;
+  return `S${code}${l ? " – " + l : ""}${pending ? " ·P" : ""}`;
 }
 
 function radioBadge(code, label, pending=false){
+  const col = STATUS_COLORS.get(code) || "#888";
   const extra = pending
-    ? ' style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;font-weight:700;"'
-    : '';
+    ? ` style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;font-weight:700;"`
+    : ` style="background:${col}22;color:${col};border:1px solid ${col};"`;
   return `<span class="badge"${extra}>${esc(radioText(code, label, pending))}</span>`;
 }
 
@@ -160,11 +175,12 @@ function upsertTeamMarker(t){
         ? `<span style="color:#3ddc84">● Live-GPS (${Math.round(age)}s)</span>`
         : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
 
+  const statusCol = STATUS_COLORS.get(t.radio_status) || "#888";
   const style = {
     radius: atStart ? 5 : 7,
-    color: atStart ? "#666" : (isLiveGps ? "#3ddc84" : (t.color || "#4ea1ff")),
+    color: atStart ? "#666" : (isLiveGps ? "#3ddc84" : statusCol),
     weight: 3,
-    fillColor: atStart ? "#444" : (t.color || "#4ea1ff"),
+    fillColor: atStart ? "#444" : statusCol,
     fillOpacity: atStart ? 0.45 : 0.95,
   };
 

@@ -15,13 +15,13 @@ from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, Exerci
 RADIO_STATUS_LABELS: dict[int, str] = {
     1:  "Frei auf Funk",
     2:  "Frei auf Wache",
-    3:  "Auf Anfahrt",
+    3:  "Einsatz übernommen",
     4:  "Am Einsatzort",
     5:  "Sprechwunsch",
     6:  "nicht Einsatzbereit",
-    7:  "gebunden",
-    8:  "Bedingt Einsatzbereit",
-    9:  "Fremdanmeldung",
+    7:  "Patient aufgenommen",
+    8:  "Am Transportziel",
+    9:  "Sonderfunktion",
     0:  "prio. Sprechwunsch",
 }
 

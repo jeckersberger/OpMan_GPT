@@ -829,20 +829,15 @@ function _swRows(teamList) {
     const hasCallsign = t.callsign && t.callsign !== t.name;
     const mainLine  = hasCallsign ? t.callsign : t.name;
     const subLine   = hasCallsign ? t.name : null;
-    const isBetten  = (t.radio_group || "regelfunk") === "bettenkanal";
-    const groupTag  = isBetten
-      ? `<span class="sw-group betten">🏥 Bettenkanal</span>`
-      : `<span class="sw-group regel">📻 Regelfunk</span>`;
     return `<li class="sw-item ${cls}">
       <div class="sw-names">
         <span class="sw-callsign">${esc(mainLine)}</span>
         ${subLine ? `<span class="sw-subname">${esc(subLine)}</span>` : ""}
-        ${groupTag}
       </div>
       <div class="sw-meta">
         <span class="sw-badge ${cls}">${badge}</span>
         <span class="sw-time">${time}</span>
-        <button class="sw-quit" onclick="quittieren(${t.id})">✓ Quittieren</button>
+        <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
       </div>
     </li>`;
   }).join("") || `<li style="padding:.6rem 1rem;font-size:.8rem;color:var(--muted);">–</li>`;
@@ -871,13 +866,24 @@ function renderSprechwunschPanel() {
   const swIds = new Set(sw.map(t => t.id));
   for (const id of _swKnownIds) { if (!swIds.has(id)) _swKnownIds.delete(id); }
 
-  const hasS0 = sw.some(t => t.radio_status === 0);
-  const label = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
+  const regel  = sw.filter(t => (t.radio_group || "regelfunk") === "regelfunk");
+  const betten = sw.filter(t => (t.radio_group || "regelfunk") === "bettenkanal");
+  const hasS0  = sw.some(t => t.radio_status === 0);
+  const label  = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
 
   panel.className = "sw-panel sw-visible";
   panel.innerHTML = `
     <div class="sw-header">${label}&nbsp;<span style="opacity:.7;font-weight:400">${sw.length}</span></div>
-    <ul class="sw-list">${_swRows(sw)}</ul>`;
+    <div class="sw-cols">
+      <div class="sw-col">
+        <div class="sw-col-header c-regel">📻 Regelfunk&nbsp;<span style="opacity:.6">${regel.length}</span></div>
+        <ul class="sw-list">${_swRows(regel)}</ul>
+      </div>
+      <div class="sw-col">
+        <div class="sw-col-header c-betten">🏥 Bettenkanal&nbsp;<span style="opacity:.6">${betten.length}</span></div>
+        <ul class="sw-list">${_swRows(betten)}</ul>
+      </div>
+    </div>`;
 }
 
 async function quittieren(teamId) {

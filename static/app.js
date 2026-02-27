@@ -1159,18 +1159,23 @@ async function _silentRefreshAll() {
   }
 }
 
-// Polling: Banner erst nach 3 aufeinanderfolgenden Fehlern anzeigen
+// Polling: Banner erst nach 5 aufeinanderfolgenden Fehlern anzeigen
 let _pollFailStreak = 0;
+let _pollBusy = false;
 setInterval(async () => {
+  if (_pollBusy) return;  // vorheriger Poll noch nicht fertig
+  _pollBusy = true;
   try {
     await _silentRefreshAll();
     _pollFailStreak = 0;
     _showConnBanner(true);
   } catch (_) {
     _pollFailStreak++;
-    if (_pollFailStreak >= 3) _showConnBanner(false);
+    if (_pollFailStreak >= 5) _showConnBanner(false);
+  } finally {
+    _pollBusy = false;
   }
-}, 10000);
+}, 15000);
 
 // ---------------- LAN-Info (Handy-Zugang) ----------------
 let _lanInfo = null;

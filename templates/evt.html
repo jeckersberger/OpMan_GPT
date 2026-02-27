@@ -490,7 +490,7 @@ evtSelect.addEventListener('change', () => {
   if (pollHandle) clearInterval(pollHandle);
   if (v) {
     poll();
-    pollHandle = setInterval(poll, 5000);
+    pollHandle = setInterval(poll, 10000);
   } else {
     document.getElementById('mainContent').innerHTML = '';
   }

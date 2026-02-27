@@ -9,6 +9,17 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
   <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    /* Puls-Animation für Live-GPS-Marker */
+    @keyframes gps-pulse {
+      0%   { stroke-width: 3; stroke-opacity: 1; r: 7; }
+      60%  { stroke-width: 6; stroke-opacity: 0.3; r: 11; }
+      100% { stroke-width: 3; stroke-opacity: 1; r: 7; }
+    }
+    .leaflet-interactive.gps-live {
+      animation: gps-pulse 2s ease-in-out infinite;
+    }
+  </style>
 </head>
 <body>
   <!-- Top Navigation -->

@@ -781,7 +781,7 @@ async function _sendGps(lat, lng) {
     await fetch(`/api/teams/${currentTeamId}`, {
       method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ lat, lng }),
+      body:    JSON.stringify({ lat, lng, gps: true }),
     });
     _lastGpsLat  = lat;
     _lastGpsLng  = lng;

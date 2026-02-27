@@ -65,6 +65,7 @@ class Team(db.Model):
 
     lat = db.Column(db.Float, nullable=True)
     lng = db.Column(db.Float, nullable=True)
+    gps_updated_at = db.Column(db.DateTime, nullable=True)   # gesetzt wenn GPS vom EVT-Gerät kommt
 
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 

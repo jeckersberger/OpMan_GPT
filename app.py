@@ -145,6 +145,7 @@ def create_app():
         _migrations = [
             "ALTER TABLE teams ADD COLUMN radio_group VARCHAR(30) NOT NULL DEFAULT 'regelfunk'",
             "ALTER TABLE case_docs ADD COLUMN completed_evts TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE teams ADD COLUMN gps_updated_at DATETIME",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -646,6 +647,8 @@ def create_app():
             team.lat = data["lat"]
         if "lng" in data:
             team.lng = data["lng"]
+        if ("lat" in data or "lng" in data) and data.get("gps"):
+            team.gps_updated_at = datetime.utcnow()
 
         team.updated_at = datetime.utcnow()
         db.session.commit()
@@ -946,6 +949,7 @@ def serialize_team(t: Team, include_missions: bool = False, pending_alarm: bool 
         "color": t.color,
         "lat": t.lat,
         "lng": t.lng,
+        "gps_updated_at": t.gps_updated_at.isoformat() + "Z" if t.gps_updated_at else None,
         "updated_at": t.updated_at.isoformat() + "Z",
         "pending_alarm": pending_alarm,
     }

@@ -112,25 +112,48 @@ function initMap(){
 
 // ---------------- Marker styles ----------------
 
+// GPS-Alter in Sekunden (null wenn kein GPS)
+function gpsAgeSec(t) {
+  if (!t.gps_updated_at) return null;
+  return (Date.now() - new Date(t.gps_updated_at).getTime()) / 1000;
+}
+
 // Teams: Kreis + permanentes Label "Name | Aktueller Status"
 function upsertTeamMarker(t){
-  if (t.lat == null || t.lng == null) return;
+  // Wenn kein GPS / keine Position: am Startpunkt anzeigen (grau, halbtransparent)
+  const hasPosition = t.lat != null && t.lng != null;
+  const sp = exerciseGeodata?.startpunkt;
+  if (!hasPosition && !sp) return;  // kein Startpunkt bekannt → kein Marker
+
+  const atStart = !hasPosition;
 
   const key = t.id;
-  const ll = [t.lat, t.lng];
+  const ll = atStart ? [sp.lat, sp.lng] : [t.lat, t.lng];
 
   const statusText = radioText(t.radio_status, t.radio_status_label);
-  const tooltipText = `${t.name} | ${statusText}`;
+  const age = gpsAgeSec(t);
+  const isLiveGps = !atStart && age !== null && age < 120;  // live = GPS-Update vor < 2 Min
+  const gpsInfo = atStart
+    ? " | wartet auf GPS"
+    : (t.gps_updated_at
+        ? ` | GPS ${new Date(t.gps_updated_at).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit", second:"2-digit"})}`
+        : " | manuell");
+  const tooltipText = `${t.name} | ${statusText}${gpsInfo}`;
   const popupHtml =
     `${esc(t.name)}${t.callsign ? " (" + esc(t.callsign) + ")" : ""}<br>` +
-    `${esc(statusText)}`;
+    `${esc(statusText)}<br>` +
+    (atStart
+      ? `<span style="color:#888">⏳ Wartet auf GPS – am Startpunkt</span>`
+      : isLiveGps
+        ? `<span style="color:#3ddc84">● Live-GPS (${Math.round(age)}s)</span>`
+        : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
 
   const style = {
-    radius: 7,
-    color: t.color || "#4ea1ff",
+    radius: atStart ? 5 : 7,
+    color: atStart ? "#666" : (isLiveGps ? "#3ddc84" : (t.color || "#4ea1ff")),
     weight: 3,
-    fillColor: t.color || "#4ea1ff",
-    fillOpacity: 0.95,
+    fillColor: atStart ? "#444" : (t.color || "#4ea1ff"),
+    fillOpacity: atStart ? 0.45 : 0.95,
   };
 
   if (teamMarkers.has(key)){
@@ -138,6 +161,10 @@ function upsertTeamMarker(t){
     marker.setLatLng(ll);
     marker.setStyle(style);
     marker.setPopupContent(popupHtml);
+
+    // Puls-Klasse setzen/entfernen je nach Live-GPS-Status
+    const el = marker.getElement();
+    if (el) el.classList.toggle("gps-live", isLiveGps);
 
     // Tooltip-Text aktualisieren (Leaflet: tooltip exists after bindTooltip)
     if (marker.getTooltip()){
@@ -163,6 +190,12 @@ function upsertTeamMarker(t){
       selectedTeamId = t.id;
       renderTeams();
       setSelectionLabel();
+    });
+
+    // Puls-Klasse direkt nach Erstellen setzen
+    marker.on("add", () => {
+      const el = marker.getElement();
+      if (el && isLiveGps) el.classList.add("gps-live");
     });
 
     teamMarkers.set(key, marker);
@@ -444,7 +477,17 @@ function renderTeams(){
             ${(t.radio_group||"regelfunk")==="bettenkanal"
               ? `<span class="badge" style="color:#c084fc;border-color:#c084fc;">🏥 Betten</span>`
               : `<span class="badge" style="color:#4ea1ff;border-color:#4ea1ff;">📻 Regel</span>`}
-            ${t.lat!=null ? `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span>` : `<span class="badge">ohne Position</span>`}
+            ${(()=>{
+              if (t.lat == null) return `<span class="badge">ohne Position</span>`;
+              const age = gpsAgeSec(t);
+              const live = age !== null && age < 120;
+              const gpsLabel = live
+                ? `<span class="badge" style="color:#3ddc84;border-color:#3ddc84;">● GPS live</span>`
+                : (t.gps_updated_at
+                    ? `<span class="badge" style="color:#f5c842;border-color:#f5c842;" title="GPS ${new Date(t.gps_updated_at).toLocaleTimeString('de-DE')}">○ GPS ${new Date(t.gps_updated_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>`
+                    : `<span class="badge">manuell</span>`);
+              return `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span> ${gpsLabel}`;
+            })()}
             ${assignedTeamIds.has(t.id) ? `<span class="badge">zugewiesen</span>` : ""}
           </div>
         </div>

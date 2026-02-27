@@ -9,6 +9,62 @@ Zum Anlegen als echte Git-Issues: Titel + Beschreibung ins Gitea-Web-Interface k
 
 ---
 
+### [DEPLOYMENT] Hosting auf Raspberry Pi oder Server
+**Label:** `deployment` `infrastructure`
+
+Die Anwendung soll dauerhaft als Website betrieben werden können –
+entweder auf einem Raspberry Pi (lokales Netz bei Übungen) oder auf einem
+externen Server (öffentlich erreichbar).
+
+**Anforderungen:**
+- Lauffähig auf Raspberry Pi 4 (ARM64, Raspberry Pi OS / Ubuntu) als auch auf einem
+  Linux-Server (Debian/Ubuntu x86_64)
+- Start über systemd-Service (automatisch nach Reboot)
+- HTTPS-Betrieb:
+  - Eigenes Netz (Raspi): selbstsigniertes Zertifikat (bereits vorhanden)
+  - Öffentlicher Server: Let's Encrypt via Certbot + nginx als Reverse Proxy
+- Persistente SQLite-Datenbank (kein Datenverlust nach Neustart)
+
+**Deployment-Schritte (Raspi):**
+```
+git clone <repo> && cd OpMan_GPT
+pip install -r requirements.txt
+# systemd-Unit einrichten (siehe unten)
+sudo systemctl enable opman && sudo systemctl start opman
+```
+
+**systemd-Unit** (`/etc/systemd/system/opman.service`):
+```ini
+[Unit]
+Description=OpMan GPT – Übungsleiter-App
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/OpMan_GPT
+ExecStart=/home/pi/OpMan_GPT/venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Deployment-Schritte (öffentlicher Server mit nginx + Let's Encrypt):**
+```
+sudo apt install nginx certbot python3-certbot-nginx
+sudo certbot --nginx -d <domain>
+# nginx als Reverse Proxy auf localhost:5000 konfigurieren
+```
+
+**Offene Aufgabe:**
+- `requirements.txt` prüfen und vervollständigen
+- Startup-Skript / `deploy.sh` für schnelles Einrichten erstellen
+- Dokumentation: `INSTALL.md` mit Schritt-für-Schritt-Anleitung (Raspi & Server)
+- Port konfigurierbar machen (aktuell hardcoded `5000`)
+
+---
+
 ### [BUG] GPS-Tracking der Trupps in Hauptkarte integrieren
 **Label:** `bug` `enhancement`
 

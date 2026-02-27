@@ -182,7 +182,9 @@ button.full{ width:100%; }
 }
 .sw-badge.s0{ background:#3a1212; color:#ff4f4f; border:1px solid rgba(255,79,79,.45); }
 .sw-badge.s5{ background:#2e2600; color:#f5c842; border:1px solid rgba(245,200,66,.4); }
-.sw-name{ font-weight:700; font-size:.85rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sw-name{ font-weight:700; font-size:.85rem; flex:1; min-width:0; overflow:hidden; line-height:1.25; }
+.sw-callsign{ display:block; font-size:.92rem; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sw-subname{ display:block; font-size:.72rem; font-weight:400; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sw-time{ font-size:.72rem; color:var(--muted); white-space:nowrap; flex-shrink:0; }
 .sw-quit{
   padding:.28rem .55rem;

@@ -825,11 +825,15 @@ function _swRows(teamList) {
     const badge = t.radio_status === 0 ? "S0 PRIO" : "S5";
     const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
                     {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    const primary   = t.callsign || t.name;
+    const secondary = t.callsign && t.callsign !== t.name ? t.name : null;
     return `<li class="sw-item ${cls}">
       <span class="sw-badge ${cls}">${badge}</span>
-      <span class="sw-name">${esc(t.name)}${t.callsign
-        ? ` <span style="font-weight:400;color:var(--muted)">(${esc(t.callsign)})</span>`
-        : ""}</span>
+      <span class="sw-name">
+        <span class="sw-callsign">${esc(primary)}</span>${secondary
+          ? `<br><span class="sw-subname">${esc(secondary)}</span>`
+          : ""}
+      </span>
       <span class="sw-time">${time}</span>
       <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
     </li>`;

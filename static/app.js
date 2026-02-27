@@ -838,7 +838,14 @@ function normalizeRadioLabels(){
 }
 
 async function refreshAll(rebuild = true){
-  const data = await api("/api/dashboard");
+  // Beim ersten Laden: eingebettete Daten nutzen (kein Request nötig)
+  let data;
+  if (window.__INITIAL_DATA__) {
+    data = window.__INITIAL_DATA__;
+    delete window.__INITIAL_DATA__;
+  } else {
+    data = await api("/api/dashboard");
+  }
   teams = data.teams;
   missions = data.missions;
   assignments = data.assignments;

@@ -186,9 +186,8 @@ def create_app():
         """Health-Check Endpoint für Monitoring."""
         return jsonify({"status": "ok", "timestamp": _fmt_dt(_utcnow())})
 
-    @app.get("/api/dashboard")
-    def dashboard_data():
-        """Alle Dashboard-Daten in einem einzigen Request (statt 4 einzelner)."""
+    def _build_dashboard_dict():
+        """Baut das Dashboard-Dict (für API und inline-Embedding)."""
         teams_list = Team.query.order_by(Team.updated_at.desc()).all()
         _pending_evts = {
             d.assigned_evt for d in CaseDoc.query.filter(
@@ -209,16 +208,23 @@ def create_app():
         assigns_out = [serialize_assignment(a)
                        for a in Assignment.query.order_by(Assignment.created_at.desc()).all()]
         docs_out = [serialize_casedoc(d) for d in CaseDoc.query.order_by(CaseDoc.id).all()]
-        return jsonify({
+        return {
             "teams": teams_out,
             "missions": missions_out,
             "assignments": assigns_out,
             "casedocs": docs_out,
-        })
+        }
+
+    @app.get("/api/dashboard")
+    def dashboard_data():
+        """Alle Dashboard-Daten in einem einzigen Request."""
+        return jsonify(_build_dashboard_dict())
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        import json as _json
+        initial_data = _json.dumps(_build_dashboard_dict(), ensure_ascii=False)
+        return render_template("index.html", initial_data=initial_data)
 
     @app.get("/protokoll")
     def protokoll():
@@ -1230,17 +1236,13 @@ if __name__ == "__main__":
 
     app = create_app()
     lip = _lan_ip()
-    ssl_ctx = (_CERT, _KEY) if _make_cert() else None
-    proto = "https" if ssl_ctx else "http"
+    proto = "http"
     print()
     print("=" * 60)
     print(f"  OpMan-GPT startet mit {proto.upper()}")
     print(f"  {proto}://{lip}:5000        ← LAN (Handy)")
     print(f"  {proto}://localhost:5000        ← lokal")
-    if ssl_ctx:
-        print("  Beim ersten Öffnen: Sicherheitswarnung → 'Trotzdem öffnen'")
-    else:
-        print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
+    print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
     print("=" * 60)
     print()
-    app.run(host="0.0.0.0", port=5000, debug=False, ssl_context=ssl_ctx, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

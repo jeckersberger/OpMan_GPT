@@ -225,6 +225,9 @@
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  {% if initial_data %}
+  <script>window.__INITIAL_DATA__ = {{ initial_data | safe }};</script>
+  {% endif %}
   <script src="/static/app.js"></script>
 </body>
 </html>

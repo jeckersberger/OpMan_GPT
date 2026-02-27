@@ -1354,5 +1354,40 @@ if __name__ == "__main__":
     print()
 
     ssl_ctx = (_CERT, _KEY) if has_cert else None
+
+    # HTTP-Server auf Port 5080 fuer Zertifikats-Download (Handy kann kein
+    # HTTPS bevor das Zertifikat installiert ist → Henne-Ei-Problem)
+    if has_cert:
+        import threading
+        from flask import Flask as _Flask
+
+        cert_app = _Flask(__name__)
+
+        @cert_app.get("/")
+        def _cert_landing():
+            return (f'<meta http-equiv="refresh" content="0;url=https://{lip}:5000/setup">'
+                    f'<p>Weiterleitung zu <a href="https://{lip}:5000/setup">Setup</a>...</p>')
+
+        @cert_app.get("/cert")
+        def _cert_download():
+            from flask import send_file as _sf
+            return _sf(_CERT, mimetype="application/x-pem-file",
+                       as_attachment=True, download_name="OpManGPT.pem")
+
+        @cert_app.get("/setup")
+        def _cert_setup():
+            # Setup-Seite ueber HTTP ausliefern (Zertifikat-Download funktioniert)
+            with app.test_request_context():
+                from flask import request as _req
+                return app.view_functions["setup_page"]()
+
+        def _run_cert_server():
+            cert_app.run(host="0.0.0.0", port=5080, debug=False, threaded=True)
+
+        t = threading.Thread(target=_run_cert_server, daemon=True)
+        t.start()
+        print(f"  Handy-Setup (HTTP): http://{lip}:5080/setup")
+        print()
+
     app.run(host="0.0.0.0", port=5000, debug=False,
             ssl_context=ssl_ctx, threaded=True)

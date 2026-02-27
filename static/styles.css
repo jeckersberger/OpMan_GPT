@@ -133,7 +133,7 @@ button.full{ width:100%; }
   bottom:1.25rem;
   right:1.25rem;
   z-index:500;
-  width:310px;
+  width:min(640px, 95vw);
   background:var(--panel);
   border:1px solid var(--border);
   border-radius:10px;
@@ -196,3 +196,14 @@ button.full{ width:100%; }
   transition:background .12s, color .12s, border-color .12s;
 }
 .sw-quit:hover{ background:rgba(78,161,255,.15); border-color:var(--accent); color:var(--accent); }
+/* Two-column Sprechwunsch layout */
+.sw-cols{ display:grid; grid-template-columns:1fr 1fr; }
+.sw-col{ border-right:1px solid var(--border); }
+.sw-col:last-child{ border-right:none; }
+.sw-col-header{
+  font-size:.7rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  padding:.3rem .7rem; color:var(--muted);
+  border-bottom:1px solid var(--border);
+}
+.sw-col-header.c-regel{ color:#4ea1ff; }
+.sw-col-header.c-betten{ color:#c084fc; }

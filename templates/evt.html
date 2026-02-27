@@ -675,11 +675,33 @@ function renderMain(team, doc, meta) {
     </button>`;
   }).join('');
 
+  // Funkgruppen-Toggle
+  const rg = team ? (team.radio_group || 'regelfunk') : 'regelfunk';
+  const rgDis = notFound ? ' disabled' : '';
+  const groupToggle = `
+    <div style="display:flex;gap:.5rem;margin-bottom:.4rem;">
+      <button onclick="setRadioGroup('regelfunk')"${rgDis}
+        style="flex:1;padding:.55rem .3rem;border-radius:8px;font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer;
+          border:2px solid ${rg==='regelfunk'?'#4ea1ff':'#334'};
+          background:${rg==='regelfunk'?'#0d2240':'transparent'};
+          color:${rg==='regelfunk'?'#4ea1ff':'#a6b3d1'};">
+        📻 Regelfunk
+      </button>
+      <button onclick="setRadioGroup('bettenkanal')"${rgDis}
+        style="flex:1;padding:.55rem .3rem;border-radius:8px;font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer;
+          border:2px solid ${rg==='bettenkanal'?'#c084fc':'#334'};
+          background:${rg==='bettenkanal'?'#1a0a2e':'transparent'};
+          color:${rg==='bettenkanal'?'#c084fc':'#a6b3d1'};">
+        🏥 Bettenkanal
+      </button>
+    </div>`;
+
   document.getElementById('mainContent').innerHTML = `
     ${teamHtml}
     ${caseHtml}
     <div class="fms-section">
-      <div class="fms-label">FMS-Status setzen</div>
+      <div class="fms-label">Funkgruppe &amp; Status</div>
+      ${groupToggle}
       <div class="fms-grid">${fmsBtns}</div>
     </div>
   `;
@@ -702,6 +724,21 @@ async function setFms(rs) {
       currentRs = t.radio_status;
       await poll();
     }
+  } catch (e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+
+// ── Funkgruppe setzen ─────────────────────────────────────────
+async function setRadioGroup(group) {
+  if (!currentTeamId) return;
+  try {
+    const res = await fetch(`/api/teams/${currentTeamId}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ radio_group: group }),
+    });
+    if (res.ok) await poll();
   } catch (e) {
     alert('Fehler: ' + e.message);
   }

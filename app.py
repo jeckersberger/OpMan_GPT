@@ -566,6 +566,12 @@ def create_app():
                 return jsonify({"error": "availability must be verfügbar|bedingt|nicht_verfügbar"}), 400
             team.availability = av
 
+        if "radio_group" in data:
+            rg = (data["radio_group"] or "regelfunk").strip().lower()
+            if rg not in {"regelfunk", "bettenkanal"}:
+                return jsonify({"error": "radio_group must be regelfunk|bettenkanal"}), 400
+            team.radio_group = rg
+
         if "radio_status" in data:
             rs = int(data["radio_status"])
             if rs not in RADIO_STATUS_LABELS:
@@ -933,6 +939,7 @@ def serialize_team(t: Team, include_missions: bool = False, pending_alarm: bool 
         "availability": t.availability,
         "radio_status": t.radio_status,
         "radio_status_label": RADIO_STATUS_LABELS.get(t.radio_status, "unbekannt"),
+        "radio_group": getattr(t, "radio_group", "regelfunk") or "regelfunk",
         "color": t.color,
         "lat": t.lat,
         "lng": t.lng,

@@ -441,6 +441,9 @@ function renderTeams(){
           </div>
           <div style="margin-top:4px;">
             ${radioBadge(t.radio_status, t.radio_status_label, !!t.pending_alarm)}
+            ${(t.radio_group||"regelfunk")==="bettenkanal"
+              ? `<span class="badge" style="color:#c084fc;border-color:#c084fc;">🏥 Betten</span>`
+              : `<span class="badge" style="color:#4ea1ff;border-color:#4ea1ff;">📻 Regel</span>`}
             ${t.lat!=null ? `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span>` : `<span class="badge">ohne Position</span>`}
             ${assignedTeamIds.has(t.id) ? `<span class="badge">zugewiesen</span>` : ""}
           </div>
@@ -451,6 +454,10 @@ function renderTeams(){
       <div class="row">
         <select data-team-radio="${esc(t.id)}" title="Funkstatus">
           ${RADIO_OPTIONS.map(([v, txt]) => `<option value="${v}" ${v===t.radio_status?"selected":""}>${esc(txt)}</option>`).join("")}
+        </select>
+        <select data-team-group="${esc(t.id)}" title="Funkgruppe" style="flex:0 0 auto;">
+          <option value="regelfunk" ${(t.radio_group||"regelfunk")==="regelfunk"?"selected":""}>📻 Regelfunk</option>
+          <option value="bettenkanal" ${(t.radio_group||"")==="bettenkanal"?"selected":""}>🏥 Bettenkanal</option>
         </select>
       </div>
 
@@ -510,6 +517,18 @@ function renderTeams(){
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ radio_status: parseInt(sel.value, 10) })
+      });
+      await refreshAll(false);
+    });
+  });
+
+  root.querySelectorAll("[data-team-group]").forEach(sel => {
+    sel.addEventListener("change", async () => {
+      const id = parseInt(sel.getAttribute("data-team-group"), 10);
+      await api(`/api/teams/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ radio_group: sel.value })
       });
       await refreshAll(false);
     });
@@ -813,15 +832,31 @@ function _playSWTone(prio) {
 
 const _swKnownIds = new Set();  // IDs der bereits bekannten Sprechwunsch-Teams
 
+function _swRows(teamList) {
+  const byTime = (a, b) => new Date(a.updated_at) - new Date(b.updated_at);
+  const s0 = teamList.filter(t => t.radio_status === 0).sort(byTime);
+  const s5 = teamList.filter(t => t.radio_status === 5).sort(byTime);
+  return [...s0, ...s5].map(t => {
+    const cls   = t.radio_status === 0 ? "s0" : "s5";
+    const badge = t.radio_status === 0 ? "S0 PRIO" : "S5";
+    const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
+                    {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+    return `<li class="sw-item ${cls}">
+      <span class="sw-badge ${cls}">${badge}</span>
+      <span class="sw-name">${esc(t.name)}${t.callsign
+        ? ` <span style="font-weight:400;color:var(--muted)">(${esc(t.callsign)})</span>`
+        : ""}</span>
+      <span class="sw-time">${time}</span>
+      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+    </li>`;
+  }).join("") || `<li style="padding:.5rem .8rem;font-size:.75rem;color:var(--muted);">–</li>`;
+}
+
 function renderSprechwunschPanel() {
   const panel = document.getElementById("swPanel");
   if (!panel) return;
 
-  // S0 zuerst (nach Eingangszeit aufsteigend), dann S5 (nach Eingangszeit aufsteigend)
-  const byTime = (a, b) => new Date(a.updated_at) - new Date(b.updated_at);
-  const s0 = teams.filter(t => t.radio_status === 0).sort(byTime);
-  const s5 = teams.filter(t => t.radio_status === 5).sort(byTime);
-  const sw = [...s0, ...s5];
+  const sw = teams.filter(t => t.radio_status === 0 || t.radio_status === 5);
 
   if (sw.length === 0) {
     panel.classList.remove("sw-visible");
@@ -840,27 +875,24 @@ function renderSprechwunschPanel() {
   const swIds = new Set(sw.map(t => t.id));
   for (const id of _swKnownIds) { if (!swIds.has(id)) _swKnownIds.delete(id); }
 
-  const label = s0.length > 0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
+  const regel   = sw.filter(t => (t.radio_group || "regelfunk") === "regelfunk");
+  const betten  = sw.filter(t => (t.radio_group || "regelfunk") === "bettenkanal");
+  const hasS0   = sw.some(t => t.radio_status === 0);
+  const label   = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
+
   panel.className = "sw-panel sw-visible";
-
-  const rows = sw.map(t => {
-    const cls   = t.radio_status === 0 ? "s0" : "s5";
-    const badge = t.radio_status === 0 ? "S0 PRIO" : "S5";
-    const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
-                    {hour:"2-digit", minute:"2-digit", second:"2-digit"});
-    return `<li class="sw-item ${cls}">
-      <span class="sw-badge ${cls}">${badge}</span>
-      <span class="sw-name">${t.name}${t.callsign
-        ? ` <span style="font-weight:400;color:var(--muted)">(${t.callsign})</span>`
-        : ""}</span>
-      <span class="sw-time">${time}</span>
-      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
-    </li>`;
-  }).join("");
-
   panel.innerHTML = `
     <div class="sw-header">${label}&nbsp;<span style="opacity:.7">${sw.length}</span></div>
-    <ul class="sw-list">${rows}</ul>`;
+    <div class="sw-cols">
+      <div class="sw-col">
+        <div class="sw-col-header c-regel">📻 Regelfunk&nbsp;<span style="opacity:.6">${regel.length}</span></div>
+        <ul class="sw-list">${_swRows(regel)}</ul>
+      </div>
+      <div class="sw-col">
+        <div class="sw-col-header c-betten">🏥 Bettenkanal&nbsp;<span style="opacity:.6">${betten.length}</span></div>
+        <ul class="sw-list">${_swRows(betten)}</ul>
+      </div>
+    </div>`;
 }
 
 async function quittieren(teamId) {

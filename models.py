@@ -56,6 +56,9 @@ class Team(db.Model):
     # Funkstatus-Code (auch 0, 41, 51, 61, 62, 68, 69, 71, 77)
     radio_status = db.Column(db.Integer, nullable=False, default=1)
 
+    # Funkgruppe: "regelfunk" | "bettenkanal"
+    radio_group = db.Column(db.String(30), nullable=False, default="regelfunk")
+
     color = db.Column(db.String(12), nullable=False, default="#4ea1ff")
 
     lat = db.Column(db.Float, nullable=True)

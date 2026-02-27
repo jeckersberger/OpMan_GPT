@@ -94,16 +94,6 @@ Sichtbarer Timer auf der Leitstellenansicht der die laufende Übungszeit anzeigt
 - Anzeige prominent im Header oder als festes Element auf der Karte
 - Zeit wird im Funkprotokoll als Referenz mitgeloggt
 
----
-
-### [ENHANCEMENT] Trupp-Bulk-Reset (alle auf S1 / verfügbar)
-**Label:** `enhancement`
-
-Ein einzelner Button der alle Trupps gleichzeitig auf Funkstatus 1 und
-Verfügbarkeit „verfügbar" zurücksetzt — nützlich nach einem Übungsdurchlauf
-oder wenn versehentlich falsche Statusmeldungen gesetzt wurden.
-
-**UI:** Button in der Trupp-Leiste, nur nach Bestätigung ausführen
 
 ---
 
@@ -148,21 +138,6 @@ ermöglichen.
 
 ---
 
-### [ENHANCEMENT] Mehrere Übungskurse parallel
-**Label:** `enhancement`
-
-Aktuell können nur alle EVTs denselben Übungssatz P1–P6 bearbeiten.
-Für größere Ausbildungsveranstaltungen wäre paralleler Betrieb mehrerer
-Kurse nützlich.
-
-**Konzept:**
-- Kurse als separate Namespaces (Kurs A, Kurs B, …)
-- Jeder Kurs hat eigene Trupps, Falldokus und Protokoll
-- Leitstellenansicht kann zwischen Kursen wechseln
-- Größere Datenbankänderung notwendig
-
----
-
 ## Erledigt
 
 - [x] Übungsfälle P1–P6 mit eingebetteten GPS-Koordinaten (kein w3w-API nötig)
@@ -171,3 +146,4 @@ Kurse nützlich.
 - [x] Mobile EVT-App: Alarm-Overlay, FMS-Buttons, GPS-Tracking
 - [x] Funkprotokoll mit Auto-Logging bei Statuswechseln
 - [x] Mehrfachteam-Übung: Fallabschluss wenn alle EVTs fertig
+

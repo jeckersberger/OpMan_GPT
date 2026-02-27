@@ -407,27 +407,6 @@
 </div>
 
 <script>
-// ── Zertifikat-Check: beim ersten Besuch zur Setup-Seite ─────
-if (!localStorage.getItem('evt_cert_ok')) {
-  // Pruefen ob GPS funktioniert (= Zertifikat vertrauenswuerdig)
-  if (navigator.geolocation && location.protocol === 'https:') {
-    navigator.geolocation.getCurrentPosition(
-      () => { localStorage.setItem('evt_cert_ok', '1'); },
-      (err) => {
-        if (err.code === 1) {
-          // Permission denied = Zertifikat OK, User hat GPS abgelehnt
-          localStorage.setItem('evt_cert_ok', '1');
-        } else {
-          // Timeout/unavailable = evtl. Zertifikat nicht installiert
-          // Zur Setup-Seite weiterleiten
-          window.location.href = '/setup?back=evt';
-        }
-      },
-      { timeout: 3000 }
-    );
-  }
-}
-
 // ── Daten aus Jinja ──────────────────────────────────────────
 const CASES_META = {{ cases | tojson }};
 

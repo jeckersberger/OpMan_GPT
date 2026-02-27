@@ -262,11 +262,16 @@ def create_app():
         _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "instance", "cert.pem")
         proto = "https" if os.path.exists(_cert) else "http"
+        # EVT-URL: bei HTTPS ueber HTTP-Port 5080 (automatischer Zertifikat-Setup)
+        if proto == "https":
+            evt_url = f"http://{lan_ip}:5080/evt"
+        else:
+            evt_url = f"{proto}://{lan_ip}:{port}/evt"
         return jsonify({
             "ip": lan_ip,
             "port": port,
             "base_url": f"{proto}://{lan_ip}:{port}",
-            "evt_url":  f"{proto}://{lan_ip}:{port}/evt",
+            "evt_url":  evt_url,
         })
 
     @app.get("/api/test-internet")
@@ -1355,18 +1360,81 @@ if __name__ == "__main__":
 
     ssl_ctx = (_CERT, _KEY) if has_cert else None
 
-    # HTTP-Server auf Port 5080 fuer Zertifikats-Download (Handy kann kein
-    # HTTPS bevor das Zertifikat installiert ist → Henne-Ei-Problem)
+    # HTTP-Server auf Port 5080: EVT-Einstieg fuer Handys
+    # Automatischer Flow: /evt → Zertifikat installieren → weiter zu HTTPS
     if has_cert:
         import threading
-        from flask import Flask as _Flask
+        from flask import Flask as _Flask, redirect as _redirect
 
         cert_app = _Flask(__name__)
+        _HTTPS_EVT = f"https://{lip}:5000/evt"
 
         @cert_app.get("/")
         def _cert_landing():
-            return (f'<meta http-equiv="refresh" content="0;url=https://{lip}:5000/setup">'
-                    f'<p>Weiterleitung zu <a href="https://{lip}:5000/setup">Setup</a>...</p>')
+            return _redirect("/evt")
+
+        @cert_app.get("/evt")
+        def _cert_evt():
+            """EVT-Einstieg: Zertifikat + Anleitung + Weiter-Button in einem."""
+            return ("""<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EVT Setup</title>
+<style>
+  body{font-family:-apple-system,sans-serif;max-width:500px;margin:0 auto;padding:1.5rem 1rem;
+       background:#0b1220;color:#e7eefc;line-height:1.6}
+  h1{font-size:1.3rem;text-align:center;margin-bottom:.5rem}
+  .sub{text-align:center;color:#a6b3d1;font-size:.9rem;margin-bottom:1.5rem}
+  .btn{display:block;width:100%;padding:14px;margin:.8rem 0;border:none;border-radius:8px;
+       font-size:1.1rem;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;color:#fff}
+  .dl{background:#2563eb}
+  .go{background:#22c55e;color:#000;font-size:1.2rem;margin-top:1.5rem}
+  .step{background:#111b2e;border:1px solid #223152;border-radius:8px;padding:.8rem 1rem;margin:.8rem 0}
+  .step b{color:#4ea1ff}
+  .num{display:inline-block;background:#2563eb;color:#fff;width:24px;height:24px;border-radius:50%;
+       text-align:center;font-size:.85rem;line-height:24px;margin-right:6px}
+  .tab{display:flex;gap:4px;margin-bottom:.8rem}
+  .tab button{flex:1;padding:10px;border:1px solid #223152;background:#111b2e;color:#e7eefc;
+              border-radius:6px;font-size:.95rem;cursor:pointer}
+  .tab button.active{background:#2563eb;border-color:#2563eb}
+  .panel{display:none}.panel.active{display:block}
+</style></head><body>
+<h1>EVT-App Setup</h1>
+<p class="sub">Einmalig: Zertifikat installieren, damit GPS funktioniert.</p>
+
+<a href="/cert" class="btn dl"><span class="num">1</span> Zertifikat herunterladen</a>
+
+<div class="tab">
+  <button class="active" onclick="show('ios')">iPhone</button>
+  <button onclick="show('android')">Android</button>
+</div>
+
+<div id="ios" class="panel active">
+  <div class="step">
+    <span class="num">2</span> <b>Einstellungen</b> oeffnen &rarr; oben auf <b>"Profil geladen"</b> tippen &rarr; <b>Installieren</b>
+  </div>
+  <div class="step">
+    <span class="num">3</span> <b>Einstellungen</b> &rarr; <b>Allgemein</b> &rarr; <b>Info</b> &rarr; ganz unten <b>Zertifikatsvertrauenseinstellungen</b> &rarr; Schalter <b>aktivieren</b>
+  </div>
+</div>
+
+<div id="android" class="panel">
+  <div class="step">
+    <span class="num">2</span> <b>Einstellungen</b> &rarr; Suche <b>"Zertifikat"</b> &rarr; <b>CA-Zertifikat installieren</b> &rarr; Datei waehlen &rarr; Bestaetigen
+  </div>
+</div>
+
+<a href="__HTTPS_EVT__" class="btn go"><span class="num">&#10003;</span> Fertig &ndash; EVT-App oeffnen</a>
+
+<script>
+function show(id){
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});
+  document.querySelectorAll('.tab button').forEach(function(b){b.classList.remove('active')});
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body></html>""".replace("__HTTPS_EVT__", _HTTPS_EVT))
 
         @cert_app.get("/cert")
         def _cert_download():
@@ -1374,19 +1442,12 @@ if __name__ == "__main__":
             return _sf(_CERT, mimetype="application/x-pem-file",
                        as_attachment=True, download_name="OpManGPT.pem")
 
-        @cert_app.get("/setup")
-        def _cert_setup():
-            # Setup-Seite ueber HTTP ausliefern (Zertifikat-Download funktioniert)
-            with app.test_request_context():
-                from flask import request as _req
-                return app.view_functions["setup_page"]()
-
         def _run_cert_server():
             cert_app.run(host="0.0.0.0", port=5080, debug=False, threaded=True)
 
         t = threading.Thread(target=_run_cert_server, daemon=True)
         t.start()
-        print(f"  Handy-Setup (HTTP): http://{lip}:5080/setup")
+        print(f"  EVT-App (Handy): http://{lip}:5080/evt")
         print()
 
     app.run(host="0.0.0.0", port=5000, debug=False,

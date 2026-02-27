@@ -1198,12 +1198,12 @@ if __name__ == "__main__":
             return True
         lip = _lan_ip()
         _os.makedirs(_INST, exist_ok=True)
-        print(f"Generiere SSL-Zertifikat für {lip} ...")
-        # cryptography auto-installieren falls nötig
+        print(f"Generiere SSL-Zertifikat fuer {lip} ...")
+        # cryptography auto-installieren falls noetig
         try:
             import cryptography  # noqa: F401
         except ImportError:
-            print("  'cryptography' nicht installiert – installiere automatisch ...")
+            print("  'cryptography' nicht installiert - installiere automatisch ...")
             r = _subprocess.run([_sys.executable, "-m", "pip", "install", "cryptography"],
                                 capture_output=True, text=True)
             if r.returncode != 0:
@@ -1220,15 +1220,16 @@ if __name__ == "__main__":
             san = [x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
             if lip != "127.0.0.1":
                 san.append(x509.IPAddress(ipaddress.ip_address(lip)))
+            # CA=True damit Chrome das Zertifikat als Root-CA akzeptiert
             cert = (x509.CertificateBuilder()
-                    .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
-                    .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
+                    .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local CA")]))
+                    .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local CA")]))
                     .public_key(key.public_key())
                     .serial_number(x509.random_serial_number())
                     .not_valid_before(datetime.datetime.now(datetime.UTC))
                     .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=825))
                     .add_extension(x509.SubjectAlternativeName(san), critical=False)
-                    .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+                    .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
                     .sign(key, hashes.SHA256()))
             with open(_KEY, "wb") as f:
                 f.write(key.private_bytes(serialization.Encoding.PEM,
@@ -1236,6 +1237,21 @@ if __name__ == "__main__":
             with open(_CERT, "wb") as f:
                 f.write(cert.public_bytes(serialization.Encoding.PEM))
             print(f"  Zertifikat erstellt: {_CERT}")
+
+            # Windows: Zertifikat automatisch als vertrauenswuerdige Root-CA installieren
+            if _sys.platform == "win32":
+                print("  Installiere Zertifikat in Windows-Vertrauensspeicher ...")
+                print("  (Es erscheint evtl. eine Admin-Abfrage - bitte bestaetigen)")
+                r = _subprocess.run(
+                    ["certutil", "-addstore", "Root", _CERT],
+                    capture_output=True, text=True,
+                )
+                if r.returncode == 0:
+                    print("  Zertifikat als vertrauenswuerdig installiert!")
+                else:
+                    print(f"  Auto-Installation fehlgeschlagen (braucht Admin-Rechte).")
+                    print(f"  Manuell: certutil -addstore Root \"{_CERT}\"")
+
             return True
         except Exception as e:
             print(f"  Zertifikat-Erstellung fehlgeschlagen: {e}")

@@ -455,10 +455,6 @@ function renderTeams(){
         <select data-team-radio="${esc(t.id)}" title="Funkstatus">
           ${RADIO_OPTIONS.map(([v, txt]) => `<option value="${v}" ${v===t.radio_status?"selected":""}>${esc(txt)}</option>`).join("")}
         </select>
-        <select data-team-group="${esc(t.id)}" title="Funkgruppe" style="flex:0 0 auto;">
-          <option value="regelfunk" ${(t.radio_group||"regelfunk")==="regelfunk"?"selected":""}>📻 Regelfunk</option>
-          <option value="bettenkanal" ${(t.radio_group||"")==="bettenkanal"?"selected":""}>🏥 Bettenkanal</option>
-        </select>
       </div>
 
       <div class="row">
@@ -517,18 +513,6 @@ function renderTeams(){
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ radio_status: parseInt(sel.value, 10) })
-      });
-      await refreshAll(false);
-    });
-  });
-
-  root.querySelectorAll("[data-team-group]").forEach(sel => {
-    sel.addEventListener("change", async () => {
-      const id = parseInt(sel.getAttribute("data-team-group"), 10);
-      await api(`/api/teams/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ radio_group: sel.value })
       });
       await refreshAll(false);
     });

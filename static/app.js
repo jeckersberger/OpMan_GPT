@@ -93,10 +93,22 @@ async function api(url, options){
 // ---------------- Map ----------------
 function initMap(){
   map = L.map("map").setView([49.3783, 11.2134], 15); // Default: Feucht
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(map);
+
+  const layers = {
+    "🗺 OpenStreetMap": L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap"
+    }),
+    "🛰 Satellite": L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 19, attribution: "&copy; Esri World Imagery"
+    }),
+    "🏔 Topo": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+      maxZoom: 17, attribution: "&copy; OpenTopoMap"
+    }),
+  };
+
+  layers["🗺 OpenStreetMap"].addTo(map);
+  L.control.layers(layers, {}, { position: "topright", collapsed: false }).addTo(map);
 
   map.on("click", (e) => {
     lastClickedLatLng = e.latlng;

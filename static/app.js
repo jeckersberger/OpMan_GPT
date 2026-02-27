@@ -825,22 +825,22 @@ function _swRows(teamList) {
     const badge = t.radio_status === 0 ? "S0 PRIO" : "S5";
     const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
                     {hour:"2-digit", minute:"2-digit"});
-    const primary   = t.callsign || t.name;
-    const secondary = t.callsign && t.callsign !== t.name ? t.name : null;
+    // Show both name and callsign when they differ
+    const hasCallsign = t.callsign && t.callsign !== t.name;
+    const mainLine  = hasCallsign ? t.callsign : t.name;
+    const subLine   = hasCallsign ? t.name : null;
     return `<li class="sw-item ${cls}">
-      <div class="sw-body">
-        <div class="sw-top">
-          <span class="sw-callsign">${esc(primary)}</span>
-          <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
-        </div>
-        <div class="sw-bot">
-          <span class="sw-badge ${cls}">${badge}</span>
-          ${secondary ? `<span class="sw-subname">${esc(secondary)}</span>` : ""}
-          <span class="sw-time">${time}</span>
-        </div>
+      <div class="sw-names">
+        <span class="sw-callsign">${esc(mainLine)}</span>
+        ${subLine ? `<span class="sw-subname">${esc(subLine)}</span>` : ""}
+      </div>
+      <div class="sw-meta">
+        <span class="sw-badge ${cls}">${badge}</span>
+        <span class="sw-time">${time}</span>
+        <button class="sw-quit" onclick="quittieren(${t.id})">✓ Quittieren</button>
       </div>
     </li>`;
-  }).join("") || `<li style="padding:.5rem .8rem;font-size:.75rem;color:var(--muted);">–</li>`;
+  }).join("") || `<li style="padding:.6rem 1rem;font-size:.8rem;color:var(--muted);">–</li>`;
 }
 
 function renderSprechwunschPanel() {
@@ -866,24 +866,13 @@ function renderSprechwunschPanel() {
   const swIds = new Set(sw.map(t => t.id));
   for (const id of _swKnownIds) { if (!swIds.has(id)) _swKnownIds.delete(id); }
 
-  const regel   = sw.filter(t => (t.radio_group || "regelfunk") === "regelfunk");
-  const betten  = sw.filter(t => (t.radio_group || "regelfunk") === "bettenkanal");
-  const hasS0   = sw.some(t => t.radio_status === 0);
-  const label   = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
+  const hasS0 = sw.some(t => t.radio_status === 0);
+  const label = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
 
   panel.className = "sw-panel sw-visible";
   panel.innerHTML = `
-    <div class="sw-header">${label}&nbsp;<span style="opacity:.7">${sw.length}</span></div>
-    <div class="sw-cols">
-      <div class="sw-col">
-        <div class="sw-col-header c-regel">📻 Regelfunk&nbsp;<span style="opacity:.6">${regel.length}</span></div>
-        <ul class="sw-list">${_swRows(regel)}</ul>
-      </div>
-      <div class="sw-col">
-        <div class="sw-col-header c-betten">🏥 Bettenkanal&nbsp;<span style="opacity:.6">${betten.length}</span></div>
-        <ul class="sw-list">${_swRows(betten)}</ul>
-      </div>
-    </div>`;
+    <div class="sw-header">${label}&nbsp;<span style="opacity:.7;font-weight:400">${sw.length}</span></div>
+    <ul class="sw-list">${_swRows(sw)}</ul>`;
 }
 
 async function quittieren(teamId) {

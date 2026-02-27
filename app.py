@@ -144,11 +144,15 @@ def create_app():
         except Exception:
             lan_ip = "127.0.0.1"
         port = 5000
+        # HTTPS wenn Zertifikat vorhanden (run.py wurde verwendet)
+        _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "instance", "cert.pem")
+        proto = "https" if os.path.exists(_cert) else "http"
         return jsonify({
             "ip": lan_ip,
             "port": port,
-            "base_url": f"http://{lan_ip}:{port}",
-            "evt_url":  f"http://{lan_ip}:{port}/evt",
+            "base_url": f"{proto}://{lan_ip}:{port}",
+            "evt_url":  f"{proto}://{lan_ip}:{port}/evt",
         })
 
     @app.get("/evt")

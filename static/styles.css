@@ -187,14 +187,15 @@ button.full{ width:100%; }
 .sw-subname{ display:block; font-size:.72rem; font-weight:400; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sw-time{ font-size:.72rem; color:var(--muted); white-space:nowrap; flex-shrink:0; }
 .sw-quit{
-  padding:.28rem .55rem;
+  padding:.1rem .25rem;
   background:transparent;
   border:1px solid var(--border);
-  border-radius:5px;
+  border-radius:4px;
   color:var(--muted);
-  font-size:.72rem; font-weight:700;
+  font-size:.7rem; font-weight:700;
   cursor:pointer; font-family:inherit;
   white-space:nowrap; flex-shrink:0;
+  line-height:1;
   transition:background .12s, color .12s, border-color .12s;
 }
 .sw-quit:hover{ background:rgba(78,161,255,.15); border-color:var(--accent); color:var(--accent); }

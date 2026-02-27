@@ -30,16 +30,59 @@ def get_lan_ip():
         return "127.0.0.1"
 
 
-def ensure_cert():
-    """Generiert das Zertifikat automatisch wenn es fehlt."""
-    if os.path.exists(CERT) and os.path.exists(KEY):
+def _generate_cert_python(lan_ip):
+    """Generiert ein selbstsigniertes Zertifikat mit reinem Python (kein openssl nötig)."""
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        import datetime, ipaddress
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+        san_entries = [
+            x509.DNSName("localhost"),
+            x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+        ]
+        if lan_ip != "127.0.0.1":
+            san_entries.append(x509.IPAddress(ipaddress.ip_address(lan_ip)))
+
+        subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")])
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(datetime.datetime.utcnow())
+            .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=825))
+            .add_extension(x509.SubjectAlternativeName(san_entries), critical=False)
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+
+        with open(KEY, "wb") as f:
+            f.write(key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.TraditionalOpenSSL,
+                serialization.NoEncryption(),
+            ))
+        with open(CERT, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
         return True
+    except ImportError:
+        return False
+    except Exception as e:
+        print(f"  Warnung: Python-Zertifikat fehlgeschlagen: {e}")
+        return False
 
-    lan_ip = get_lan_ip()
-    os.makedirs(INSTANCE_DIR, exist_ok=True)
 
+def _generate_cert_openssl(lan_ip):
+    """Generiert ein selbstsigniertes Zertifikat mit openssl CLI."""
     cnf_path = os.path.join(INSTANCE_DIR, "san.cnf")
-    cnf_content = f"""[req]
+    with open(cnf_path, "w") as f:
+        f.write(f"""[req]
 default_bits       = 2048
 prompt             = no
 distinguished_name = dn
@@ -58,25 +101,39 @@ extendedKeyUsage = serverAuth
 IP.1 = {lan_ip}
 IP.2 = 127.0.0.1
 DNS.1 = localhost
-"""
-    with open(cnf_path, "w") as f:
-        f.write(cnf_content)
-
-    print(f"Generiere SSL-Zertifikat für {lan_ip} ...")
-    result = subprocess.run([
-        "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-keyout", KEY, "-out", CERT,
-        "-days", "825",
-        "-config", cnf_path,
-    ], capture_output=True, text=True)
-
-    if result.returncode != 0:
-        print(f"  Warnung: openssl fehlgeschlagen – Fallback auf HTTP")
-        print(f"  {result.stderr.strip()}")
+""")
+    try:
+        result = subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", KEY, "-out", CERT, "-days", "825", "-config", cnf_path,
+        ], capture_output=True, text=True)
+        return result.returncode == 0
+    except FileNotFoundError:
         return False
 
-    print(f"  Zertifikat erstellt: {CERT}")
-    return True
+
+def ensure_cert():
+    """Generiert das Zertifikat automatisch wenn es fehlt."""
+    if os.path.exists(CERT) and os.path.exists(KEY):
+        return True
+
+    lan_ip = get_lan_ip()
+    os.makedirs(INSTANCE_DIR, exist_ok=True)
+    print(f"Generiere SSL-Zertifikat für {lan_ip} ...")
+
+    # Versuch 1: Python cryptography-Bibliothek (plattformunabhängig)
+    if _generate_cert_python(lan_ip):
+        print(f"  Zertifikat erstellt: {CERT}")
+        return True
+
+    # Versuch 2: openssl CLI (Linux/macOS)
+    if _generate_cert_openssl(lan_ip):
+        print(f"  Zertifikat erstellt: {CERT}")
+        return True
+
+    print("  Warnung: Zertifikat konnte nicht erstellt werden – Fallback auf HTTP")
+    print("  Tipp: 'pip install cryptography' installieren für automatische Zertifikate")
+    return False
 
 
 app = create_app()

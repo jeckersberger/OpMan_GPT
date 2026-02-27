@@ -537,7 +537,39 @@ function _unlockAudio() {
   } catch (e) { _audioCtx = null; }
 }
 
-function _playAlarmTone() {
+// Audio bei JEDER Nutzerinteraktion entsperren (nicht nur EVT-Select)
+['click', 'touchstart', 'pointerdown'].forEach(evt => {
+  document.addEventListener(evt, _unlockAudio, { once: false, passive: true });
+});
+
+// ── Notification Permission frühzeitig anfragen ────────────────
+function _requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+// Bei erster Interaktion anfragen
+['click', 'touchstart'].forEach(evt => {
+  document.addEventListener(evt, _requestNotificationPermission, { once: true, passive: true });
+});
+
+function _showNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, {
+      body: body,
+      icon: '🚨',
+      tag: 'alarm',           // ersetzt vorherige Alarm-Notification
+      requireInteraction: true, // bleibt sichtbar bis Nutzer reagiert
+      vibrate: [400, 120, 400, 120, 800],
+    });
+  } catch (_) { /* Notification nicht verfügbar */ }
+}
+
+// ── Looping Alarm Sound ──────────────────────────────────────
+let _alarmLoopHandle = null;
+
+function _playAlarmBurst() {
   if (!_audioCtx) return;
   try {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
@@ -555,12 +587,26 @@ function _playAlarmTone() {
       gain.connect(_audioCtx.destination);
       osc.type = 'square';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.35, _audioCtx.currentTime + start);
+      gain.gain.setValueAtTime(0.45, _audioCtx.currentTime + start);
       gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
       osc.start(_audioCtx.currentTime + start);
       osc.stop(_audioCtx.currentTime + start + dur + 0.02);
     });
   } catch (e) { /* kein Audio-Support */ }
+}
+
+function _playAlarmTone() {
+  _stopAlarmTone();  // vorherigen Loop stoppen
+  _playAlarmBurst(); // sofort abspielen
+  // Alle 1.5 Sekunden wiederholen bis quittiert
+  _alarmLoopHandle = setInterval(_playAlarmBurst, 1500);
+}
+
+function _stopAlarmTone() {
+  if (_alarmLoopHandle) {
+    clearInterval(_alarmLoopHandle);
+    _alarmLoopHandle = null;
+  }
 }
 
 // ── Alarm ────────────────────────────────────────────────────
@@ -570,14 +616,14 @@ function triggerAlarm(doc, meta) {
   const key = `${doc.id}:${doc.alarm_time}`;
   seenAlarms.add(key);  // schon jetzt als gesehen markieren, verhindert Doppelt-Anzeige
 
-  _playAlarmTone();
-  if (navigator.vibrate) navigator.vibrate([400, 120, 400, 120, 800]);
+  _playAlarmTone();  // spielt in Schleife bis quittiert
+  if (navigator.vibrate) navigator.vibrate([400, 120, 400, 120, 800, 500, 400, 120, 400, 120, 800]);
 
   _alarmDoc = doc;
   document.getElementById('alarmPid').textContent  = doc.id || '–';
   document.getElementById('alarmSchlw').textContent = (meta && meta.schlagwort) ? meta.schlagwort : '–';
 
-  // Alarmdetails: ggf. falscher Name (P2) oder falsche Adresse (P3)
+  // Alarmdetails
   let detail = '';
   if (meta) {
     const patName  = meta.patient_alarm || meta.patient || '';
@@ -588,9 +634,18 @@ function triggerAlarm(doc, meta) {
   document.getElementById('alarmDetail').innerHTML = detail;
 
   document.getElementById('alarmOverlay').classList.add('show');
+
+  // Browser-Notification für gesperrten Bildschirm
+  const schlagwort = (meta && meta.schlagwort) ? meta.schlagwort : '';
+  _showNotification(
+    'NEUER EINSATZ – ' + (doc.id || ''),
+    schlagwort + (detail ? '\n' + (meta.patient_alarm || meta.patient || '') : '')
+  );
 }
 
 document.getElementById('alarmDismiss').addEventListener('click', async () => {
+  _stopAlarmTone();  // Alarm-Sound stoppen
+  if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('alarmOverlay').classList.remove('show');
   _alarmDoc = null;
   // Alarm quittieren = S3 (Einsatz übernommen) senden
@@ -600,7 +655,9 @@ document.getElementById('alarmDismiss').addEventListener('click', async () => {
 // ── Testalarm ────────────────────────────────────────────────
 let _testAlarmShown = null;  // timestamp-string des aktuellen Testalarms
 
-function _playTestAlarmTone() {
+let _testAlarmLoopHandle = null;
+
+function _playTestAlarmBurst() {
   if (!_audioCtx) return;
   try {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
@@ -618,7 +675,7 @@ function _playTestAlarmTone() {
       gain.connect(_audioCtx.destination);
       osc.type = 'sine';
       osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.3, _audioCtx.currentTime + start);
+      gain.gain.setValueAtTime(0.35, _audioCtx.currentTime + start);
       gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + start + dur);
       osc.start(_audioCtx.currentTime + start);
       osc.stop(_audioCtx.currentTime + start + dur + 0.05);
@@ -626,20 +683,37 @@ function _playTestAlarmTone() {
   } catch (_) { /* kein Audio-Support */ }
 }
 
+function _playTestAlarmTone() {
+  _stopTestAlarmTone();
+  _playTestAlarmBurst();
+  _testAlarmLoopHandle = setInterval(_playTestAlarmBurst, 1200);
+}
+
+function _stopTestAlarmTone() {
+  if (_testAlarmLoopHandle) {
+    clearInterval(_testAlarmLoopHandle);
+    _testAlarmLoopHandle = null;
+  }
+}
+
 function showTestAlarm(team) {
   const key = team.test_alarm_at;
   if (_testAlarmShown === key) return;  // bereits angezeigt
   _testAlarmShown = key;
-  _playTestAlarmTone();
-  if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  _playTestAlarmTone();  // spielt in Schleife
+  if (navigator.vibrate) navigator.vibrate([300, 100, 300, 500, 300, 100, 300]);
   document.getElementById('testAlarmText').textContent = team.test_alarm_text || 'Testalarm';
   document.getElementById('testAlarmOverlay').classList.add('show');
+
+  // Browser-Notification
+  _showNotification('TESTALARM', team.test_alarm_text || 'Testalarm');
 }
 
 document.getElementById('testAlarmDismiss').addEventListener('click', async () => {
+  _stopTestAlarmTone();  // Sound stoppen
+  if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('testAlarmOverlay').classList.remove('show');
   if (currentTeamId) {
-    // Testalarm löschen + S3 setzen (Einsatz übernommen)
     await Promise.all([
       fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
       setFms(3),

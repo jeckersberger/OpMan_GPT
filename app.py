@@ -520,10 +520,86 @@ def create_app():
         cert_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  "instance", "cert.pem")
         if not os.path.exists(cert_path):
-            return "Kein Zertifikat vorhanden. Zuerst gen_cert.py ausführen.", 404
+            return "Kein Zertifikat vorhanden.", 404
         from flask import send_file
         return send_file(cert_path, mimetype="application/x-pem-file",
                          as_attachment=True, download_name="OpManGPT.pem")
+
+    @app.get("/setup")
+    def setup_page():
+        """Handy-Setup: Zertifikat installieren mit Schritt-fuer-Schritt-Anleitung."""
+        return """<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpMan-GPT Handy-Setup</title>
+<style>
+  body{font-family:-apple-system,sans-serif;max-width:500px;margin:2rem auto;padding:0 1rem;
+       background:#0d1117;color:#e6edf3;line-height:1.6}
+  h1{font-size:1.3rem;text-align:center}
+  .btn{display:block;width:100%;padding:14px;margin:1rem 0;border:none;border-radius:8px;
+       font-size:1.1rem;font-weight:600;cursor:pointer;text-align:center;text-decoration:none}
+  .btn-dl{background:#2563eb;color:#fff}
+  .step{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:1rem;margin:1rem 0}
+  .step h3{margin:0 0 .5rem;font-size:1rem}
+  .step ol{margin:0;padding-left:1.5rem}
+  .tab{display:flex;gap:4px;margin-bottom:1rem}
+  .tab button{flex:1;padding:10px;border:1px solid #30363d;background:#161b22;color:#e6edf3;
+              border-radius:6px;font-size:.95rem;cursor:pointer}
+  .tab button.active{background:#2563eb;border-color:#2563eb;color:#fff}
+  .panel{display:none}.panel.active{display:block}
+  .done{background:#22c55e;color:#000}
+</style></head><body>
+<h1>OpMan-GPT Handy-Setup</h1>
+<p style="text-align:center">GPS braucht ein vertrauenswuerdiges Zertifikat.<br>Einmalig 2 Minuten, dann funktioniert alles.</p>
+
+<div class="tab">
+  <button class="active" onclick="show('ios')">iPhone</button>
+  <button onclick="show('android')">Android</button>
+</div>
+
+<div id="ios" class="panel active">
+  <a href="/cert" class="btn btn-dl">1. Zertifikat herunterladen</a>
+  <div class="step"><h3>2. Profil installieren</h3>
+    <ol>
+      <li>Tippe auf "Zulassen" wenn gefragt</li>
+      <li>Oeffne <b>Einstellungen</b></li>
+      <li>Oben erscheint <b>"Profil geladen"</b> - tippe drauf</li>
+      <li>Tippe <b>"Installieren"</b> (2x) und gib deinen Code ein</li>
+    </ol>
+  </div>
+  <div class="step"><h3>3. Zertifikat vertrauen</h3>
+    <ol>
+      <li><b>Einstellungen</b> → <b>Allgemein</b> → <b>Info</b></li>
+      <li>Ganz unten: <b>Zertifikatsvertrauenseinstellungen</b></li>
+      <li>Schalter bei <b>"OpMan-GPT Local CA"</b> aktivieren</li>
+    </ol>
+  </div>
+  <a href="/" class="btn done">Fertig - zur App</a>
+</div>
+
+<div id="android" class="panel">
+  <a href="/cert" class="btn btn-dl">1. Zertifikat herunterladen</a>
+  <div class="step"><h3>2. Zertifikat installieren</h3>
+    <ol>
+      <li>Oeffne <b>Einstellungen</b> → <b>Sicherheit</b> (oder suche "Zertifikat")</li>
+      <li><b>Verschluesselung & Anmeldedaten</b></li>
+      <li><b>Zertifikat installieren</b> → <b>CA-Zertifikat</b></li>
+      <li>Waehle die heruntergeladene Datei <b>OpManGPT.pem</b></li>
+      <li>Bestaetigen</li>
+    </ol>
+  </div>
+  <a href="/" class="btn done">Fertig - zur App</a>
+</div>
+
+<script>
+function show(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body></html>"""
 
     # ---------------------------
     # Exercise Config

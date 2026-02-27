@@ -802,10 +802,12 @@ async function setRadioGroup(group) {
 
 // ── GPS-Standort-Tracking ─────────────────────────────────────
 let _gpsWatchId   = null;
+let _gpsFallback  = null;   // Fallback-Intervall für iOS
 let _gpsEnabled   = (localStorage.getItem('evt_gps') !== '0');  // default: ein
 let _lastGpsLat   = null;
 let _lastGpsLng   = null;
 let _lastGpsSent  = 0;
+let _gpsGotFix    = false;  // true sobald erster Fix kam
 
 const GPS_SEND_INTERVAL = 10000;  // mindestens alle 10 s senden
 const GPS_MIN_METERS    = 5;      // nur senden wenn >5 m Bewegung ODER Interval abgelaufen
@@ -844,6 +846,7 @@ async function _sendGps(lat, lng) {
 function _onGpsPosition(pos) {
   const { latitude: lat, longitude: lng, accuracy } = pos.coords;
   const acc = Math.round(accuracy);
+  _gpsGotFix = true;
   _setGpsDot('active', `±${acc}m`);
 
   const moved = (_lastGpsLat == null)
@@ -861,17 +864,60 @@ function _onGpsError(err) {
   _setGpsDot('error', msgs[err.code] || 'GPS-Fehler');
 }
 
+// iOS Safari: watchPosition feuert oft nicht zuverlässig.
+// Workaround: erst getCurrentPosition aufrufen (triggert Permission-Dialog),
+// dann watchPosition + Fallback-Polling alle 15s mit getCurrentPosition.
 function startGps() {
   if (!navigator.geolocation) {
     _setGpsDot('error', 'nicht unterstützt');
     return;
   }
+  // HTTPS-Check (Geolocation braucht Secure Context)
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    _setGpsDot('error', 'HTTPS nötig');
+    return;
+  }
   _setGpsDot('waiting', 'Suche…');
-  _gpsWatchId = navigator.geolocation.watchPosition(
-    _onGpsPosition,
-    _onGpsError,
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  _gpsGotFix = false;
+
+  const opts = { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 };
+
+  // 1) getCurrentPosition – triggert iOS-Permission-Dialog zuverlässig
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      _onGpsPosition(pos);
+      _startWatch(opts);
+    },
+    (err) => {
+      _onGpsError(err);
+      _startWatch(opts);  // trotzdem versuchen
+    },
+    opts
   );
+}
+
+function _startWatch(opts) {
+  // 2) watchPosition für kontinuierliche Updates
+  if (_gpsWatchId == null) {
+    _gpsWatchId = navigator.geolocation.watchPosition(
+      _onGpsPosition,
+      _onGpsError,
+      opts
+    );
+  }
+
+  // 3) Fallback-Polling für iOS: alle 15s getCurrentPosition
+  //    (fängt Fälle ab wo watchPosition aufhört zu feuern)
+  if (!_gpsFallback) {
+    _gpsFallback = setInterval(() => {
+      if (!_gpsEnabled || !currentTeamId) return;
+      navigator.geolocation.getCurrentPosition(
+        _onGpsPosition,
+        () => {},  // stille Fehler im Fallback
+        { enableHighAccuracy: true, maximumAge: 20000, timeout: 15000 }
+      );
+    }, 15000);
+  }
 }
 
 function stopGps() {
@@ -879,6 +925,11 @@ function stopGps() {
     navigator.geolocation.clearWatch(_gpsWatchId);
     _gpsWatchId = null;
   }
+  if (_gpsFallback) {
+    clearInterval(_gpsFallback);
+    _gpsFallback = null;
+  }
+  _gpsGotFix = false;
   _setGpsDot('', 'GPS aus');
 }
 

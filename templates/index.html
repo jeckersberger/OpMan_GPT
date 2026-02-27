@@ -35,11 +35,40 @@
       <div class="divider"></div>
       <button id="btnTestAlarm" class="navbtn" style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;" onclick="showTestAlarmModal()">🔔 Testalarm</button>
       <div class="divider"></div>
+      <button class="navbtn" style="background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b;" onclick="showResetModal()">🔄 Reset</button>
+      <div class="divider"></div>
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
       <div class="divider"></div>
       <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
     </nav>
   </header>
+
+  <!-- Reset Modal -->
+  <div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1a0808;border:2px solid #ff6b6b;border-radius:12px;padding:1.5rem;max-width:400px;width:90%;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#ff6b6b;">🔄 Übungs-Reset</h3>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Setzt die Übung zurück für einen Neudurchlauf.</p>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.2rem;">
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsLog" style="accent-color:#ff6b6b;" />
+          Funkprotokoll leeren
+        </label>
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsTeams" checked style="accent-color:#ff6b6b;" />
+          Trupps auf S1 / verfügbar zurücksetzen (Position bleibt)
+        </label>
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsDeleteTeams" style="accent-color:#ff6b6b;" onchange="if(this.checked)document.getElementById('rsTeams').checked=false;" />
+          <span style="color:#ff6b6b;">⚠ Trupps + Einsätze komplett löschen</span>
+        </label>
+      </div>
+      <p style="font-size:.75rem;color:#f5c842;margin-bottom:1rem;">Immer zurückgesetzt: Falldokumentationen (P1–P6), Zuweisungen, Missionsstatus.</p>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('resetModal').style.display='none'" style="padding:.5rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Abbrechen</button>
+        <button onclick="doReset()" style="padding:.5rem 1.2rem;background:#ff6b6b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Zurücksetzen</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Testalarm Modal -->
   <div id="testAlarmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">

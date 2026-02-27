@@ -1079,6 +1079,31 @@ function showLanModal() {
   document.getElementById("lanModal").style.display = "flex";
 }
 
+// ---------------- Übungs-Reset ----------------
+function showResetModal() {
+  $("resetModal").style.display = "flex";
+}
+
+async function doReset() {
+  const include_log  = $("rsLog").checked;
+  const delete_teams = $("rsDeleteTeams").checked;
+  const reset_teams  = $("rsTeams").checked && !delete_teams;
+
+  const warn = delete_teams
+    ? "ACHTUNG: Alle Trupps und Einsätze werden gelöscht!\n\nTrotzdem zurücksetzen?"
+    : "Übung zurücksetzen? Alle Falldokumentationen und Zuweisungen werden geleert.";
+  if (!confirm(warn)) return;
+
+  await api("/api/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ include_log, reset_teams, delete_teams }),
+  });
+  $("resetModal").style.display = "none";
+  await refreshAll(true);
+  if (exerciseGeodata) refreshExerciseLayer();
+}
+
 // ---------------- Testalarm ----------------
 function showTestAlarmModal() {
   const list = $("taTeamList");

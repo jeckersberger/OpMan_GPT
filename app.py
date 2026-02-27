@@ -366,25 +366,57 @@ def create_app():
     # ---------------------------
     @app.post("/api/reset")
     def reset_exercise():
-        """Setzt alle CaseDoc-Einträge zurück. Optional auch den Funklog."""
+        """Vollständiger Übungs-Reset.
+
+        Body (alle optional, default False):
+          include_log    – Funkprotokoll leeren
+          reset_teams    – Trupps auf S1/verfügbar zurücksetzen (Positionen behalten)
+          delete_teams   – Trupps und Einsätze komplett löschen
+        """
         data = request.get_json(force=True) or {}
-        include_log = bool(data.get("include_log", False))
+        include_log  = bool(data.get("include_log",  False))
+        reset_teams  = bool(data.get("reset_teams",  True))
+        delete_teams = bool(data.get("delete_teams", False))
+        now = datetime.utcnow()
 
+        # 1. CaseDocs zurücksetzen
         for doc in CaseDoc.query.all():
-            doc.assigned_evt  = None
-            doc.alarm_time    = None
-            doc.status3_time  = None
-            doc.status4_time  = None
-            doc.status7_time  = None
-            doc.status8_time  = None
-            doc.rmi_reported  = None
-            doc.sk_reported   = None
-            doc.pzc_reported  = None
-            doc.zielklinik    = None
-            doc.notes         = None
-            doc.completed     = False
-            doc.updated_at    = datetime.utcnow()
+            doc.assigned_evt   = None
+            doc.alarm_time     = None
+            doc.status3_time   = None
+            doc.status4_time   = None
+            doc.status7_time   = None
+            doc.status8_time   = None
+            doc.rmi_reported   = None
+            doc.sk_reported    = None
+            doc.pzc_reported   = None
+            doc.zielklinik     = None
+            doc.notes          = None
+            doc.completed      = False
+            doc.completed_evts = "[]"
+            doc.updated_at     = now
 
+        # 2. Alle Zuweisungen löschen
+        Assignment.query.delete()
+
+        # 3. Missions auf "offen" zurücksetzen
+        for m in Mission.query.all():
+            m.status     = "offen"
+            m.updated_at = now
+
+        # 4. Trupps
+        if delete_teams:
+            Mission.query.delete()
+            Team.query.delete()
+        elif reset_teams:
+            for t in Team.query.all():
+                t.radio_status   = 1
+                t.availability   = "verfügbar"
+                t.test_alarm_at  = None
+                t.test_alarm_text = None
+                t.updated_at     = now
+
+        # 5. Funkprotokoll
         if include_log:
             RadioLogEntry.query.delete()
 

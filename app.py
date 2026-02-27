@@ -531,7 +531,7 @@ def create_app():
         back = request.args.get("back", "")
         back_url = "/evt" if back == "evt" else "/"
         back_label = "Zurueck zur EVT-App" if back == "evt" else "Fertig - zur App"
-        return f"""<!doctype html>
+        return ("""<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpMan-GPT Handy-Setup</title>
@@ -602,7 +602,7 @@ function show(id){
   event.target.classList.add('active');
 }
 </script>
-</body></html>"""
+</body></html>""".replace("{back_url}", back_url).replace("{back_label}", back_label))
 
     # ---------------------------
     # Exercise Config

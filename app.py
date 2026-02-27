@@ -547,20 +547,11 @@ def create_app():
 
     @app.post("/api/exercise/import-missions")
     def import_exercise_missions():
-        """Erstellt Missions aus den Übungsfällen (Koordinaten aus Cache, falls vorhanden)."""
-        geodata: dict = {"cases": {}, "startpunkt": None}
-        if os.path.exists(W3W_CACHE_FILE):
-            try:
-                with open(W3W_CACHE_FILE) as f:
-                    geodata = json.load(f)
-            except Exception:
-                pass
-
+        """Erstellt Missions aus den Übungsfällen (statische Koordinaten)."""
         created = []
         for case_id, cd in EXERCISE_CASES.items():
-            geo = (geodata.get("cases") or {}).get(case_id, {})
-            lat = geo.get("lat") or cd.get("lat")
-            lng = geo.get("lng") or cd.get("lng")
+            lat = cd.get("lat")
+            lng = cd.get("lng")
             title = f"{case_id}: {cd['schlagwort']}"
             # Nicht doppelt anlegen
             existing = Mission.query.filter_by(title=title).first()
@@ -1254,47 +1245,31 @@ if __name__ == "__main__":
     lip = _lan_ip()
     has_cert = _make_cert()
 
-    # ── gunicorn für Production (schnell, stabil, 10+ Geräte) ──
-    _use_gunicorn = True
-    try:
-        import gunicorn  # noqa: F401
-    except ImportError:
-        _use_gunicorn = False
-        print("  gunicorn nicht installiert – Fallback auf Flask Dev-Server")
-        print("  Installiere mit: pip install gunicorn")
-
     proto = "https" if has_cert else "http"
     print()
     print("=" * 60)
     print(f"  OpMan-GPT startet mit {proto.upper()}")
-    if _use_gunicorn:
-        print(f"  Server: gunicorn (Production, 4 Worker)")
-    else:
-        print(f"  Server: Flask Dev-Server (nur zum Testen!)")
-    print(f"  {proto}://{lip}:5000        ← LAN (Handy)")
-    print(f"  {proto}://localhost:5000        ← lokal")
+    print(f"  {proto}://{lip}:5000        <- LAN (Handy)")
+    print(f"  {proto}://localhost:5000        <- lokal")
     if has_cert:
-        print("  Beim ersten Öffnen: Sicherheitswarnung → 'Trotzdem öffnen'")
+        print("  Beim ersten Oeffnen: Sicherheitswarnung -> 'Trotzdem oeffnen'")
     else:
-        print("  ⚠  GPS funktioniert NICHT über HTTP auf iOS/Android!")
+        print("  !  GPS funktioniert NICHT ueber HTTP auf iOS/Android!")
     print("=" * 60)
     print()
 
-    if _use_gunicorn:
-        # gunicorn per subprocess starten (damit __main__ sauber bleibt)
-        _cmd = [
-            _sys.executable, "-m", "gunicorn",
-            "--bind", "0.0.0.0:5000",
-            "--workers", "4",
-            "--threads", "2",
-            "--timeout", "120",
-            "--access-logfile", "-",
-            "app:create_app()",
-        ]
-        if has_cert:
-            _cmd += ["--certfile", _CERT, "--keyfile", _KEY]
-        _subprocess.run(_cmd)
-    else:
-        ssl_ctx = (_CERT, _KEY) if has_cert else None
-        app.run(host="0.0.0.0", port=5000, debug=False,
-                ssl_context=ssl_ctx, threaded=True)
+    ssl_ctx = (_CERT, _KEY) if has_cert else None
+    # Flask mit eigenem ThreadingWSGIServer: jeder Request in eigenem Thread
+    from werkzeug.serving import make_server
+    import ssl as _ssl
+
+    server = make_server("0.0.0.0", 5000, app, threaded=True)
+    if ssl_ctx:
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(ssl_ctx[0], ssl_ctx[1])
+        server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    print(f"  Server laeuft auf {proto}://0.0.0.0:5000 ...")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n  Server gestoppt.")

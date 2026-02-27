@@ -413,6 +413,12 @@ async function loadExerciseLayer() {
 function upsertMissionMarker(m){
   if (m.lat == null || m.lng == null) return;
 
+  // Übungsfälle werden bereits als Exercise-Marker dargestellt → kein doppelter Pin
+  if (exerciseGeodata) {
+    const caseMatch = m.title.match(/^(P\d+):/);
+    if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) return;
+  }
+
   const key = m.id;
   const ll = [m.lat, m.lng];
   const col = missionColor(m);
@@ -726,7 +732,18 @@ function renderMissions(){
     btn.addEventListener("click", () => {
       const id = parseInt(btn.getAttribute("data-mission-pan"), 10);
       const m = missions.find(x => x.id === id);
-      if (m?.lat != null) map.setView([m.lat, m.lng], map.getZoom());
+      if (!m) return;
+
+      // Übungsfall? → zum Exercise-Marker springen
+      const caseMatch = m.title.match(/^(P\d+):/);
+      if (caseMatch && exerciseMarkers.has(caseMatch[1])) {
+        const exMarker = exerciseMarkers.get(caseMatch[1]);
+        map.setView(exMarker.getLatLng(), map.getZoom());
+        exMarker.openPopup();
+        return;
+      }
+
+      if (m.lat != null) map.setView([m.lat, m.lng], map.getZoom());
       if (missionMarkers.has(id)) missionMarkers.get(id).openPopup();
     });
   });

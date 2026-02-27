@@ -39,17 +39,6 @@ Das Funkprotokoll als Datei exportieren für die Nachbesprechung.
 
 ---
 
-### [ENHANCEMENT] Trupp-Bulk-Reset (alle auf S1 / verfügbar)
-**Label:** `enhancement`
-
-Ein einzelner Button der alle Trupps gleichzeitig auf Funkstatus 1 und
-Verfügbarkeit „verfügbar" zurücksetzt — nützlich nach einem Übungsdurchlauf
-oder wenn versehentlich falsche Statusmeldungen gesetzt wurden.
-
-**UI:** Button in der Trupp-Leiste, nur nach Bestätigung ausführen
-
----
-
 ### [ENHANCEMENT] Status-Verlauf / Zeitleiste pro Trupp
 **Label:** `enhancement`
 

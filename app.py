@@ -4,7 +4,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify
 from sqlalchemy import text
 from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig
@@ -33,6 +33,17 @@ ALLOWED_AVAILABILITY = {"verfügbar", "bedingt", "nicht_verfügbar"}
 # Optional (empfohlen): welche Funkstatus gelten als "disponierbar"?
 # Wenn du ALLE "availability=verfügbar" zulassen willst, setze DISPATCHABLE... = None
 DISPATCHABLE_RADIO_STATUSES: set[int] | None = {1, 2}  # frei auf Funk / frei auf Wache
+
+
+def _utcnow():
+    """Timezone-aware UTC now (ersetzt deprecated _utcnow())."""
+    return datetime.now(timezone.utc)
+
+
+def _fmt_dt(dt):
+    """ISO 8601 Format mit Z-Suffix, oder None."""
+    return dt.isoformat() + "Z" if dt else None
+
 
 # ---------------------------
 # what3words API
@@ -158,12 +169,17 @@ def create_app():
                     pass  # Column already exists
         # CaseDoc-Einträge initialisieren (nur beim ersten Start)
         for case_id in EXERCISE_CASES:
-            if CaseDoc.query.get(case_id) is None:
+            if db.session.get(CaseDoc, case_id) is None:
                 db.session.add(CaseDoc(id=case_id))
         # ExerciseConfig Singleton
-        if ExerciseConfig.query.get(1) is None:
+        if db.session.get(ExerciseConfig, 1) is None:
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
+
+    @app.get("/health")
+    def health_check():
+        """Health-Check Endpoint für Monitoring."""
+        return jsonify({"status": "ok", "timestamp": _fmt_dt(_utcnow())})
 
     @app.get("/")
     def index():
@@ -268,7 +284,7 @@ def create_app():
 
     @app.patch("/api/casedocs/<string:case_id>")
     def update_casedoc(case_id: str):
-        doc = CaseDoc.query.get_or_404(case_id)
+        doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
 
         for field in ("assigned_evt", "rmi_reported", "sk_reported",
@@ -294,7 +310,7 @@ def create_app():
                 else:
                     setattr(doc, ts_field, None)
 
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = _utcnow()
         _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
@@ -302,15 +318,15 @@ def create_app():
     @app.post("/api/casedocs/<string:case_id>/stamp")
     def stamp_casedoc(case_id: str):
         """Setzt einen Zeitstempel auf 'jetzt'."""
-        doc = CaseDoc.query.get_or_404(case_id)
+        doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
         field = data.get("field")
         allowed = {"alarm_time", "status3_time", "status4_time",
                    "status7_time", "status8_time"}
         if field not in allowed:
             return jsonify({"error": "unknown field"}), 400
-        setattr(doc, field, datetime.utcnow())
-        doc.updated_at = datetime.utcnow()
+        setattr(doc, field, _utcnow())
+        doc.updated_at = _utcnow()
         _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
@@ -338,9 +354,9 @@ def create_app():
             try:
                 ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).replace(tzinfo=None)
             except (ValueError, AttributeError):
-                ts = datetime.utcnow()
+                ts = _utcnow()
         else:
-            ts = datetime.utcnow()
+            ts = _utcnow()
 
         entry = RadioLogEntry(
             timestamp=ts,
@@ -356,7 +372,7 @@ def create_app():
 
     @app.delete("/api/radiolog/<int:entry_id>")
     def delete_logentry(entry_id: int):
-        entry = RadioLogEntry.query.get_or_404(entry_id)
+        entry = db.get_or_404(RadioLogEntry, entry_id)
         db.session.delete(entry)
         db.session.commit()
         return jsonify({"ok": True})
@@ -377,7 +393,7 @@ def create_app():
         include_log  = bool(data.get("include_log",  False))
         reset_teams  = bool(data.get("reset_teams",  True))
         delete_teams = bool(data.get("delete_teams", False))
-        now = datetime.utcnow()
+        now = _utcnow()
 
         # 1. CaseDocs zurücksetzen
         for doc in CaseDoc.query.all():
@@ -457,12 +473,12 @@ def create_app():
     # ---------------------------
     @app.get("/api/exercise/config")
     def get_exercise_config():
-        cfg = ExerciseConfig.query.get(1)
+        cfg = db.session.get(ExerciseConfig, 1)
         return jsonify({"evt_count": cfg.evt_count if cfg else 6})
 
     @app.post("/api/exercise/config")
     def update_exercise_config():
-        cfg = ExerciseConfig.query.get_or_404(1)
+        cfg = db.get_or_404(ExerciseConfig, 1)
         data = request.get_json(force=True)
         if "evt_count" in data:
             n = int(data["evt_count"])
@@ -496,7 +512,7 @@ def create_app():
                 if existing.lat != lat or existing.lng != lng:
                     existing.lat = lat
                     existing.lng = lng
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = _utcnow()
                 created.append({"id": existing.id, "title": title, "skipped": True})
                 continue
             m = Mission(
@@ -506,7 +522,7 @@ def create_app():
                 status="offen",
                 lat=lat,
                 lng=lng,
-                updated_at=datetime.utcnow(),
+                updated_at=_utcnow(),
             )
             db.session.add(m)
             db.session.flush()
@@ -571,7 +587,7 @@ def create_app():
             color=color,
             lat=data.get("lat"),
             lng=data.get("lng"),
-            updated_at=datetime.utcnow(),
+            updated_at=_utcnow(),
         )
         db.session.add(team)
         db.session.commit()
@@ -579,7 +595,7 @@ def create_app():
 
     @app.patch("/api/teams/<int:team_id>")
     def update_team(team_id: int):
-        team = Team.query.get_or_404(team_id)
+        team = db.get_or_404(Team, team_id)
         data = request.get_json(force=True)
 
         if "name" in data:
@@ -616,7 +632,7 @@ def create_app():
                     remaining = Assignment.query.filter_by(mission_id=mission.id).first()
                     if not remaining and mission.status == "zugewiesen":
                         mission.status = "offen"
-                        mission.updated_at = datetime.utcnow()
+                        mission.updated_at = _utcnow()
                 team.availability = "verfügbar"
 
             # Aktiven CaseDoc suchen → Zeitstempel spiegeln + ggf. abschließen
@@ -636,8 +652,8 @@ def create_app():
                     _case_ref = _doc.id
                     _field = _stamp_map.get(rs)
                     if _field and getattr(_doc, _field) is None:
-                        setattr(_doc, _field, datetime.utcnow())
-                        _doc.updated_at = datetime.utcnow()
+                        setattr(_doc, _field, _utcnow())
+                        _doc.updated_at = _utcnow()
                     # S1 nach S4 oder S8 → diesen EVT als erledigt markieren
                     if rs == 1 and (_doc.status4_time is not None
                                     or _doc.status8_time is not None):
@@ -649,7 +665,7 @@ def create_app():
                             _evts.append(_evt_done)
                         _doc.completed_evts = json.dumps(_evts)
                         # Prüfen ob alle EVTs fertig sind
-                        _cfg = ExerciseConfig.query.get(1)
+                        _cfg = db.session.get(ExerciseConfig, 1)
                         _total = _cfg.evt_count if _cfg else 6
                         _globally_done = len(_evts) >= _total
                         if _globally_done:
@@ -664,13 +680,13 @@ def create_app():
                             _doc.status7_time = None
                             _doc.status8_time = None
                             _doc.completed    = False
-                        _doc.updated_at = datetime.utcnow()
+                        _doc.updated_at = _utcnow()
                         # Mission abschließen + Assignment dieses Teams aufheben
                         for _dm in Mission.query.filter(
                             Mission.title.like(f"{_done_case_id}:%")
                         ).all():
                             _dm.status = "abgeschlossen"
-                            _dm.updated_at = datetime.utcnow()
+                            _dm.updated_at = _utcnow()
                             _del_a = Assignment.query.filter_by(
                                 team_id=team.id, mission_id=_dm.id
                             ).first()
@@ -687,16 +703,16 @@ def create_app():
         if "lng" in data:
             team.lng = data["lng"]
         if ("lat" in data or "lng" in data) and data.get("gps"):
-            team.gps_updated_at = datetime.utcnow()
+            team.gps_updated_at = _utcnow()
 
-        team.updated_at = datetime.utcnow()
+        team.updated_at = _utcnow()
         db.session.commit()
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.post("/api/teams/<int:team_id>/quittieren")
     def quittieren_team(team_id: int):
         """Quittiert einen Sprechwunsch (S0/S5) und setzt das Team auf den Vorgänger-Status zurück."""
-        team = Team.query.get_or_404(team_id)
+        team = db.get_or_404(Team, team_id)
         if team.radio_status not in {0, 5}:
             return jsonify({"error": "Kein aktiver Sprechwunsch"}), 400
 
@@ -726,25 +742,25 @@ def create_app():
                 break
 
         team.radio_status = restore_rs
-        team.updated_at = datetime.utcnow()
+        team.updated_at = _utcnow()
 
         sw_label = RADIO_STATUS_LABELS.get(sw_status, f"S{sw_status}")
         rs_label  = RADIO_STATUS_LABELS.get(restore_rs, f"S{restore_rs}")
         db.session.add(RadioLogEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             sender="FüSt",
             receiver=team.callsign or team.name,
             fms_status=restore_rs,
             case_ref=_case_ref,
             message=f"{sw_label} quittiert – zurück auf FMS {restore_rs} ({rs_label})",
-            created_at=datetime.utcnow(),
+            created_at=_utcnow(),
         ))
         db.session.commit()
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.delete("/api/teams/<int:team_id>")
     def delete_team(team_id: int):
-        team = Team.query.get_or_404(team_id)
+        team = db.get_or_404(Team, team_id)
         db.session.delete(team)
         db.session.commit()
         return jsonify({"ok": True})
@@ -761,7 +777,7 @@ def create_app():
         """
         data = request.get_json(force=True)
         text = (data.get("text") or "Testalarm").strip()[:200]
-        now = datetime.utcnow()
+        now = _utcnow()
 
         if data.get("all"):
             targets = Team.query.all()
@@ -783,10 +799,10 @@ def create_app():
     @app.delete("/api/testalarm/<int:team_id>")
     def clear_testalarm(team_id: int):
         """EVT quittiert den Testalarm."""
-        team = Team.query.get_or_404(team_id)
+        team = db.get_or_404(Team, team_id)
         team.test_alarm_at   = None
         team.test_alarm_text = None
-        team.updated_at      = datetime.utcnow()
+        team.updated_at      = _utcnow()
         db.session.commit()
         return jsonify({"ok": True})
 
@@ -812,7 +828,7 @@ def create_app():
             status=(data.get("status") or "offen"),
             lat=data.get("lat"),
             lng=data.get("lng"),
-            updated_at=datetime.utcnow(),
+            updated_at=_utcnow(),
         )
         db.session.add(mission)
         db.session.commit()
@@ -820,7 +836,7 @@ def create_app():
 
     @app.patch("/api/missions/<int:mission_id>")
     def update_mission(mission_id: int):
-        mission = Mission.query.get_or_404(mission_id)
+        mission = db.get_or_404(Mission, mission_id)
         data = request.get_json(force=True)
 
         if "title" in data:
@@ -836,13 +852,13 @@ def create_app():
         if "lng" in data:
             mission.lng = data["lng"]
 
-        mission.updated_at = datetime.utcnow()
+        mission.updated_at = _utcnow()
         db.session.commit()
         return jsonify(serialize_mission(mission, include_teams=True))
 
     @app.delete("/api/missions/<int:mission_id>")
     def delete_mission(mission_id: int):
-        mission = Mission.query.get_or_404(mission_id)
+        mission = db.get_or_404(Mission, mission_id)
         db.session.delete(mission)
         db.session.commit()
         return jsonify({"ok": True})
@@ -864,8 +880,8 @@ def create_app():
         if not team_id or not mission_id:
             return jsonify({"error": "team_id and mission_id required"}), 400
 
-        team = Team.query.get_or_404(int(team_id))
-        mission = Mission.query.get_or_404(int(mission_id))
+        team = db.get_or_404(Team, int(team_id))
+        mission = db.get_or_404(Mission, int(mission_id))
 
         # Nur verfügbare Teams zuweisen
         if team.availability != "verfügbar":
@@ -885,29 +901,29 @@ def create_app():
         # Mission: offen -> zugewiesen
         if mission.status == "offen":
             mission.status = "zugewiesen"
-            mission.updated_at = datetime.utcnow()
+            mission.updated_at = _utcnow()
 
         # Team: nach Zuweisung optional Availability umstellen
         # (damit es nicht weiter als verfügbar angeboten wird)
         team.availability = "bedingt"
-        team.updated_at = datetime.utcnow()
+        team.updated_at = _utcnow()
 
         # CaseDoc alarmieren: Mission-Titel hat Format "P1: Schlagwort"
         _parts = mission.title.split(":", 1)
         _mission_case_id = _parts[0].strip() if len(_parts) >= 2 else None
         if _mission_case_id:
-            _cdoc = CaseDoc.query.get(_mission_case_id)
+            _cdoc = db.session.get(CaseDoc, _mission_case_id)
             if _cdoc and not _cdoc.alarm_time and not _cdoc.completed:
                 _cdoc.assigned_evt = team.name
-                _cdoc.alarm_time   = datetime.utcnow()
-                _cdoc.updated_at   = datetime.utcnow()
+                _cdoc.alarm_time   = _utcnow()
+                _cdoc.updated_at   = _utcnow()
 
         db.session.commit()
         return jsonify(serialize_assignment(a)), 201
 
     @app.delete("/api/assignments/<int:assignment_id>")
     def delete_assignment(assignment_id: int):
-        a = Assignment.query.get_or_404(assignment_id)
+        a = db.get_or_404(Assignment, assignment_id)
 
         team = a.team  # Team merken bevor wir löschen
         db.session.delete(a)
@@ -919,7 +935,7 @@ def create_app():
         if not still_assigned:
             # Team wieder verfügbar machen
             team.availability = "verfügbar"
-            team.updated_at = datetime.utcnow()
+            team.updated_at = _utcnow()
             db.session.commit()
 
         return jsonify({"ok": True})
@@ -935,13 +951,13 @@ def _auto_log(team: "Team", rs: int, case_ref: str | None = None) -> None:
     label = RADIO_STATUS_LABELS.get(rs, f"S{rs}")
     name = team.callsign or team.name
     entry = RadioLogEntry(
-        timestamp=datetime.utcnow(),
+        timestamp=_utcnow(),
         sender=name,
         receiver="FüSt",
         fms_status=rs,
         case_ref=case_ref,
         message=f"FMS {rs} – {label}",
-        created_at=datetime.utcnow(),
+        created_at=_utcnow(),
     )
     db.session.add(entry)
 
@@ -975,7 +991,7 @@ def _sync_team_from_doc(doc: "CaseDoc") -> None:
         return  # Schon korrekt, kein Eintrag nötig
 
     team.radio_status = rs
-    team.updated_at = datetime.utcnow()
+    team.updated_at = _utcnow()
     _auto_log(team, rs, case_ref=doc.id)
 
 
@@ -983,16 +999,14 @@ def _sync_team_from_doc(doc: "CaseDoc") -> None:
 # Serialization
 # ---------------------------
 def serialize_casedoc(d: CaseDoc):
-    def fmt(dt):
-        return (dt.isoformat() + "Z") if dt else None
     return {
         "id":            d.id,
         "assigned_evt":  d.assigned_evt,
-        "alarm_time":    fmt(d.alarm_time),
-        "status3_time":  fmt(d.status3_time),
-        "status4_time":  fmt(d.status4_time),
-        "status7_time":  fmt(d.status7_time),
-        "status8_time":  fmt(d.status8_time),
+        "alarm_time":    _fmt_dt(d.alarm_time),
+        "status3_time":  _fmt_dt(d.status3_time),
+        "status4_time":  _fmt_dt(d.status4_time),
+        "status7_time":  _fmt_dt(d.status7_time),
+        "status8_time":  _fmt_dt(d.status8_time),
         "rmi_reported":  d.rmi_reported,
         "sk_reported":   d.sk_reported,
         "pzc_reported":  d.pzc_reported,
@@ -1000,20 +1014,20 @@ def serialize_casedoc(d: CaseDoc):
         "notes":         d.notes,
         "completed":     d.completed,
         "completed_evts": json.loads(getattr(d, "completed_evts", None) or "[]"),
-        "updated_at":    fmt(d.updated_at),
+        "updated_at":    _fmt_dt(d.updated_at),
     }
 
 
 def serialize_logentry(e: RadioLogEntry):
     return {
         "id":         e.id,
-        "timestamp":  (e.timestamp.isoformat() + "Z"),
+        "timestamp":  _fmt_dt(e.timestamp),
         "sender":     e.sender,
         "receiver":   e.receiver,
         "fms_status": e.fms_status,
         "case_ref":   e.case_ref,
         "message":    e.message,
-        "created_at": (e.created_at.isoformat() + "Z"),
+        "created_at": _fmt_dt(e.created_at),
     }
 
 
@@ -1029,10 +1043,10 @@ def serialize_team(t: Team, include_missions: bool = False, pending_alarm: bool 
         "color": t.color,
         "lat": t.lat,
         "lng": t.lng,
-        "gps_updated_at":  t.gps_updated_at.isoformat() + "Z" if t.gps_updated_at else None,
-        "test_alarm_at":   t.test_alarm_at.isoformat() + "Z" if t.test_alarm_at else None,
+        "gps_updated_at":  _fmt_dt(t.gps_updated_at),
+        "test_alarm_at":   _fmt_dt(t.test_alarm_at),
         "test_alarm_text": t.test_alarm_text,
-        "updated_at": t.updated_at.isoformat() + "Z",
+        "updated_at": _fmt_dt(t.updated_at),
         "pending_alarm": pending_alarm,
     }
 
@@ -1058,7 +1072,7 @@ def serialize_mission(m: Mission, include_teams: bool = False):
         "status": m.status,
         "lat": m.lat,
         "lng": m.lng,
-        "updated_at": m.updated_at.isoformat() + "Z",
+        "updated_at": _fmt_dt(m.updated_at),
     }
 
     if include_teams:
@@ -1082,7 +1096,7 @@ def serialize_assignment(a: Assignment):
         "id": a.id,
         "team_id": a.team_id,
         "mission_id": a.mission_id,
-        "created_at": a.created_at.isoformat() + "Z",
+        "created_at": _fmt_dt(a.created_at),
         "team": {
             "id": a.team.id,
             "name": a.team.name,
@@ -1151,8 +1165,8 @@ if __name__ == "__main__":
                     .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "OpMan-GPT Local")]))
                     .public_key(key.public_key())
                     .serial_number(x509.random_serial_number())
-                    .not_valid_before(datetime.datetime.utcnow())
-                    .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=825))
+                    .not_valid_before(datetime._utcnow())
+                    .not_valid_after(datetime._utcnow() + datetime.timedelta(days=825))
                     .add_extension(x509.SubjectAlternativeName(san), critical=False)
                     .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                     .sign(key, hashes.SHA256()))

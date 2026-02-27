@@ -1084,9 +1084,46 @@ function wireUI(){
   }
 }
 
-// ---------------- Auto-Refresh (Live-Sync, alle 10 s) ----------------
-// Vollständiger Refresh: Sidebar-Listen + Marker + Übungs-Layer
-setInterval(() => refreshAll(false).catch(() => {}), 10000);
+// ---------------- Connection-Status + Auto-Refresh ----------------
+let _connOk = true;
+let _connFailCount = 0;
+
+function _showConnBanner(ok) {
+  let banner = document.getElementById("connBanner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "connBanner";
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;padding:6px 12px;" +
+      "text-align:center;font-size:.85rem;font-weight:600;transition:transform .3s;transform:translateY(-100%);";
+    document.body.appendChild(banner);
+  }
+  if (!ok) {
+    _connFailCount++;
+    banner.style.background = "#b91c1c";
+    banner.style.color = "#fff";
+    banner.textContent = `⚠ Verbindung zum Server verloren (${_connFailCount}x)`;
+    banner.style.transform = "translateY(0)";
+  } else if (_connOk !== ok && _connFailCount > 0) {
+    banner.style.background = "#15803d";
+    banner.style.color = "#fff";
+    banner.textContent = "✓ Verbindung wiederhergestellt";
+    banner.style.transform = "translateY(0)";
+    _connFailCount = 0;
+    setTimeout(() => { banner.style.transform = "translateY(-100%)"; }, 3000);
+  } else {
+    banner.style.transform = "translateY(-100%)";
+  }
+  _connOk = ok;
+}
+
+setInterval(async () => {
+  try {
+    await refreshAll(false);
+    _showConnBanner(true);
+  } catch (_) {
+    _showConnBanner(false);
+  }
+}, 10000);
 
 // ---------------- LAN-Info (Handy-Zugang) ----------------
 let _lanInfo = null;

@@ -342,6 +342,10 @@
     .gps-dot.active   .gps-circle { background: var(--green); animation: blink 2s ease-in-out infinite; }
     .gps-dot.error    .gps-circle { background: var(--red); }
     .gps-dot.waiting  .gps-circle { background: var(--yellow); animation: blink 1s ease-in-out infinite; }
+    /* GPS Accuracy Farbfeedback */
+    .gps-dot.acc-good  { color: var(--green); }
+    .gps-dot.acc-fair  { color: var(--yellow); }
+    .gps-dot.acc-poor  { color: #ff8800; }
   </style>
 </head>
 <body>
@@ -872,7 +876,9 @@ function _onGpsPosition(pos) {
   const { latitude: lat, longitude: lng, accuracy } = pos.coords;
   const acc = Math.round(accuracy);
   _gpsGotFix = true;
-  _setGpsDot('active', `±${acc}m`);
+  // Farbfeedback: grün ≤10m, gelb ≤50m, orange >50m
+  const accClass = acc <= 10 ? 'acc-good' : acc <= 50 ? 'acc-fair' : 'acc-poor';
+  _setGpsDot('active ' + accClass, `±${acc}m`);
 
   const moved = (_lastGpsLat == null)
     ? 999

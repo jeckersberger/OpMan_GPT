@@ -1259,17 +1259,5 @@ if __name__ == "__main__":
     print()
 
     ssl_ctx = (_CERT, _KEY) if has_cert else None
-    # Flask mit eigenem ThreadingWSGIServer: jeder Request in eigenem Thread
-    from werkzeug.serving import make_server
-    import ssl as _ssl
-
-    server = make_server("0.0.0.0", 5000, app, threaded=True)
-    if ssl_ctx:
-        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
-        ctx.load_cert_chain(ssl_ctx[0], ssl_ctx[1])
-        server.socket = ctx.wrap_socket(server.socket, server_side=True)
-    print(f"  Server laeuft auf {proto}://0.0.0.0:5000 ...")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n  Server gestoppt.")
+    app.run(host="0.0.0.0", port=5000, debug=False,
+            ssl_context=ssl_ctx, threaded=True)

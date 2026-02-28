@@ -1,6 +1,6 @@
 # OpMan GPT – Übungs- und Einsatzleitstand
 
-Webbasiertes Einsatzleit- und Übungssystem für den Sanitätsdienst (BRK).
+Webbasiertes Einsatzleit- und Übungssystem für den Sanitätsdienst.
 Läuft lokal im LAN – kein Cloud-Dienst, keine externen Abhängigkeiten im Betrieb.
 
 ---
@@ -142,3 +142,4 @@ Alle Daten bleiben lokal. Keine externen Dienste außer OpenStreetMap-Kartenkach
 ## Offene Aufgaben
 
 Siehe [TODO.md](TODO.md).
+

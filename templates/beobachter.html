@@ -111,6 +111,13 @@
     }
     .leaflet-interactive.gps-live { animation: gps-pulse 2s ease-in-out infinite; }
 
+    @keyframes case-pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(255,79,79,.6); }
+      70%  { box-shadow: 0 0 0 8px rgba(255,79,79,0);  }
+      100% { box-shadow: 0 0 0 0   rgba(255,79,79,0);  }
+    }
+    .case-pin-active { animation: case-pulse 2s ease-out infinite; }
+
     @media (max-width: 768px) {
       .main { flex-direction: column; }
       .sidebar { width: 100%; max-height: 35vh; border-right: none; border-bottom: 1px solid var(--border); }
@@ -229,54 +236,96 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OSM', maxZoom: 19
 }).addTo(map);
 
-const teamMarkers = new Map();
-const caseMarkers = new Map();
+const teamMarkers = new Map();   // teamId → L.circleMarker
+const caseMarkers = new Map();   // caseId → L.marker
+const teamTracks  = new Map();   // teamId → [[lat,lng], ...]
+const trackLines  = new Map();   // teamId → L.polyline
+
+// ── Lauflinie: Spur eines Teams aktualisieren ──────────────────
+function updateTrack(t) {
+  if (t.lat == null || t.lng == null) return;
+  const pos = [t.lat, t.lng];
+  const hist = teamTracks.get(t.id) || [];
+  const last = hist[hist.length - 1];
+  // Nur hinzufügen wenn Position signifikant geändert (> ~5m)
+  if (last && Math.abs(last[0] - pos[0]) < 0.000045 && Math.abs(last[1] - pos[1]) < 0.000045) return;
+  hist.push(pos);
+  teamTracks.set(t.id, hist);
+
+  const col = t.color || '#4ea1ff';
+  if (trackLines.has(t.id)) {
+    trackLines.get(t.id).setLatLngs(hist);
+    trackLines.get(t.id).setStyle({ color: col });
+  } else {
+    const line = L.polyline(hist, { color: col, weight: 3, opacity: 0.75, dashArray: '7 5' }).addTo(map);
+    line.bringToBack();
+    trackLines.set(t.id, line);
+  }
+}
 
 function upsertTeamMarker(t) {
+  updateTrack(t);
   if (t.lat == null || t.lng == null) {
     if (teamMarkers.has(t.id)) { map.removeLayer(teamMarkers.get(t.id)); teamMarkers.delete(t.id); }
     return;
   }
   const col = STATUS_COLORS[t.radio_status] || '#888';
+  const isGps = t.gps_updated_at && (Date.now() - new Date(t.gps_updated_at).getTime() < 120000);
   if (teamMarkers.has(t.id)) {
     const m = teamMarkers.get(t.id);
     m.setLatLng([t.lat, t.lng]);
     m.setStyle({ color: col, fillColor: col });
-    // Update tooltip
     m.unbindTooltip();
   } else {
-    const isGps = t.gps_updated_at && (Date.now() - new Date(t.gps_updated_at).getTime() < 120000);
     const m = L.circleMarker([t.lat, t.lng], {
-      radius: 7, color: col, fillColor: col, fillOpacity: 0.85, weight: 2,
+      radius: 8, color: col, fillColor: col, fillOpacity: 0.9, weight: 2.5,
       className: isGps ? 'gps-live' : ''
     }).addTo(map);
     teamMarkers.set(t.id, m);
   }
   const label = `${esc(t.name)} · ${FMS_LABELS[t.radio_status] || 'S?'}`;
-  const m = teamMarkers.get(t.id);
-  m.bindTooltip(`<span style="background:${col};color:#fff;padding:2px 6px;border-radius:4px;font-size:.7rem;font-weight:700;white-space:nowrap;">${label}</span>`, {
-    permanent: true, direction: 'top', offset: [0, -10], className: 'team-tt'
+  teamMarkers.get(t.id).bindTooltip(
+    `<span style="background:${col};color:#fff;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700;white-space:nowrap;">${label}</span>`,
+    { permanent: true, direction: 'top', offset: [0, -11], className: 'team-tt' }
+  );
+}
+
+function makeCaseIcon(c) {
+  const done = !!c.completed;
+  const col  = done ? '#3ddc84' : '#ff4f4f';
+  const bdr  = done ? '#1aaa55' : '#cc0000';
+  const cls  = done ? '' : 'case-pin-active';
+  return L.divIcon({
+    className: '',
+    html: `<div class="${cls}" style="
+      background:${col}; border:2px solid ${bdr}; border-radius:5px;
+      padding:2px 6px; font-size:10px; font-weight:900; color:#fff;
+      white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.55);
+      text-shadow:0 1px 2px rgba(0,0,0,.5); min-width:26px; text-align:center;
+    ">${esc(c.id)}</div>`,
+    iconAnchor: [13, 10]
   });
 }
 
 function upsertCaseMarker(c) {
   if (c.lat == null || c.lng == null) return;
-  const done = !!c.completed;
-  const col = done ? '#22cc66' : '#ff4f4f';
+  const popup = `<b>${esc(c.id)}</b>: ${esc(c.schlagwort)}<br>`
+    + `${esc(c.patient || '')}`
+    + (c.assigned_evt ? `<br><span style="color:#f5c842;">→ ${esc(c.assigned_evt)}</span>` : '')
+    + (c.w3w          ? `<br><code style="font-size:.75em;">${esc(c.w3w)}</code>` : '');
+
   if (caseMarkers.has(c.id)) {
     const m = caseMarkers.get(c.id);
     m.setLatLng([c.lat, c.lng]);
+    m.setIcon(makeCaseIcon(c));   // Farbe updaten wenn Status wechselt
+    m.bindPopup(popup);
   } else {
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="background:${col};width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 6px ${col};"></div>`,
-      iconSize: [16, 16], iconAnchor: [8, 8]
-    });
-    const m = L.marker([c.lat, c.lng], { icon }).addTo(map);
+    const m = L.marker([c.lat, c.lng], { icon: makeCaseIcon(c), zIndexOffset: 500 }).addTo(map);
+    m.bindPopup(popup);
+    // Permanentes Tooltip mit Schlagwort
+    m.bindTooltip(`<b>${esc(c.id)}</b> ${esc(c.schlagwort)}`, { direction: 'top', offset: [0, -8] });
     caseMarkers.set(c.id, m);
   }
-  const popup = `<b>${esc(c.id)}</b>: ${esc(c.schlagwort)}<br>${esc(c.patient || '')}${c.assigned_evt ? '<br>→ '+esc(c.assigned_evt) : ''}`;
-  caseMarkers.get(c.id).bindPopup(popup);
 }
 
 // ── Sidebar rendering ──
@@ -329,7 +378,13 @@ async function poll() {
     renderTeams(data.teams);
     const seenTeams = new Set();
     for (const t of data.teams) { upsertTeamMarker(t); seenTeams.add(t.id); }
-    for (const [id] of teamMarkers) { if (!seenTeams.has(id)) { map.removeLayer(teamMarkers.get(id)); teamMarkers.delete(id); } }
+    for (const [id] of teamMarkers) {
+      if (!seenTeams.has(id)) {
+        map.removeLayer(teamMarkers.get(id)); teamMarkers.delete(id);
+        if (trackLines.has(id)) { map.removeLayer(trackLines.get(id)); trackLines.delete(id); }
+        teamTracks.delete(id);
+      }
+    }
 
     // Cases (nur alarmierte)
     renderCases(data.cases);

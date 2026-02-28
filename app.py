@@ -156,7 +156,7 @@ def create_app():
             "patient": "Jürgen Krämer", "alter": 72, "geschlecht": "m",
             "w3w": "///familienname.haltung.aufdeckung", "w3w_alarm": None,
             "lat": 49.373262, "lng": 11.201692,
-            "rmi_soll": "421", "sk_soll": "1", "pzc_soll": "421721",
+            "rmi_soll": "421", "sk_soll": "2/3", "pzc_soll": "421722,421723",
             "besonderheit": "Stroke-Klinik. Fokus auf PZC / Klinikwahl. Antikoagulation beachten.",
         },
         "P6": {

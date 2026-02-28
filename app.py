@@ -2,8 +2,22 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import urllib.parse
 import urllib.request
+
+# ── Auto-install optionaler Abhängigkeiten ──
+def _ensure_package(import_name: str, pip_spec: str) -> None:
+    try:
+        __import__(import_name)
+    except ImportError:
+        print(f"[startup] '{import_name}' nicht gefunden – installiere '{pip_spec}' …", flush=True)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pip_spec],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        print(f"[startup] '{pip_spec}' erfolgreich installiert.", flush=True)
+
+_ensure_package("qrcode", "qrcode[svg]")
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify
 from sqlalchemy import text

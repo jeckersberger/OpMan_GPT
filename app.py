@@ -164,7 +164,7 @@ def create_app():
             "patient": "Sabine Lutz", "alter": 56, "geschlecht": "w",
             "w3w": "///obenrum.kranz.wählen", "w3w_alarm": None,
             "lat": 49.375283, "lng": 11.204709,
-            "rmi_soll": "331", "sk_soll": "2", "pzc_soll": "331562",
+            "rmi_soll": "331", "sk_soll": "2/3", "pzc_soll": "331562,331563",
             "besonderheit": "ASS-Allergie! Fokus auf PZC / Klinikwahl.",
         },
     }

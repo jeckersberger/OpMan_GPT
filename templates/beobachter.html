@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Beobachter – OpMan-GPT</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    :root {
+      --bg:     #0b1220;
+      --panel:  #111b2e;
+      --panel2: #162035;
+      --text:   #e7eefc;
+      --accent: #4ea1ff;
+      --green:  #3ddc84;
+      --yellow: #f5c842;
+      --red:    #ff4f4f;
+      --muted:  #a6b3d1;
+      --border: #223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: .5rem 1rem;
+      background: var(--panel);
+      border-bottom: 2px solid var(--accent);
+      flex-shrink: 0;
+    }
+    .topbar .brand { font-size: 1rem; font-weight: 700; white-space: nowrap; }
+    .topbar .clock { font-family: monospace; font-size: 1rem; color: var(--green); }
+    .topbar .hint { font-size: .75rem; color: var(--muted); }
+    .topbar a { color: var(--accent); text-decoration: none; font-size: .85rem; padding: .3rem .6rem; border: 1px solid var(--accent); border-radius: 6px; }
+    .conn-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); display: inline-block; margin-left: auto; }
+
+    .main { display: flex; flex: 1; min-height: 0; }
+
+    .sidebar {
+      width: 280px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      flex-shrink: 0;
+      padding: .75rem;
+    }
+    .sidebar h2 { font-size: .9rem; margin-bottom: .75rem; color: var(--accent); }
+
+    .team-card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .6rem .75rem;
+      margin-bottom: .5rem;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .team-card:hover { border-color: var(--accent); }
+    .team-card .name { font-weight: 700; font-size: .85rem; }
+    .team-card .status { font-size: .75rem; color: var(--muted); margin-top: .2rem; }
+    .team-card .fms-badge {
+      display: inline-block;
+      padding: .15rem .5rem;
+      border-radius: 4px;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+    .team-card .mission-tag {
+      font-size: .7rem;
+      color: var(--yellow);
+      margin-top: .3rem;
+    }
+
+    .case-card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .6rem .75rem;
+      margin-bottom: .5rem;
+    }
+    .case-card.active { border-color: var(--red); }
+    .case-card.done { border-color: var(--green); opacity: .7; }
+    .case-card .pid { font-weight: 700; color: var(--accent); }
+    .case-card .schlw { font-size: .8rem; color: var(--text); }
+    .case-card .evt-name { font-size: .75rem; color: var(--yellow); }
+    .case-card .ts { font-size: .7rem; color: var(--muted); margin-top: .2rem; }
+
+    #map {
+      flex: 1;
+      min-width: 0;
+      z-index: 1;
+    }
+
+    /* Team-Label auf Karte */
+    .team-tt { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+    .team-tt::before { display: none !important; }
+
+    @keyframes gps-pulse {
+      0%   { stroke-width: 3; stroke-opacity: 1; r: 7; }
+      60%  { stroke-width: 6; stroke-opacity: 0.3; r: 11; }
+      100% { stroke-width: 3; stroke-opacity: 1; r: 7; }
+    }
+    .leaflet-interactive.gps-live { animation: gps-pulse 2s ease-in-out infinite; }
+
+    @keyframes case-pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(255,79,79,.6); }
+      70%  { box-shadow: 0 0 0 8px rgba(255,79,79,0);  }
+      100% { box-shadow: 0 0 0 0   rgba(255,79,79,0);  }
+    }
+    .case-pin-active { animation: case-pulse 2s ease-out infinite; }
+
+    @media (max-width: 768px) {
+      .main { flex-direction: column; }
+      .sidebar { width: 100%; max-height: 35vh; border-right: none; border-bottom: 1px solid var(--border); }
+      #map { min-height: 50vh; }
+    }
+
+    /* ── QR Beamer Overlay ── */
+    #qrOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1.5rem 1.5rem;
+      overflow-y: auto;
+    }
+    #qrOverlay.active { display: flex; }
+    .qr-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      justify-content: center;
+      width: 100%;
+    }
+    .qr-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .6rem;
+    }
+    .qr-item img {
+      width: 320px;
+      height: 320px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .qr-item .qr-label {
+      color: #fff;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      margin-top: .5rem;
+    }
+    .qr-item .qr-url {
+      color: #888;
+      font-size: .8rem;
+      font-family: monospace;
+      word-break: break-all;
+      text-align: center;
+      max-width: 340px;
+      margin-top: .25rem;
+    }
+    #qrCloseBtn {
+      position: fixed;
+      top: 1rem;
+      right: 1.2rem;
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: .4rem .9rem;
+      font-size: .85rem;
+      cursor: pointer;
+      z-index: 10000;
+    }
+    #qrCloseBtn:hover { background: #333; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">👁 Beobachter</div>
+    <span class="clock" id="clock"></span>
+    <span class="hint">Live-Ansicht (read-only)</span>
+    <button onclick="toggleQr()" style="background:#162035;color:#4ea1ff;border:1px solid #4ea1ff;border-radius:6px;padding:.3rem .7rem;font-size:.85rem;cursor:pointer;">🏷 QR-Setup</button>
+    <a href="/">← Einsatzleiter</a>
+    <span class="conn-dot" id="connDot"></span>
+  </header>
+
+  <!-- QR Beamer Overlay -->
+  <div id="qrOverlay">
+    <button id="qrCloseBtn" onclick="toggleQr()">✕ Schließen</button>
+    <div class="qr-grid" id="qrGrid">
+      <div style="color:#888;">Lade QR-Codes…</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar">
+      <h2>Teams</h2>
+      <div id="teamsList"></div>
+      <h2 style="margin-top:1rem;">Alarmierte Fälle</h2>
+      <div id="casesList"></div>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+// ── Helpers ──
+function esc(s) { return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtTime(iso) { return iso ? new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '–'; }
+
+const STATUS_COLORS = {0:'#ff3333',1:'#22cc66',2:'#0d7a3a',3:'#f5c842',4:'#2299ff',5:'#888',6:'#888',7:'#ff8800',8:'#9b59b6',9:'#888'};
+const FMS_LABELS = {0:'S0 prio. Sprechwunsch',1:'S1 Frei auf Funk',2:'S2 Frei auf Wache',3:'S3 Einsatz übern.',4:'S4 Am Einsatzort',5:'S5 Sprechwunsch',6:'S6 n. einsatzbereit',7:'S7 Patient aufgen.',8:'S8 Am Transportziel',9:'S9 Sonderfunktion'};
+
+// ── Clock ──
+function tick() { document.getElementById('clock').textContent = new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+tick(); setInterval(tick, 1000);
+
+// ── Map ──
+const map = L.map('map', { zoomControl: true }).setView([49.3783, 11.2134], 15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OSM', maxZoom: 19
+}).addTo(map);
+
+const teamMarkers = new Map();   // teamId → L.circleMarker
+const caseMarkers = new Map();   // caseId → L.marker
+const teamTracks  = new Map();   // teamId → [[lat,lng], ...]
+const trackLines  = new Map();   // teamId → L.polyline
+
+// ── Lauflinie: Spur eines Teams aktualisieren ──────────────────
+function updateTrack(t) {
+  if (t.lat == null || t.lng == null) return;
+  const pos = [t.lat, t.lng];
+  const hist = teamTracks.get(t.id) || [];
+  const last = hist[hist.length - 1];
+  // Nur hinzufügen wenn Position signifikant geändert (> ~5m)
+  if (last && Math.abs(last[0] - pos[0]) < 0.000045 && Math.abs(last[1] - pos[1]) < 0.000045) return;
+  hist.push(pos);
+  teamTracks.set(t.id, hist);
+
+  const col = t.color || '#4ea1ff';
+  if (trackLines.has(t.id)) {
+    trackLines.get(t.id).setLatLngs(hist);
+    trackLines.get(t.id).setStyle({ color: col });
+  } else {
+    const line = L.polyline(hist, { color: col, weight: 3, opacity: 0.75, dashArray: '7 5' }).addTo(map);
+    line.bringToBack();
+    trackLines.set(t.id, line);
+  }
+}
+
+function upsertTeamMarker(t) {
+  updateTrack(t);
+  if (t.lat == null || t.lng == null) {
+    if (teamMarkers.has(t.id)) { map.removeLayer(teamMarkers.get(t.id)); teamMarkers.delete(t.id); }
+    return;
+  }
+  const col = STATUS_COLORS[t.radio_status] || '#888';
+  const isGps = t.gps_updated_at && (Date.now() - new Date(t.gps_updated_at).getTime() < 120000);
+  if (teamMarkers.has(t.id)) {
+    const m = teamMarkers.get(t.id);
+    m.setLatLng([t.lat, t.lng]);
+    m.setStyle({ color: col, fillColor: col });
+    m.unbindTooltip();
+  } else {
+    const m = L.circleMarker([t.lat, t.lng], {
+      radius: 8, color: col, fillColor: col, fillOpacity: 0.9, weight: 2.5,
+      className: isGps ? 'gps-live' : ''
+    }).addTo(map);
+    teamMarkers.set(t.id, m);
+  }
+  const label = `${esc(t.name)} · ${FMS_LABELS[t.radio_status] || 'S?'}`;
+  teamMarkers.get(t.id).bindTooltip(
+    `<span style="background:${col};color:#fff;padding:2px 7px;border-radius:4px;font-size:.72rem;font-weight:700;white-space:nowrap;">${label}</span>`,
+    { permanent: true, direction: 'top', offset: [0, -11], className: 'team-tt' }
+  );
+}
+
+function makeCaseIcon(c) {
+  const done = !!c.completed;
+  const col  = done ? '#3ddc84' : '#ff4f4f';
+  const bdr  = done ? '#1aaa55' : '#cc0000';
+  const cls  = done ? '' : 'case-pin-active';
+  return L.divIcon({
+    className: '',
+    html: `<div class="${cls}" style="
+      background:${col}; border:2px solid ${bdr}; border-radius:5px;
+      padding:2px 6px; font-size:10px; font-weight:900; color:#fff;
+      white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.55);
+      text-shadow:0 1px 2px rgba(0,0,0,.5); min-width:26px; text-align:center;
+    ">${esc(c.id)}</div>`,
+    iconAnchor: [13, 10]
+  });
+}
+
+function upsertCaseMarker(c) {
+  if (c.lat == null || c.lng == null) return;
+  const popup = `<b>${esc(c.id)}</b>: ${esc(c.schlagwort)}<br>`
+    + `${esc(c.patient || '')}`
+    + (c.assigned_evt ? `<br><span style="color:#f5c842;">→ ${esc(c.assigned_evt)}</span>` : '')
+    + (c.w3w          ? `<br><code style="font-size:.75em;">${esc(c.w3w)}</code>` : '');
+
+  if (caseMarkers.has(c.id)) {
+    const m = caseMarkers.get(c.id);
+    m.setLatLng([c.lat, c.lng]);
+    m.setIcon(makeCaseIcon(c));   // Farbe updaten wenn Status wechselt
+    m.bindPopup(popup);
+  } else {
+    const m = L.marker([c.lat, c.lng], { icon: makeCaseIcon(c), zIndexOffset: 500 }).addTo(map);
+    m.bindPopup(popup);
+    // Permanentes Tooltip mit Schlagwort
+    m.bindTooltip(`<b>${esc(c.id)}</b> ${esc(c.schlagwort)}`, { direction: 'top', offset: [0, -8] });
+    caseMarkers.set(c.id, m);
+  }
+}
+
+// ── Sidebar rendering ──
+function renderTeams(teams) {
+  const el = document.getElementById('teamsList');
+  if (!teams.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;">Keine Teams angelegt.</div>'; return; }
+  el.innerHTML = teams.map(t => {
+    const col = STATUS_COLORS[t.radio_status] || '#888';
+    const label = FMS_LABELS[t.radio_status] || 'S?';
+    const missions = (t.missions || []).filter(m => m.status !== 'abgeschlossen');
+    return `<div class="team-card" onclick="flyTo(${t.lat},${t.lng})">
+      <div class="name" style="color:${t.color || '#4ea1ff'};">${esc(t.name)}${t.callsign ? ' <span style="color:var(--muted);font-size:.75rem;">('+esc(t.callsign)+')</span>' : ''}</div>
+      <div class="status">
+        <span class="fms-badge" style="background:${col}22;color:${col};border:1px solid ${col};">${esc(label)}</span>
+      </div>
+      ${missions.length ? missions.map(m => `<div class="mission-tag">→ ${esc(m.title)}</div>`).join('') : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderCases(cases) {
+  const el = document.getElementById('casesList');
+  if (!cases.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;">Noch keine Alarmierungen.</div>'; return; }
+  el.innerHTML = cases.map(c => {
+    const done = !!c.completed;
+    return `<div class="case-card ${done ? 'done' : 'active'}" onclick="flyTo(${c.lat},${c.lng})">
+      <div><span class="pid">${esc(c.id)}</span> <span class="schlw">${esc(c.schlagwort)}</span></div>
+      ${c.assigned_evt ? `<div class="evt-name">→ ${esc(c.assigned_evt)}</div>` : ''}
+      <div class="ts">Alarm: ${fmtTime(c.alarm_time)}${c.status3_time ? ' · S3: '+fmtTime(c.status3_time) : ''}${c.status4_time ? ' · S4: '+fmtTime(c.status4_time) : ''}${done ? ' · ✓' : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function flyTo(lat, lng) {
+  if (lat != null && lng != null) map.setView([lat, lng]);
+}
+
+// ── Polling ──
+let _pollFails = 0;
+
+async function poll() {
+  try {
+    const res = await fetch('/api/beobachter');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    _pollFails = 0;
+    document.getElementById('connDot').style.background = 'var(--green)';
+
+    // Teams
+    renderTeams(data.teams);
+    const seenTeams = new Set();
+    for (const t of data.teams) { upsertTeamMarker(t); seenTeams.add(t.id); }
+    for (const [id] of teamMarkers) {
+      if (!seenTeams.has(id)) {
+        map.removeLayer(teamMarkers.get(id)); teamMarkers.delete(id);
+        if (trackLines.has(id)) { map.removeLayer(trackLines.get(id)); trackLines.delete(id); }
+        teamTracks.delete(id);
+      }
+    }
+
+    // Cases (nur alarmierte)
+    renderCases(data.cases);
+    const seenCases = new Set();
+    for (const c of data.cases) { upsertCaseMarker(c); seenCases.add(c.id); }
+    for (const [id] of caseMarkers) { if (!seenCases.has(id)) { map.removeLayer(caseMarkers.get(id)); caseMarkers.delete(id); } }
+
+  } catch (_) {
+    _pollFails++;
+    if (_pollFails >= 5) document.getElementById('connDot').style.background = 'var(--red)';
+  }
+}
+
+// ── Boot ──
+poll();
+setInterval(poll, 5000);
+
+// Auto-fit nach erstem erfolgreichen Poll
+setTimeout(async () => {
+  const pts = [];
+  for (const [, m] of teamMarkers) pts.push(m.getLatLng());
+  for (const [, m] of caseMarkers) pts.push(m.getLatLng());
+  if (pts.length > 0) map.fitBounds(L.latLngBounds(pts).pad(0.15));
+}, 2000);
+
+// ── QR Beamer Overlay ──
+let _qrLoaded = false;
+
+async function loadQrCodes() {
+  const grid = document.getElementById('qrGrid');
+  try {
+    const res = await fetch('/api/qrcodes');
+    const data = await res.json();
+    if (!res.ok) {
+      grid.innerHTML = `<div style="color:#f55;">Serverfehler ${res.status}: ${esc(data.error || '')}</div>`;
+      return;
+    }
+    const q = data.evt_qr;
+    grid.innerHTML = `
+      <div class="qr-item">
+        <img src="data:image/svg+xml;base64,${q.img_b64}" alt="EVT-App"/>
+        <div class="qr-label">📱 EVT-App starten</div>
+        <div class="qr-url">${esc(q.url)}</div>
+      </div>
+    `;
+  } catch (e) {
+    grid.innerHTML = `<div style="color:#f55;">Fehler: ${esc(String(e))}</div>`;
+  }
+}
+
+async function toggleQr() {
+  const overlay = document.getElementById('qrOverlay');
+  const isActive = overlay.classList.toggle('active');
+  if (isActive && !_qrLoaded) {
+    await loadQrCodes();
+    _qrLoaded = true;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('qrOverlay').classList.remove('active');
+});
+  </script>
+</body>
+</html>

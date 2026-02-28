@@ -16,6 +16,7 @@ let assignedTeamIds = new Set(); // Teams, die bereits irgendwo zugewiesen sind
 // Exercise layer (Funkübung)
 let exerciseGeodata = null;       // geodata from /api/exercise/geodata
 let casedocData = [];             // from /api/casedocs
+let casesMeta   = {};             // from /api/cases/meta (aktive Fälle)
 let exerciseMarkers = new Map();  // caseId (string) -> L.Marker
 let connectionLines = [];         // L.Polyline[] team <-> case
 let startpunktMarker = null;
@@ -1056,29 +1057,7 @@ function wireUI(){
     await refreshAll();
   });
 
-  const btnImport = $("btnImportExercise");
-  if (btnImport) {
-    btnImport.addEventListener("click", async () => {
-      btnImport.disabled = true;
-      btnImport.textContent = "Importiere…";
-      try {
-        const result = await api("/api/exercise/import-missions", { method: "POST" });
-        const created = result.created || [];
-        const newOnes = created.filter(c => !c.skipped).length;
-        const skipped = created.filter(c => c.skipped).length;
-        alert(`Import: ${newOnes} neu angelegt, ${skipped} übersprungen (bereits vorhanden).`);
-        await refreshAll(true);
-        if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
-      } catch (e) {
-        // error already shown by api()
-      } finally {
-        btnImport.disabled = false;
-        btnImport.textContent = "📥 Übungsfälle als Einsätze importieren (P1–P6)";
-      }
-    });
-  }
-
-  // global Assign (links+rechts auswählen)
+// global Assign (links+rechts auswählen)
   const btnAssign = $("btnAssign");
   if (btnAssign){
     btnAssign.addEventListener("click", async () => {
@@ -1209,6 +1188,54 @@ function showLanModal() {
   const certLink = document.getElementById("certDownloadLink");
   if (certLink) certLink.href = `${_lanInfo.base_url}/cert`;
   document.getElementById("lanModal").style.display = "flex";
+}
+
+async function showQrSetup() {
+  document.getElementById("lanModal").style.display = "none";
+  const qrModal = document.getElementById("qrSetupModal");
+  const grid = document.getElementById("qrGrid");
+  grid.innerHTML = '<div style="text-align:center;color:#a6b3d1;padding:2rem;">Lade QR-Codes…</div>';
+  qrModal.style.display = "flex";
+  try {
+    const res = await fetch("/api/qrcodes");
+    if (!res.ok) throw new Error("Fehler beim Laden");
+    const data = await res.json();
+    grid.innerHTML = data.codes.map(c => `
+      <div style="text-align:center;background:#0b1220;border:1px solid #223152;border-radius:10px;padding:1rem;">
+        <div style="font-weight:700;font-size:1.1rem;margin-bottom:.5rem;color:#4ea1ff;">${esc(c.name)}</div>
+        <img src="data:image/svg+xml;base64,${c.img_b64}" alt="${esc(c.name)}" style="width:160px;height:160px;border-radius:6px;background:#fff;"/>
+        <div style="font-size:.65rem;color:#a6b3d1;margin-top:.4rem;word-break:break-all;">${esc(c.url)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    grid.innerHTML = `<div style="color:#ff6b6b;text-align:center;padding:1rem;">Fehler: ${esc(e.message)}</div>`;
+  }
+}
+
+function printQrCodes() {
+  const w = window.open('', '_blank');
+  // Alle QR-Karten extrahieren, aber für Druck-Layout vereinfachen
+  const cards = document.querySelectorAll('#qrGrid > div');
+  let html = '';
+  cards.forEach(card => {
+    const name = card.querySelector('div')?.textContent || '';
+    const img = card.querySelector('img');
+    const url = card.querySelectorAll('div')[2]?.textContent || '';
+    html += `<div class="card"><h3>${esc(name)}</h3>${img ? `<img src="${img.src}" style="width:160px;height:160px;"/>` : ''}<div class="url">${esc(url)}</div></div>`;
+  });
+  w.document.write(`<!doctype html><html><head><title>QR-Codes – EVT Setup</title>
+    <style>body{font-family:sans-serif;margin:1rem;text-align:center;color:#000}
+    .grid{display:flex;flex-wrap:wrap;gap:1.5rem;justify-content:center}
+    .card{border:1px solid #ccc;border-radius:8px;padding:1rem;width:200px;page-break-inside:avoid}
+    .card img{width:160px;height:160px} .card h3{margin:.5rem 0 .3rem}
+    .url{font-size:.6rem;color:#666;word-break:break-all}
+    @media print{body{margin:0}}</style></head><body>
+    <h1>EVT Setup – QR-Codes</h1>
+    <p>Scannen = EVT-App mit richtigem Team vorausgewählt</p>
+    <div class="grid">${html}</div>
+    </body></html>`);
+  w.document.close();
+  w.onload = () => { w.print(); };
 }
 
 // ---------------- Übungs-Timer ----------------

@@ -78,15 +78,6 @@ Zeitgesteuerte Anweisungen für Mimen, z.B. „Nach 5 Min: SpO2 sinkt auf 88%, P
 
 ---
 
-### [ENHANCEMENT] Echtzeit-Übersicht für Beobachter/Ausbilder
-**Label:** `enhancement`
-
-Eigene Read-only Seite `/beobachter` mit Live-Karte und Statusübersicht.
-
-**Zweck:** Ausbilder an den Stationen können mitverfolgen ohne EL-Rechte zu brauchen.
-
-**Inhalt:** Live-Karte, Trupp-Status, Zeitstempel, Fall-Zuordnung – alles nur lesend.
-
 ---
 
 ### [ENHANCEMENT] Übungsvorlagen speichern & laden
@@ -98,13 +89,6 @@ Komplette Übungskonfiguration als JSON exportieren und bei der nächsten Übung
 Nächste Übung: Datei laden → fertig. Spart das komplette Neuanlegen.
 
 ---
-
-### [ENHANCEMENT] QR-Code Setup für EVT-Geräte
-**Label:** `enhancement`
-
-Pro EVT einen QR-Code generieren. Handy scannt → EVT-Seite öffnet sich mit richtigem EVT vorausgewählt.
-
-**Vorteil:** Spart Fummelei bei der Einrichtung vor der Übung. QR-Codes können ausgedruckt und an die Geräte/Westen geheftet werden.
 
 ---
 
@@ -160,3 +144,6 @@ Pro EVT einen QR-Code generieren. Handy scannt → EVT-Seite öffnet sich mit ri
 - [x] ABCD-Schema: Button-Selektion bleibt erhalten, korrekte Anzeige bei SK1 (6. Stelle)
 - [x] PZC-Eingabe löst sofortige Auswertung aus (kein Warten auf Debounce)
 - [x] Abgeschlossene Fälle sind nicht mehr alarmierbar (Server + Client)
+- [x] QR-Code Setup: Pro-EVT QR-Codes generieren + drucken, URL-Parameter auto-selects Team
+- [x] Beobachter-Ansicht: Read-only Live-Karte unter `/beobachter`, Einsätze erst nach Alarmierung sichtbar
+- [x] Testalarm: w3w-Startadresse im Overlay zum Testen des w3w-Links

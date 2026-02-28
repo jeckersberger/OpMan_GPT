@@ -457,20 +457,28 @@ def create_app():
             cfg = db.session.get(ExerciseConfig, 1)
             evt_count = cfg.evt_count if cfg else 6
 
-            codes = []
-            for i in range(1, evt_count + 1):
-                evt_name = f"EVT {i}"
-                url = f"{base}/evt?team={urllib.parse.quote(evt_name)}"
-                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+            def _make_qr(url: str, box_size: int = 8) -> str:
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                                   box_size=box_size, border=2)
                 qr.add_data(url)
                 qr.make(fit=True)
                 img = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
                 buf = io.BytesIO()
                 img.save(buf)
-                svg_b64 = base64.b64encode(buf.getvalue()).decode()
-                codes.append({"name": evt_name, "url": url, "img_b64": svg_b64})
+                return base64.b64encode(buf.getvalue()).decode()
 
-            return jsonify({"codes": codes, "base_url": base})
+            # Einzelner QR für die Beamer-Ansicht (allgemeine EVT-URL, kein Team vorgewählt)
+            evt_url = f"{base}/evt"
+            evt_qr = {"name": "EVT-App", "url": evt_url, "img_b64": _make_qr(evt_url, box_size=12)}
+
+            # Pro-EVT QR-Codes für den Drucken-Dialog im EL
+            codes = []
+            for i in range(1, evt_count + 1):
+                evt_name = f"EVT {i}"
+                url = f"{base}/evt?team={urllib.parse.quote(evt_name)}"
+                codes.append({"name": evt_name, "url": url, "img_b64": _make_qr(url)})
+
+            return jsonify({"codes": codes, "evt_qr": evt_qr, "base_url": base})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 

@@ -130,12 +130,6 @@
       overflow-y: auto;
     }
     #qrOverlay.active { display: flex; }
-    #qrOverlay h1 {
-      font-size: 1.6rem;
-      color: #fff;
-      margin-bottom: 1.5rem;
-      letter-spacing: .05em;
-    }
     .qr-grid {
       display: flex;
       flex-wrap: wrap;
@@ -150,25 +144,27 @@
       gap: .6rem;
     }
     .qr-item img {
-      width: 200px;
-      height: 200px;
+      width: 320px;
+      height: 320px;
       background: #fff;
-      border-radius: 8px;
-      padding: 6px;
+      border-radius: 12px;
+      padding: 10px;
     }
     .qr-item .qr-label {
       color: #fff;
-      font-size: 1.2rem;
+      font-size: 2rem;
       font-weight: 700;
       letter-spacing: .04em;
+      margin-top: .5rem;
     }
     .qr-item .qr-url {
       color: #888;
-      font-size: .65rem;
+      font-size: .8rem;
       font-family: monospace;
       word-break: break-all;
       text-align: center;
-      max-width: 210px;
+      max-width: 340px;
+      margin-top: .25rem;
     }
     #qrCloseBtn {
       position: fixed;
@@ -199,7 +195,6 @@
   <!-- QR Beamer Overlay -->
   <div id="qrOverlay">
     <button id="qrCloseBtn" onclick="toggleQr()">✕ Schließen</button>
-    <h1>📱 EVT-App starten</h1>
     <div class="qr-grid" id="qrGrid">
       <div style="color:#888;">Lade QR-Codes…</div>
     </div>
@@ -372,13 +367,14 @@ async function loadQrCodes() {
       grid.innerHTML = `<div style="color:#f55;">Serverfehler ${res.status}: ${esc(data.error || '')}</div>`;
       return;
     }
-    grid.innerHTML = data.codes.map(c => `
+    const q = data.evt_qr;
+    grid.innerHTML = `
       <div class="qr-item">
-        <img src="data:image/svg+xml;base64,${c.img_b64}" alt="${esc(c.name)}"/>
-        <div class="qr-label">${esc(c.name)}</div>
-        <div class="qr-url">${esc(c.url)}</div>
+        <img src="data:image/svg+xml;base64,${q.img_b64}" alt="EVT-App"/>
+        <div class="qr-label">📱 EVT-App starten</div>
+        <div class="qr-url">${esc(q.url)}</div>
       </div>
-    `).join('');
+    `;
   } catch (e) {
     grid.innerHTML = `<div style="color:#f55;">Fehler: ${esc(String(e))}</div>`;
   }

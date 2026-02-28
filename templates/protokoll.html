@@ -806,7 +806,7 @@ function buildCaseCard(pid) {
         <input id="pzc_${pid}" type="text" placeholder="${esc(meta.pzc_soll||'–')}"
           value="${esc(doc.pzc_reported||'')}" oninput="onPzcInput('${pid}')"></div>
     </div>
-    <div id="abcde_wrap_${pid}" style="display:${(doc.pzc_reported||'').endsWith('1')?'block':'none'}">
+    <div id="abcde_wrap_${pid}" style="display:${((doc.pzc_reported||'').length>=6&&(doc.pzc_reported||'')[5]==='1')?'block':'none'}">
       <label class="form-label">ABCD-Schema (bei SK1 Pflicht) – Punkte 1–4</label>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .6rem;align-items:center;">
         ${['A','B','C','D'].map(letter => {
@@ -936,7 +936,11 @@ function debounceSave(pid){ clearTimeout(debTimers[pid]); debTimers[pid]=setTime
 function onPzcInput(pid){
   const val=(document.getElementById('pzc_'+pid)?.value||'').trim();
   const wrap=document.getElementById('abcde_wrap_'+pid);
-  if(wrap) wrap.style.display=val.endsWith('1')?'block':'none';
+  if(wrap) wrap.style.display=(val.length>=6&&val[5]==='1')?'block':'none';
+  // PZC lokal aktualisieren für sofortige Eval-Anzeige
+  const doc=caseDocs[pid]||(caseDocs[pid]={});
+  doc.pzc_reported=val||null;
+  refreshEvalRow(pid);
   debounceSave(pid);
 }
 function flashSaved(pid){ const el=document.getElementById('saved_'+pid); if(!el)return; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); }
@@ -956,7 +960,7 @@ function refreshEvalRow(pid) {
   let html=eb('PZC',doc.pzc_reported,meta.pzc_soll);
   // Bei SK1 (PZC endet auf 1): ABCD-Schema Pflicht
   const pzc=(doc.pzc_reported||'').trim();
-  if(pzc.endsWith('1')){
+  if(pzc.length>=6&&pzc[5]==='1'){
     const obj=_parseAbcd(doc.abcde_schema);
     const soll=meta.abcd_soll||{};
     const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
@@ -1070,7 +1074,7 @@ function renderNachbesprechung() {
     }
     function abcdCell(){
       const pzc=(doc.pzc_reported||'').trim();
-      if(!pzc.endsWith('1')) return `<td class="nbr-na">n/a</td>`;
+      if(!(pzc.length>=6&&pzc[5]==='1')) return `<td class="nbr-na">n/a</td>`;
       const obj=_parseAbcd(doc.abcde_schema);
       const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
       const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
@@ -1119,7 +1123,7 @@ function renderEvtBewertung() {
     }
     // ABCD bewerten (nur wenn SK1 = PZC endet auf 1)
     const pzc=(doc.pzc_reported||'').trim();
-    if(pzc.endsWith('1')&&meta.abcd_soll&&meta.abcd_soll.A){
+    if(pzc.length>=6&&pzc[5]==='1'&&meta.abcd_soll&&meta.abcd_soll.A){
       evtData[evt].total++;
       const obj=_parseAbcd(doc.abcde_schema);
       const ok=['A','B','C','D'].every(l=>obj[l]===meta.abcd_soll[l]);

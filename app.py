@@ -388,44 +388,46 @@ def create_app():
         import base64
         try:
             import qrcode
-        except ImportError:
-            return "qrcode-Paket nicht installiert (pip install qrcode)", 500
-
-        import socket as _socket
-        try:
-            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            lan_ip = s.getsockname()[0]
-            s.close()
-        except Exception:
-            lan_ip = "127.0.0.1"
-        _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "instance", "cert.pem")
-        proto = "https" if os.path.exists(_cert) else "http"
-        if proto == "https":
-            base = f"http://{lan_ip}:5080"
-        else:
-            base = f"{proto}://{lan_ip}:5000"
-
-        cfg = db.session.get(ExerciseConfig, 1)
-        evt_count = cfg.evt_count if cfg else 6
-
-        codes = []
-        for i in range(1, evt_count + 1):
-            evt_name = f"EVT {i}"
-            url = f"{base}/evt?team={urllib.parse.quote(evt_name)}"
-            qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
-            qr.add_data(url)
-            qr.make(fit=True)
-            # SVG-Factory braucht kein PIL/Pillow
             import qrcode.image.svg
-            img = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
-            buf = io.BytesIO()
-            img.save(buf)
-            svg_b64 = base64.b64encode(buf.getvalue()).decode()
-            codes.append({"name": evt_name, "url": url, "img_b64": svg_b64})
+        except ImportError as e:
+            return jsonify({"error": f"qrcode-Paket fehlt: {e} – pip install 'qrcode[svg]'"}), 500
 
-        return jsonify({"codes": codes, "base_url": base})
+        try:
+            import socket as _socket
+            try:
+                s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                lan_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                lan_ip = "127.0.0.1"
+            _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "instance", "cert.pem")
+            proto = "https" if os.path.exists(_cert) else "http"
+            if proto == "https":
+                base = f"http://{lan_ip}:5080"
+            else:
+                base = f"{proto}://{lan_ip}:5000"
+
+            cfg = db.session.get(ExerciseConfig, 1)
+            evt_count = cfg.evt_count if cfg else 6
+
+            codes = []
+            for i in range(1, evt_count + 1):
+                evt_name = f"EVT {i}"
+                url = f"{base}/evt?team={urllib.parse.quote(evt_name)}"
+                qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+                qr.add_data(url)
+                qr.make(fit=True)
+                img = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+                buf = io.BytesIO()
+                img.save(buf)
+                svg_b64 = base64.b64encode(buf.getvalue()).decode()
+                codes.append({"name": evt_name, "url": url, "img_b64": svg_b64})
+
+            return jsonify({"codes": codes, "base_url": base})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     # ---------------------------
     # EVT Mobile Status API

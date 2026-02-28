@@ -367,8 +367,11 @@ async function loadQrCodes() {
   const grid = document.getElementById('qrGrid');
   try {
     const res = await fetch('/api/qrcodes');
-    if (!res.ok) throw new Error();
     const data = await res.json();
+    if (!res.ok) {
+      grid.innerHTML = `<div style="color:#f55;">Serverfehler ${res.status}: ${esc(data.error || '')}</div>`;
+      return;
+    }
     grid.innerHTML = data.codes.map(c => `
       <div class="qr-item">
         <img src="data:image/svg+xml;base64,${c.img_b64}" alt="${esc(c.name)}"/>
@@ -376,16 +379,16 @@ async function loadQrCodes() {
         <div class="qr-url">${esc(c.url)}</div>
       </div>
     `).join('');
-  } catch (_) {
-    grid.innerHTML = '<div style="color:#f55;">Fehler beim Laden der QR-Codes.</div>';
+  } catch (e) {
+    grid.innerHTML = `<div style="color:#f55;">Fehler: ${esc(String(e))}</div>`;
   }
 }
 
-function toggleQr() {
+async function toggleQr() {
   const overlay = document.getElementById('qrOverlay');
   const isActive = overlay.classList.toggle('active');
   if (isActive && !_qrLoaded) {
-    loadQrCodes();
+    await loadQrCodes();
     _qrLoaded = true;
   }
 }

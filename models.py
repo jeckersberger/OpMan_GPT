@@ -108,6 +108,79 @@ class ExerciseConfig(db.Model):
     evt_count = db.Column(db.Integer, nullable=False, default=6)
 
 
+class CaseDefinition(db.Model):
+    """Vollständige Definition eines Übungsfalls (editierbar, JSON-importierbar)."""
+    __tablename__ = "case_definitions"
+
+    id            = db.Column(db.String(10),  primary_key=True)   # z.B. 'P1'
+    schlagwort    = db.Column(db.String(200), nullable=False, default="")
+    szenario      = db.Column(db.String(200), nullable=True)       # Untertitel Karte
+
+    patient       = db.Column(db.String(100), nullable=False, default="")
+    patient_alarm = db.Column(db.String(100), nullable=True)       # falscher Name
+    alter         = db.Column(db.Integer,     nullable=True)
+    geschlecht    = db.Column(db.String(1),   nullable=True)       # m / w / d
+
+    w3w           = db.Column(db.String(120), nullable=True)       # echter Fundort
+    w3w_alarm     = db.Column(db.String(120), nullable=True)       # falsche Alarmadresse
+    lat           = db.Column(db.Float,       nullable=True)
+    lng           = db.Column(db.Float,       nullable=True)
+
+    # Auswertungsfelder
+    rmi_soll      = db.Column(db.String(20),  nullable=True)
+    sk_soll       = db.Column(db.String(20),  nullable=True)
+    pzc_soll      = db.Column(db.String(50),  nullable=True)
+    kein_transport= db.Column(db.Boolean,     nullable=False, default=False)
+
+    # Medizinische Inhalte als JSON-Text
+    vitals_json   = db.Column(db.Text, nullable=True)  # {"RR":"82/54","HF":"132",...}
+    befund_json   = db.Column(db.Text, nullable=True)  # ["Bullet 1","Bullet 2",...]
+    abcde_json    = db.Column(db.Text, nullable=True)  # {"A":"...","B":"...",...}
+    sampler_json  = db.Column(db.Text, nullable=True)  # {"S":"...","A":"...",...}
+
+    besonderheit  = db.Column(db.Text, nullable=True)  # Hinweis für EL / Mime
+    hinweis       = db.Column(db.Text, nullable=True)  # extra Instruktionstext
+
+    sort_order    = db.Column(db.Integer, nullable=False, default=0)
+    updated_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # ── Convenience-Properties ──────────────────────────────────────
+    import json as _json
+
+    @property
+    def vitals(self):
+        try: return self._json.loads(self.vitals_json) if self.vitals_json else {}
+        except Exception: return {}
+
+    @property
+    def befund(self):
+        try: return self._json.loads(self.befund_json) if self.befund_json else []
+        except Exception: return []
+
+    @property
+    def abcde(self):
+        try: return self._json.loads(self.abcde_json) if self.abcde_json else {}
+        except Exception: return {}
+
+    @property
+    def sampler(self):
+        try: return self._json.loads(self.sampler_json) if self.sampler_json else {}
+        except Exception: return {}
+
+    def to_dict(self):
+        return {
+            "id": self.id, "schlagwort": self.schlagwort, "szenario": self.szenario,
+            "patient": self.patient, "patient_alarm": self.patient_alarm,
+            "alter": self.alter, "geschlecht": self.geschlecht,
+            "w3w": self.w3w, "w3w_alarm": self.w3w_alarm, "lat": self.lat, "lng": self.lng,
+            "rmi_soll": self.rmi_soll, "sk_soll": self.sk_soll, "pzc_soll": self.pzc_soll,
+            "kein_transport": self.kein_transport,
+            "vitals": self.vitals, "befund": self.befund,
+            "abcde": self.abcde, "sampler": self.sampler,
+            "besonderheit": self.besonderheit, "hinweis": self.hinweis,
+        }
+
+
 class PushSubscription(db.Model):
     """Web-Push-Abonnement eines EVT-Geräts."""
     __tablename__ = "push_subscriptions"

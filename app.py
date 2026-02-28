@@ -19,9 +19,9 @@ def _ensure_package(import_name: str, pip_spec: str) -> None:
 
 _ensure_package("qrcode", "qrcode[svg]")
 from datetime import datetime, timezone
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription
+from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -247,14 +247,45 @@ def create_app():
                     _conn.commit()
                 except Exception:
                     pass  # Column already exists
-        # CaseDoc-Einträge initialisieren (nur beim ersten Start)
-        for case_id in EXERCISE_CASES:
-            if db.session.get(CaseDoc, case_id) is None:
-                db.session.add(CaseDoc(id=case_id))
+        # CaseDefinition aus EXERCISE_CASES befüllen (nur beim allerersten Start)
+        if CaseDefinition.query.count() == 0:
+            for i, (cid, cd) in enumerate(EXERCISE_CASES.items()):
+                db.session.add(CaseDefinition(
+                    id=cid, schlagwort=cd["schlagwort"],
+                    szenario=cd.get("szenario"),
+                    patient=cd["patient"], patient_alarm=cd.get("patient_alarm"),
+                    alter=cd.get("alter"), geschlecht=cd.get("geschlecht"),
+                    w3w=cd.get("w3w"), w3w_alarm=cd.get("w3w_alarm"),
+                    lat=cd.get("lat"), lng=cd.get("lng"),
+                    rmi_soll=cd.get("rmi_soll"), sk_soll=cd.get("sk_soll"),
+                    pzc_soll=cd.get("pzc_soll"), besonderheit=cd.get("besonderheit"),
+                    sort_order=i,
+                ))
+            db.session.flush()
+
+        # CaseDoc-Einträge aus CaseDefinition initialisieren
+        for cd_row in CaseDefinition.query.all():
+            if db.session.get(CaseDoc, cd_row.id) is None:
+                db.session.add(CaseDoc(id=cd_row.id))
         # ExerciseConfig Singleton
         if db.session.get(ExerciseConfig, 1) is None:
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
+
+    def _cases_dict():
+        """Gibt alle CaseDefinitions als dict zurück (rückwärtskompatibel mit EXERCISE_CASES-Format)."""
+        result = {}
+        for cd in CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all():
+            result[cd.id] = {
+                "schlagwort": cd.schlagwort or "", "szenario": cd.szenario,
+                "patient": cd.patient or "", "patient_alarm": cd.patient_alarm,
+                "alter": cd.alter, "geschlecht": cd.geschlecht,
+                "w3w": cd.w3w, "w3w_alarm": cd.w3w_alarm,
+                "lat": cd.lat, "lng": cd.lng,
+                "rmi_soll": cd.rmi_soll, "sk_soll": cd.sk_soll, "pzc_soll": cd.pzc_soll,
+                "besonderheit": cd.besonderheit, "kein_transport": cd.kein_transport,
+            }
+        return result
 
     @app.get("/health")
     def health_check():
@@ -303,7 +334,7 @@ def create_app():
 
     @app.get("/protokoll")
     def protokoll():
-        return render_template("protokoll.html", cases=EXERCISE_CASES)
+        return render_template("protokoll.html", cases=_cases_dict())
 
     @app.get("/api/server-info")
     def server_info():
@@ -366,7 +397,7 @@ def create_app():
 
     @app.get("/evt")
     def evt_mobile():
-        return render_template("evt.html", cases=EXERCISE_CASES,
+        return render_template("evt.html", cases=_cases_dict(),
                                startpunkt_w3w=STARTPUNKT_W3W)
 
     @app.get("/beobachter")
@@ -383,14 +414,14 @@ def create_app():
         docs = CaseDoc.query.filter(CaseDoc.alarm_time.isnot(None)).order_by(CaseDoc.id).all()
         cases_out = []
         for d in docs:
-            meta = EXERCISE_CASES.get(d.id, {})
+            _cd = db.session.get(CaseDefinition, d.id)
             cases_out.append({
                 **serialize_casedoc(d),
-                "lat": meta.get("lat"),
-                "lng": meta.get("lng"),
-                "schlagwort": meta.get("schlagwort", ""),
-                "patient": meta.get("patient", ""),
-                "w3w": meta.get("w3w", ""),
+                "lat": _cd.lat if _cd else None,
+                "lng": _cd.lng if _cd else None,
+                "schlagwort": (_cd.schlagwort if _cd else "") or "",
+                "patient": (_cd.patient if _cd else "") or "",
+                "w3w": (_cd.w3w if _cd else "") or "",
             })
 
         return jsonify({"teams": teams_out, "cases": cases_out})
@@ -461,7 +492,8 @@ def create_app():
             if active:
                 active_doc = max(active, key=lambda d: d.alarm_time)
 
-        case_meta = EXERCISE_CASES.get(active_doc.id) if active_doc else None
+        _cd_obj = db.session.get(CaseDefinition, active_doc.id) if active_doc else None
+        case_meta = _cd_obj.to_dict() if _cd_obj else None
         # pending_alarm: Alarm ausgelöst, aber S3 noch nicht bestätigt
         _pa = bool(active_doc and active_doc.alarm_time and not active_doc.status3_time)
         return jsonify({
@@ -640,15 +672,14 @@ def create_app():
     # ---------------------------
     @app.get("/api/exercise/geodata")
     def exercise_geodata():
-        """Return exercise case coordinates (built directly from EXERCISE_CASES)."""
+        """Return exercise case coordinates from CaseDefinition DB."""
         result: dict = {"cases": {}, "startpunkt": None}
-        for case_id, cd in EXERCISE_CASES.items():
-            result["cases"][case_id] = {
-                "lat": cd.get("lat"),
-                "lng": cd.get("lng"),
-                "schlagwort": cd["schlagwort"],
-                "patient": cd["patient"],
-                "w3w": cd["w3w"],
+        for cd in CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all():
+            result["cases"][cd.id] = {
+                "lat": cd.lat, "lng": cd.lng,
+                "schlagwort": cd.schlagwort or "",
+                "patient": cd.patient or "",
+                "w3w": cd.w3w or "",
             }
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
         return jsonify(result)
@@ -767,10 +798,10 @@ function show(id){
     def import_exercise_missions():
         """Erstellt Missions aus den Übungsfällen (statische Koordinaten)."""
         created = []
-        for case_id, cd in EXERCISE_CASES.items():
-            lat = cd.get("lat")
-            lng = cd.get("lng")
-            title = f"{case_id}: {cd['schlagwort']}"
+        for cd in CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all():
+            lat = cd.lat
+            lng = cd.lng
+            title = f"{cd.id}: {cd.schlagwort}"
             # Nicht doppelt anlegen
             existing = Mission.query.filter_by(title=title).first()
             if existing:
@@ -783,8 +814,8 @@ function show(id){
                 continue
             m = Mission(
                 title=title,
-                description=cd.get("besonderheit") or None,
-                priority=1 if cd.get("sk_soll") == "1" else 3,
+                description=cd.besonderheit or None,
+                priority=1 if cd.sk_soll == "1" else 3,
                 status="offen",
                 lat=lat,
                 lng=lng,
@@ -795,6 +826,160 @@ function show(id){
             created.append({"id": m.id, "title": title, "skipped": False})
         db.session.commit()
         return jsonify({"created": created})
+
+    # ---------------------------
+    # Case Editor + Patientenkarten
+    # ---------------------------
+    @app.get("/cases")
+    def cases_list():
+        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        return render_template("cases.html", cases=cases)
+
+    @app.get("/cases/new")
+    def case_new():
+        return render_template("cases.html", cases=[], editing=CaseDefinition(), is_new=True)
+
+    @app.post("/cases/new")
+    def case_new_save():
+        data = request.form
+        cid = (data.get("id") or "").strip().upper()
+        if not cid:
+            return "Keine Fall-ID angegeben.", 400
+        if db.session.get(CaseDefinition, cid):
+            return f"Fall '{cid}' existiert bereits.", 400
+        _save_case_from_form(CaseDefinition(id=cid), data)
+        if db.session.get(CaseDoc, cid) is None:
+            db.session.add(CaseDoc(id=cid))
+        db.session.commit()
+        return redirect("/cases")
+
+    @app.get("/cases/<string:case_id>/edit")
+    def case_edit(case_id):
+        cd = db.get_or_404(CaseDefinition, case_id)
+        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        return render_template("cases.html", cases=cases, editing=cd, is_new=False)
+
+    @app.post("/cases/<string:case_id>/edit")
+    def case_edit_save(case_id):
+        cd = db.get_or_404(CaseDefinition, case_id)
+        _save_case_from_form(cd, request.form)
+        db.session.commit()
+        return redirect("/cases")
+
+    @app.post("/cases/<string:case_id>/delete")
+    def case_delete(case_id):
+        cd = db.get_or_404(CaseDefinition, case_id)
+        db.session.delete(cd)
+        db.session.commit()
+        return redirect("/cases")
+
+    def _save_case_from_form(cd: CaseDefinition, data):
+        cd.schlagwort     = data.get("schlagwort", "").strip()
+        cd.szenario       = data.get("szenario", "").strip() or None
+        cd.patient        = data.get("patient", "").strip()
+        cd.patient_alarm  = data.get("patient_alarm", "").strip() or None
+        cd.alter          = int(data["alter"]) if data.get("alter") else None
+        cd.geschlecht     = data.get("geschlecht", "").strip() or None
+        cd.w3w            = data.get("w3w", "").strip() or None
+        cd.w3w_alarm      = data.get("w3w_alarm", "").strip() or None
+        cd.lat            = float(data["lat"]) if data.get("lat") else None
+        cd.lng            = float(data["lng"]) if data.get("lng") else None
+        cd.rmi_soll       = data.get("rmi_soll", "").strip() or None
+        cd.sk_soll        = data.get("sk_soll", "").strip() or None
+        cd.pzc_soll       = data.get("pzc_soll", "").strip() or None
+        cd.kein_transport = bool(data.get("kein_transport"))
+        cd.besonderheit   = data.get("besonderheit", "").strip() or None
+        cd.hinweis        = data.get("hinweis", "").strip() or None
+        cd.sort_order     = int(data["sort_order"]) if data.get("sort_order") else 0
+        cd.updated_at     = _utcnow()
+        # Vitals (7 Einzelfelder → JSON)
+        vitals = {}
+        for key in ("RR", "HF", "AF", "SpO2", "Temp", "GCS", "BZ"):
+            v = data.get(f"vital_{key}", "").strip()
+            if v:
+                vitals[key] = v
+        cd.vitals_json = json.dumps(vitals, ensure_ascii=False) if vitals else None
+        # Befund: eine Zeile = ein Bullet
+        befund = [l.strip() for l in data.get("befund", "").splitlines() if l.strip()]
+        cd.befund_json = json.dumps(befund, ensure_ascii=False) if befund else None
+        # ABCDE
+        abcde = {}
+        for letter in ("A", "B", "C", "D", "E"):
+            v = data.get(f"abcde_{letter}", "").strip()
+            if v:
+                abcde[letter] = v
+        cd.abcde_json = json.dumps(abcde, ensure_ascii=False) if abcde else None
+        # SAMPLER
+        sampler = {}
+        for letter in ("S", "A", "M", "P", "L", "E", "R"):
+            v = data.get(f"sampler_{letter}", "").strip()
+            if v:
+                sampler[letter] = v
+        cd.sampler_json = json.dumps(sampler, ensure_ascii=False) if sampler else None
+        db.session.add(cd)
+
+    @app.get("/api/cases/export")
+    def cases_export():
+        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        payload = {"version": 1, "cases": [c.to_dict() for c in cases]}
+        from flask import Response
+        return Response(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            mimetype="application/json",
+            headers={"Content-Disposition": "attachment; filename=cases_export.json"},
+        )
+
+    @app.post("/api/cases/import")
+    def cases_import():
+        try:
+            raw = request.get_json(force=True) or {}
+            case_list = raw.get("cases", raw) if isinstance(raw, dict) else raw
+            if not isinstance(case_list, list):
+                return jsonify({"error": "Erwartet: {\"cases\": [...]} oder direkt [...]"}), 400
+            updated, created = 0, 0
+            for item in case_list:
+                cid = str(item.get("id", "")).strip().upper()
+                if not cid:
+                    continue
+                cd = db.session.get(CaseDefinition, cid)
+                if cd is None:
+                    cd = CaseDefinition(id=cid)
+                    db.session.add(cd)
+                    created += 1
+                else:
+                    updated += 1
+                for field in ("schlagwort", "szenario", "patient", "patient_alarm",
+                              "alter", "geschlecht", "w3w", "w3w_alarm", "lat", "lng",
+                              "rmi_soll", "sk_soll", "pzc_soll", "besonderheit", "hinweis",
+                              "kein_transport", "sort_order"):
+                    if field in item:
+                        setattr(cd, field, item[field])
+                if "vitals" in item:
+                    cd.vitals_json = json.dumps(item["vitals"], ensure_ascii=False)
+                if "befund" in item:
+                    cd.befund_json = json.dumps(item["befund"], ensure_ascii=False)
+                if "abcde" in item:
+                    cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
+                if "sampler" in item:
+                    cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
+                cd.updated_at = _utcnow()
+                # CaseDoc sicherstellen
+                if db.session.get(CaseDoc, cid) is None:
+                    db.session.add(CaseDoc(id=cid))
+            db.session.commit()
+            return jsonify({"ok": True, "created": created, "updated": updated})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.get("/patientenkarten")
+    def patientenkarten():
+        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        return render_template("patientenkarten.html", cases=cases)
+
+    @app.get("/patientenkarten/<string:case_id>")
+    def patientenkarte_single(case_id):
+        cd = db.get_or_404(CaseDefinition, case_id)
+        return render_template("patientenkarten.html", cases=[cd])
 
     # ---------------------------
     # Teams
@@ -1227,8 +1412,8 @@ function show(id){
                 _cdoc.updated_at   = _utcnow()
 
                 # Web-Push an das zugewiesene EVT senden
-                _meta = EXERCISE_CASES.get(_mission_case_id, {})
-                _push_body = _meta.get("schlagwort", "")
+                _meta_cd = db.session.get(CaseDefinition, _mission_case_id)
+                _push_body = (_meta_cd.schlagwort if _meta_cd else "") or ""
                 _broadcast_push(
                     team.name,
                     f"NEUER EINSATZ – {_mission_case_id}",

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Patientenkarten – Druckansicht</title>
+  <style>
+    /* ── Bildschirm-Wrapper ── */
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #111;
+      margin: 0;
+    }
+    .screen-bar {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .5rem 1rem; background: #111b2e;
+      border-bottom: 2px solid #4ea1ff;
+      color: #e7eefc;
+    }
+    .screen-bar a { color: #4ea1ff; text-decoration: none; font-size: .85rem;
+                    padding: .3rem .6rem; border: 1px solid #4ea1ff; border-radius: 6px; }
+    .screen-bar button { color: #3ddc84; border: 1px solid #3ddc84; border-radius: 6px;
+                         background: transparent; padding: .3rem .6rem; font-size: .85rem; cursor: pointer; }
+    .screen-bar .brand { font-weight: 700; font-size: 1rem; color: #e7eefc; }
+    .pages-wrap { padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem; align-items: center; }
+
+    /* ── Druckseite ── */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      background: #fff;
+      box-shadow: 0 4px 24px rgba(0,0,0,.4);
+      border-radius: 4px;
+      padding: 12mm 14mm;
+      display: flex;
+      flex-direction: column;
+      font-size: 9pt;
+      color: #111;
+    }
+
+    /* Header */
+    .card-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 4mm;
+    }
+    .card-org { font-size: 11pt; font-weight: 700; color: #1a3a6b; }
+    .uebung-badge {
+      background: #cc0000; color: #fff; font-weight: 900; font-size: 14pt;
+      padding: 2mm 5mm; border-radius: 3px; letter-spacing: .05em;
+    }
+    .card-title { font-size: 13pt; font-weight: 700; margin-bottom: 1mm; }
+    .card-subtitle { font-size: 9pt; color: #444; margin-bottom: 4mm; }
+
+    /* Zwei-Spalten: Patient + Vitals */
+    .top-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
+    .info-table { width: 100%; border-collapse: collapse; }
+    .info-table td { padding: 1mm 2mm; vertical-align: top; font-size: 8.5pt; }
+    .info-table td:first-child { color: #555; white-space: nowrap; font-size: 8pt; }
+    .info-table td:last-child { font-weight: 600; }
+    .w3w-blank { font-family: monospace; font-size: 8pt; color: #aaa; letter-spacing: .05em; }
+    .w3w-real  { font-family: monospace; font-size: 8.5pt; font-weight: 700; color: #1a3a6b; }
+    .w3w-alarm-label { font-size: 7pt; color: #cc0000; font-weight: 700; }
+
+    .vitals-box { border: 1.5px solid #1a3a6b; border-radius: 4px; overflow: hidden; }
+    .vitals-box table { width: 100%; border-collapse: collapse; }
+    .vitals-box tr { border-bottom: 1px solid #e0e8f0; }
+    .vitals-box tr:last-child { border-bottom: none; }
+    .vitals-box td { padding: 1mm 2.5mm; font-size: 8.5pt; }
+    .vitals-box td:first-child { color: #555; width: 45%; font-size: 8pt; }
+    .vitals-box td:last-child { font-weight: 700; }
+    .vitals-header { background: #1a3a6b; color: #fff; font-weight: 700; font-size: 8pt;
+                     padding: 1.5mm 2.5mm; }
+
+    /* Sections */
+    .section { margin-bottom: 3mm; }
+    .section-head {
+      background: #e8eef8; color: #1a3a6b; font-weight: 700; font-size: 8pt;
+      padding: 1.5mm 3mm; border-left: 3px solid #1a3a6b; margin-bottom: 1.5mm;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .befund-list { margin: 0; padding: 0 0 0 5mm; }
+    .befund-list li { margin-bottom: .8mm; font-size: 8.5pt; }
+
+    .schema-table { width: 100%; border-collapse: collapse; }
+    .schema-table tr { border-bottom: 1px solid #e8eef8; }
+    .schema-table tr:last-child { border-bottom: none; }
+    .schema-table td { padding: 1.2mm 2mm; font-size: 8pt; vertical-align: top; }
+    .schema-table td.letter-cell {
+      width: 18px; text-align: center; font-weight: 900; color: #fff;
+      background: #1a3a6b; border-radius: 2px; padding: 1mm;
+    }
+    .schema-table td.sampler-letter { background: #2a6b3a; }
+    .schema-table td.label-cell { width: 60px; color: #555; font-size: 7.5pt; white-space: nowrap; }
+    .schema-table td.content-cell { color: #222; }
+
+    .special-box {
+      border: 1.5px solid #cc0000; border-radius: 4px; padding: 2mm 3mm;
+      background: #fff5f5; margin-bottom: 3mm;
+    }
+    .special-box .sp-label { font-size: 7pt; font-weight: 700; color: #cc0000;
+                              text-transform: uppercase; letter-spacing: .05em; margin-bottom: .5mm; }
+    .special-box .sp-text { font-size: 8.5pt; color: #333; }
+
+    .hinweis-box {
+      border: 1.5px solid #e6a000; border-radius: 4px; padding: 2mm 3mm;
+      background: #fffdf0; margin-bottom: 3mm;
+    }
+    .hinweis-box .sp-label { color: #b87000; }
+    .hinweis-box .sp-text { font-size: 8.5pt; }
+
+    .card-footer {
+      margin-top: auto; padding-top: 3mm; border-top: 1px solid #ddd;
+      font-size: 7pt; color: #888; display: flex; justify-content: space-between;
+    }
+
+    /* ── Rückseite ── */
+    .back-page {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6mm; text-align: center;
+    }
+    .back-uebung { font-size: 28pt; font-weight: 900; color: #cc0000; letter-spacing: .1em; }
+    .back-org { font-size: 14pt; font-weight: 700; color: #1a3a6b; margin-bottom: 4mm; }
+    .back-main { font-size: 13pt; font-weight: 700; max-width: 120mm; line-height: 1.5; }
+    .back-thanks { font-size: 10pt; color: #444; }
+    .back-hinweis { font-size: 9pt; color: #555; max-width: 130mm; line-height: 1.6;
+                    border: 1px solid #ccc; border-radius: 4px; padding: 4mm 6mm; background: #f9f9f9; }
+    .back-notruf { font-size: 11pt; font-weight: 700; color: #cc0000; }
+
+    /* ── Print ── */
+    @media print {
+      body { background: #fff; }
+      .screen-bar, .pages-wrap { display: block !important; padding: 0; background: transparent; }
+      .screen-bar { display: none !important; }
+      .pages-wrap { gap: 0; }
+      .page {
+        width: 100%; min-height: 100vh; box-shadow: none; border-radius: 0;
+        page-break-after: always; break-after: page;
+        padding: 12mm 14mm;
+      }
+      @page { size: A4 portrait; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="screen-bar">
+  <div class="brand">🖨 Patientenkarten – Druckansicht</div>
+  <button onclick="window.print()">🖨 Drucken / Als PDF speichern</button>
+  <a href="/cases">← Fallverwaltung</a>
+  <a href="/">← Einsatzleiter</a>
+</div>
+
+<div class="pages-wrap">
+
+{% for cd in cases %}
+{% set v = cd.vitals %}
+{% set gschlecht_text = 'männlich' if cd.geschlecht == 'm' else ('weiblich' if cd.geschlecht == 'w' else (cd.geschlecht or '–')) %}
+
+{# ── VORDERSEITE ── #}
+<div class="page">
+
+  <div class="card-header">
+    <div>
+      <div class="card-org">BRK Funkübung Feucht</div>
+    </div>
+    <div class="uebung-badge">ÜBUNG</div>
+  </div>
+
+  <div class="card-title">Patientenkarte {{ cd.id }}</div>
+  {% if cd.szenario %}
+  <div class="card-subtitle">Szenario: {{ cd.szenario }}</div>
+  {% elif cd.schlagwort %}
+  <div class="card-subtitle">Szenario: {{ cd.schlagwort }}</div>
+  {% endif %}
+
+  {# Besonderheit / Adressfalle / falscher Name #}
+  {% if cd.patient_alarm %}
+  <div class="special-box">
+    <div class="sp-label">⚠ Namensabweichung</div>
+    <div class="sp-text">Name in Alarmierung: <strong>{{ cd.patient_alarm }}</strong> – echter Name: {{ cd.patient }}</div>
+  </div>
+  {% endif %}
+  {% if cd.w3w_alarm %}
+  <div class="special-box">
+    <div class="sp-label">⚠ Adressfalle</div>
+    <div class="sp-text">Alarmadresse: <span style="font-family:monospace;font-weight:700;">{{ cd.w3w_alarm }}</span> ist falsch. Korrekte Adresse: <span style="font-family:monospace;font-weight:700;">{{ cd.w3w }}</span></div>
+  </div>
+  {% endif %}
+  {% if cd.kein_transport %}
+  <div class="special-box">
+    <div class="sp-label">ℹ Kein Transport</div>
+    <div class="sp-text">Patient lehnt Transport ab / kein Transport indiziert. Korrekte Versorgung und Dokumentation trotzdem erforderlich.</div>
+  </div>
+  {% endif %}
+
+  {# Zwei-Spalten: Patient-Info + Vitals #}
+  <div class="top-cols">
+    <div>
+      <table class="info-table">
+        <tr><td>Name</td><td>{{ cd.patient or '–' }}</td></tr>
+        <tr><td>Alter</td><td>{% if cd.alter %}{{ cd.alter }} Jahre{% else %}–{% endif %}</td></tr>
+        <tr><td>Geschlecht</td><td>{{ gschlecht_text }}</td></tr>
+        <tr>
+          <td>Fundort<br>(what3words)</td>
+          <td>
+            <div class="w3w-blank">///__________.__________.__________ </div>
+            {% if cd.w3w %}
+            <div class="w3w-real">{{ cd.w3w }}</div>
+            {% endif %}
+            {% if cd.w3w_alarm %}
+            <div class="w3w-alarm-label">↑ Alarmadresse falsch!</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% if cd.pzc_soll and cd.pzc_soll != '—' %}
+        <tr><td>PZC (Soll)</td><td style="font-family:monospace;">{{ cd.pzc_soll }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+    <div>
+      {% if v %}
+      <div class="vitals-box">
+        <div class="vitals-header">Vitalparameter</div>
+        <table>
+          {% if v.RR   %}<tr><td>Blutdruck (RR)</td><td>{{ v.RR }} mmHg</td></tr>{% endif %}
+          {% if v.HF   %}<tr><td>Herzfrequenz (HF)</td><td>{{ v.HF }} /min</td></tr>{% endif %}
+          {% if v.AF   %}<tr><td>Atemfrequenz (AF)</td><td>{{ v.AF }} /min</td></tr>{% endif %}
+          {% if v.SpO2 %}<tr><td>Sauerstoffsättigung</td><td>{{ v.SpO2 }}</td></tr>{% endif %}
+          {% if v.Temp %}<tr><td>Temperatur</td><td>{{ v.Temp }} °C</td></tr>{% endif %}
+          {% if v.GCS  %}<tr><td>GCS</td><td>{{ v.GCS }}</td></tr>{% endif %}
+          {% if v.BZ   %}<tr><td>Blutzucker (BZ)</td><td>{{ v.BZ }} mg/dl</td></tr>{% endif %}
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Befund #}
+  {% if cd.befund %}
+  <div class="section">
+    <div class="section-head">Beschwerden / Befund</div>
+    <ul class="befund-list">
+      {% for b in cd.befund %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ABCDE #}
+  {% set ab = cd.abcde %}
+  {% if ab %}
+  <div class="section">
+    <div class="section-head">ABCDE-Schema (Befundorientiert)</div>
+    <table class="schema-table">
+      {% for letter in ['A','B','C','D','E'] %}{% if ab.get(letter) %}
+      <tr>
+        <td class="letter-cell">{{ letter }}</td>
+        <td class="content-cell">{{ ab[letter] }}</td>
+      </tr>
+      {% endif %}{% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {# SAMPLER #}
+  {% set sa = cd.sampler %}
+  {% if sa %}
+  <div class="section">
+    <div class="section-head">SAMPLER-Anamnese</div>
+    <table class="schema-table">
+      {% set sampler_labels = {'S':'Symptoms','A':'Allergies','M':'Medications','P':'Past history','L':'Last intake','E':'Events','R':'Risk factors'} %}
+      {% for letter in ['S','A','M','P','L','E','R'] %}{% if sa.get(letter) %}
+      <tr>
+        <td class="letter-cell sampler-letter">{{ letter }}</td>
+        <td class="label-cell">{{ sampler_labels[letter] }}:</td>
+        <td class="content-cell">{{ sa[letter] }}</td>
+      </tr>
+      {% endif %}{% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {# Besonderheit #}
+  {% if cd.besonderheit %}
+  <div class="hinweis-box">
+    <div class="sp-label">ℹ Hinweis für Übungsleitung</div>
+    <div class="sp-text">{{ cd.besonderheit }}</div>
+  </div>
+  {% endif %}
+
+  <div class="card-footer">
+    <span>Interne Übungsunterlage – Patientenkarte {{ cd.id }}</span>
+    <span>BRK Funkübung Feucht – Patientensteckkarten</span>
+  </div>
+</div>
+
+{# ── RÜCKSEITE ── #}
+<div class="page back-page">
+  <div class="back-uebung">ÜBUNG</div>
+  <div class="back-org">BRK Funkübung Feucht</div>
+  <div class="back-main">DIES IST EINE ÜBUNG DES BRK</div>
+  <div class="back-main">Bitte lassen Sie diesen Zettel an der Position liegen.</div>
+  <div class="back-thanks">Vielen Dank für Ihre Unterstützung.</div>
+  <div class="back-hinweis">
+    <strong>Hinweis:</strong> Keine Gefahr. Es handelt sich nicht um einen echten Notfall.<br>
+    <span class="back-notruf">In einem echten Notfall: <strong>112</strong> rufen</span>
+  </div>
+  <div style="font-size:8pt;color:#aaa;margin-top:4mm;">Patientenkarte {{ cd.id }} – Rückseite</div>
+</div>
+
+{% else %}
+<div class="page" style="align-items:center;justify-content:center;color:#888;">
+  Keine Fälle vorhanden. Bitte in der <a href="/cases">Fallverwaltung</a> anlegen.
+</div>
+{% endfor %}
+
+</div>
+</body>
+</html>

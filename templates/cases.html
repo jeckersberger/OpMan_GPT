@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Fallverwaltung – OpMan-GPT</title>
+  <style>
+    :root {
+      --bg:#0b1220; --panel:#111b2e; --panel2:#162035; --text:#e7eefc;
+      --accent:#4ea1ff; --green:#3ddc84; --yellow:#f5c842; --red:#ff4f4f;
+      --muted:#a6b3d1; --border:#223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .topbar { display:flex; align-items:center; gap:.75rem; padding:.5rem 1rem;
+              background:var(--panel); border-bottom:2px solid var(--accent); flex-shrink:0; }
+    .topbar .brand { font-size:1rem; font-weight:700; }
+    .topbar a, .topbar button { color:var(--accent); text-decoration:none; font-size:.85rem;
+              padding:.3rem .6rem; border:1px solid var(--accent); border-radius:6px; background:transparent;
+              cursor:pointer; }
+    .topbar button.warn { color:var(--yellow); border-color:var(--yellow); }
+    .topbar button.grn  { color:var(--green);  border-color:var(--green);  }
+    .spacer { flex:1; }
+
+    .layout { display:flex; gap:0; min-height: calc(100vh - 48px); }
+
+    /* ── Sidebar ── */
+    .sidebar { width:260px; background:var(--panel); border-right:1px solid var(--border);
+               flex-shrink:0; display:flex; flex-direction:column; }
+    .sidebar-header { padding:.75rem; border-bottom:1px solid var(--border); display:flex;
+                      justify-content:space-between; align-items:center; }
+    .sidebar-header h2 { font-size:.9rem; color:var(--accent); }
+    .case-item { display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem;
+                 border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s; }
+    .case-item:hover { background:var(--panel2); }
+    .case-item.active { background:var(--panel2); border-left:3px solid var(--accent); }
+    .case-item .cid { font-weight:700; color:var(--accent); font-size:.85rem; min-width:28px; }
+    .case-item .ctitle { font-size:.78rem; color:var(--muted); flex:1; overflow:hidden;
+                         text-overflow:ellipsis; white-space:nowrap; }
+    .case-item .cbadge { font-size:.65rem; padding:.1rem .35rem; border-radius:3px; flex-shrink:0; }
+    .cbadge.full  { background:#1a3a1a; color:var(--green); border:1px solid var(--green); }
+    .cbadge.empty { background:#2a1a00; color:var(--yellow); border:1px solid var(--yellow); }
+
+    /* ── Editor ── */
+    .editor { flex:1; padding:1.5rem 2rem; overflow-y:auto; }
+    .editor h2 { font-size:1.1rem; margin-bottom:1.25rem; color:var(--accent); }
+
+    .section { margin-bottom:1.5rem; }
+    .section-title { font-size:.75rem; font-weight:700; text-transform:uppercase;
+                     color:var(--muted); letter-spacing:.06em; margin-bottom:.6rem;
+                     padding-bottom:.3rem; border-bottom:1px solid var(--border); }
+
+    .field-grid { display:grid; gap:.6rem; }
+    .field-grid.cols2 { grid-template-columns: 1fr 1fr; }
+    .field-grid.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+    .field-grid.vitals { grid-template-columns: repeat(4, 1fr); }
+
+    label { display:flex; flex-direction:column; gap:.25rem; font-size:.75rem; color:var(--muted); }
+    input[type=text], input[type=number], textarea, select {
+      background:var(--panel2); border:1px solid var(--border); border-radius:5px;
+      color:var(--text); padding:.35rem .5rem; font-size:.82rem; font-family:inherit; width:100%;
+    }
+    input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); }
+    textarea { resize:vertical; min-height:60px; }
+    textarea.tall { min-height:80px; }
+    textarea.mono { font-family:monospace; font-size:.78rem; }
+
+    .checkbox-label { flex-direction:row; align-items:center; gap:.5rem; cursor:pointer; }
+    .checkbox-label input { width:auto; }
+
+    .abcde-grid, .sampler-grid { display:grid; gap:.5rem; }
+    .abcde-row, .sampler-row { display:grid; grid-template-columns:28px 1fr; gap:.5rem; align-items:start; }
+    .letter { width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+              background:var(--accent); color:#fff; font-weight:700; border-radius:4px; font-size:.9rem;
+              flex-shrink:0; margin-top:2px; }
+
+    .actions { display:flex; gap:.75rem; margin-top:1.5rem; padding-top:1rem;
+               border-top:1px solid var(--border); }
+    .btn { padding:.5rem 1.2rem; border-radius:6px; border:none; cursor:pointer;
+           font-size:.85rem; font-weight:600; }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-danger  { background:var(--red); color:#fff; }
+    .btn-ghost   { background:transparent; border:1px solid var(--border); color:var(--muted); }
+    .btn:hover { opacity:.85; }
+
+    /* ── JSON Import Modal ── */
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000;
+                align-items:center; justify-content:center; }
+    .modal-bg.active { display:flex; }
+    .modal { background:var(--panel); border:1px solid var(--border); border-radius:10px;
+             padding:1.5rem; width:min(680px,95vw); max-height:85vh; display:flex;
+             flex-direction:column; gap:1rem; }
+    .modal h3 { color:var(--accent); font-size:1rem; }
+    .modal textarea { flex:1; min-height:300px; font-family:monospace; font-size:.75rem; }
+    .modal-actions { display:flex; gap:.75rem; }
+
+    .hint { font-size:.72rem; color:var(--muted); margin-top:.2rem; }
+
+    @media (max-width:700px) {
+      .layout { flex-direction:column; }
+      .sidebar { width:100%; max-height:35vh; overflow-y:auto; }
+      .field-grid.cols2, .field-grid.cols3, .field-grid.vitals { grid-template-columns:1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">📋 Fallverwaltung</div>
+  <a href="/">← Einsatzleiter</a>
+  <a href="/patientenkarten" target="_blank">🖨 Patientenkarten</a>
+  <div class="spacer"></div>
+  <button class="grn" onclick="showImport()">⬆ JSON importieren</button>
+  <a href="/api/cases/export">⬇ JSON exportieren</a>
+</div>
+
+<div class="layout">
+  <!-- Sidebar: Fall-Liste -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h2>Fälle</h2>
+      <a href="/cases/new" style="font-size:.75rem;padding:.2rem .5rem;">+ Neu</a>
+    </div>
+    {% for c in cases %}
+    <div class="case-item {% if editing is defined and editing.id == c.id %}active{% endif %}"
+         onclick="location.href='/cases/{{ c.id }}/edit'">
+      <span class="cid">{{ c.id }}</span>
+      <span class="ctitle">{{ c.schlagwort or '—' }}</span>
+      <span class="cbadge {% if c.vitals_json and c.abcde_json %}full{% else %}empty{% endif %}">
+        {% if c.vitals_json and c.abcde_json %}✓{% else %}leer{% endif %}
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:1rem;color:var(--muted);font-size:.8rem;">Noch keine Fälle. Anlegen oder importieren.</div>
+    {% endfor %}
+  </nav>
+
+  <!-- Editor -->
+  <div class="editor">
+    {% if editing is defined %}
+    {% set cd = editing %}
+    {% set act = '/cases/new' if is_new else '/cases/' + cd.id + '/edit' %}
+    <h2>{{ 'Neuer Fall' if is_new else 'Fall ' + cd.id + ' bearbeiten' }}</h2>
+    <form method="post" action="{{ act }}">
+
+      <!-- Basis -->
+      <div class="section">
+        <div class="section-title">Grunddaten</div>
+        <div class="field-grid cols3">
+          {% if is_new %}
+          <label>Fall-ID (z.B. P1)
+            <input type="text" name="id" value="{{ cd.id or '' }}" required maxlength="10" placeholder="P1">
+          </label>
+          {% else %}
+          <label>Fall-ID
+            <input type="text" value="{{ cd.id }}" disabled>
+          </label>
+          {% endif %}
+          <label>Reihenfolge
+            <input type="number" name="sort_order" value="{{ cd.sort_order or 0 }}" min="0">
+          </label>
+          <label>Geschlecht
+            <select name="geschlecht">
+              <option value="">–</option>
+              <option value="m" {% if cd.geschlecht=='m' %}selected{% endif %}>männlich</option>
+              <option value="w" {% if cd.geschlecht=='w' %}selected{% endif %}>weiblich</option>
+              <option value="d" {% if cd.geschlecht=='d' %}selected{% endif %}>divers</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-grid cols2" style="margin-top:.6rem;">
+          <label>Schlagwort (Alarmierungstext)
+            <input type="text" name="schlagwort" value="{{ cd.schlagwort or '' }}" required>
+          </label>
+          <label>Szenario (Untertitel Patientenkarte)
+            <input type="text" name="szenario" value="{{ cd.szenario or '' }}" placeholder="z.B. VU – Radfahrer vs. PKW (schweres Trauma)">
+          </label>
+        </div>
+      </div>
+
+      <!-- Patient -->
+      <div class="section">
+        <div class="section-title">Patient</div>
+        <div class="field-grid cols3">
+          <label>Name (echt / für Mime)
+            <input type="text" name="patient" value="{{ cd.patient or '' }}">
+          </label>
+          <label>Name in Alarmierung (falls abweichend)
+            <input type="text" name="patient_alarm" value="{{ cd.patient_alarm or '' }}" placeholder="leer = gleich wie oben">
+          </label>
+          <label>Alter
+            <input type="number" name="alter" value="{{ cd.alter or '' }}" min="0" max="120">
+          </label>
+        </div>
+      </div>
+
+      <!-- Standort -->
+      <div class="section">
+        <div class="section-title">Standort</div>
+        <div class="field-grid cols2">
+          <label>what3words (echter Fundort)
+            <input type="text" name="w3w" value="{{ cd.w3w or '' }}" placeholder="///wort.wort.wort">
+          </label>
+          <label>what3words Alarmadresse (falls Adressfalle)
+            <input type="text" name="w3w_alarm" value="{{ cd.w3w_alarm or '' }}" placeholder="leer = keine Falle">
+          </label>
+          <label>Breitengrad (lat)
+            <input type="text" name="lat" value="{{ cd.lat or '' }}" placeholder="49.377493">
+          </label>
+          <label>Längengrad (lng)
+            <input type="text" name="lng" value="{{ cd.lng or '' }}" placeholder="11.206863">
+          </label>
+        </div>
+      </div>
+
+      <!-- Auswertung -->
+      <div class="section">
+        <div class="section-title">Auswertungsfelder</div>
+        <div class="field-grid cols3">
+          <label>RMI-Soll
+            <input type="text" name="rmi_soll" value="{{ cd.rmi_soll or '' }}" placeholder="z.B. 211">
+          </label>
+          <label>SK-Soll
+            <input type="text" name="sk_soll" value="{{ cd.sk_soll or '' }}" placeholder="z.B. 1">
+          </label>
+          <label>PZC-Soll
+            <input type="text" name="pzc_soll" value="{{ cd.pzc_soll or '' }}" placeholder="z.B. 211271">
+          </label>
+        </div>
+        <div style="margin-top:.6rem;">
+          <label class="checkbox-label">
+            <input type="checkbox" name="kein_transport" {% if cd.kein_transport %}checked{% endif %}>
+            Kein Transport nötig (Patient lehnt ab / nicht indiziert)
+          </label>
+        </div>
+      </div>
+
+      <!-- Vitalparameter -->
+      <div class="section">
+        <div class="section-title">Vitalparameter</div>
+        {% set v = cd.vitals %}
+        <div class="field-grid vitals">
+          <label>RR (mmHg)<input type="text" name="vital_RR"   value="{{ v.get('RR','') }}"   placeholder="82/54"></label>
+          <label>HF (/min) <input type="text" name="vital_HF"   value="{{ v.get('HF','') }}"   placeholder="132"></label>
+          <label>AF (/min) <input type="text" name="vital_AF"   value="{{ v.get('AF','') }}"   placeholder="30"></label>
+          <label>SpO2      <input type="text" name="vital_SpO2" value="{{ v.get('SpO2','') }}" placeholder="88% (RA)"></label>
+          <label>Temp (°C) <input type="text" name="vital_Temp" value="{{ v.get('Temp','') }}" placeholder="36,0"></label>
+          <label>GCS       <input type="text" name="vital_GCS"  value="{{ v.get('GCS','') }}"  placeholder="12 (E3 V4 M5)"></label>
+          <label>BZ (mg/dl)<input type="text" name="vital_BZ"   value="{{ v.get('BZ','') }}"   placeholder="118"></label>
+        </div>
+      </div>
+
+      <!-- Befund -->
+      <div class="section">
+        <div class="section-title">Beschwerden / Befund</div>
+        <label>Eine Zeile = ein Bullet-Punkt
+          <textarea name="befund" class="tall">{{ cd.befund | join('\n') }}</textarea>
+        </label>
+      </div>
+
+      <!-- ABCDE -->
+      <div class="section">
+        <div class="section-title">ABCDE-Schema</div>
+        {% set ab = cd.abcde %}
+        <div class="abcde-grid">
+          {% for letter in ['A','B','C','D','E'] %}
+          <div class="abcde-row">
+            <div class="letter">{{ letter }}</div>
+            <textarea name="abcde_{{ letter }}" class="tall">{{ ab.get(letter, '') }}</textarea>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- SAMPLER -->
+      <div class="section">
+        <div class="section-title">SAMPLER-Anamnese</div>
+        {% set sa = cd.sampler %}
+        <div class="sampler-grid">
+          {% for letter, desc in [('S','Symptoms'),('A','Allergies'),('M','Medications'),('P','Past history'),('L','Last intake'),('E','Events'),('R','Risk factors')] %}
+          <div class="sampler-row">
+            <div class="letter" title="{{ desc }}">{{ letter }}</div>
+            <textarea name="sampler_{{ letter }}">{{ sa.get(letter, '') }}</textarea>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Besonderheiten -->
+      <div class="section">
+        <div class="section-title">Hinweise für Übungsleitung / Mime</div>
+        <div class="field-grid cols2">
+          <label>Besonderheit (erscheint auf Patientenkarte)
+            <textarea name="besonderheit">{{ cd.besonderheit or '' }}</textarea>
+          </label>
+          <label>Interner Hinweis (nur für EL, nicht auf Karte)
+            <textarea name="hinweis">{{ cd.hinweis or '' }}</textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">💾 Speichern</button>
+        {% if not is_new %}
+        <a href="/patientenkarten/{{ cd.id }}" target="_blank" class="btn btn-ghost">🖨 Diese Karte drucken</a>
+        <form method="post" action="/cases/{{ cd.id }}/delete" style="margin:0;" onsubmit="return confirm('Fall {{ cd.id }} wirklich löschen?')">
+          <button type="submit" class="btn btn-danger">🗑 Löschen</button>
+        </form>
+        {% endif %}
+        <a href="/cases" class="btn btn-ghost">Abbrechen</a>
+      </div>
+    </form>
+    {% else %}
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:1rem;color:var(--muted);">
+      <div style="font-size:3rem;">📋</div>
+      <div>Fall in der Liste auswählen oder <a href="/cases/new" style="color:var(--accent);">neuen anlegen</a>.</div>
+      <div style="font-size:.8rem;">Tipp: JSON von einer KI erzeugen lassen → importieren → fertig.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- JSON Import Modal -->
+<div class="modal-bg" id="importModal">
+  <div class="modal">
+    <h3>⬆ JSON importieren</h3>
+    <p class="hint">Füge hier das JSON ein (Format: <code>{"cases":[{...},{...}]}</code> oder direkt <code>[{...}]</code>).<br>
+    Bestehende Fälle mit gleicher ID werden überschrieben, neue werden angelegt.</p>
+    <textarea id="importJson" class="mono" placeholder='{"cases": [{"id": "P1", "schlagwort": "...", ...}]}'></textarea>
+    <div style="font-size:.72rem;color:var(--muted);">
+      Pflichtfelder pro Fall: <code>id</code>, <code>schlagwort</code>, <code>patient</code><br>
+      Optional: <code>vitals</code> {RR,HF,AF,SpO2,Temp,GCS,BZ}, <code>befund</code> [array],
+      <code>abcde</code> {A–E}, <code>sampler</code> {S,A,M,P,L,E,R}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="doImport()">Importieren</button>
+      <button class="btn btn-ghost" onclick="closeImport()">Abbrechen</button>
+    </div>
+    <div id="importResult" style="font-size:.8rem;"></div>
+  </div>
+</div>
+
+<script>
+function showImport() { document.getElementById('importModal').classList.add('active'); }
+function closeImport() { document.getElementById('importModal').classList.remove('active'); }
+
+async function doImport() {
+  const raw = document.getElementById('importJson').value.trim();
+  const result = document.getElementById('importResult');
+  if (!raw) { result.style.color='#f55'; result.textContent='Kein JSON eingegeben.'; return; }
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch(e) { result.style.color='#f55'; result.textContent='JSON-Fehler: ' + e.message; return; }
+  result.style.color='var(--muted)'; result.textContent='Importiere…';
+  try {
+    const res = await fetch('/api/cases/import', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(parsed),
+    });
+    const data = await res.json();
+    if (!res.ok) { result.style.color='#f55'; result.textContent='Fehler: ' + (data.error||res.status); return; }
+    result.style.color='var(--green)';
+    result.textContent = `✓ ${data.created} neue Fälle, ${data.updated} aktualisiert.`;
+    setTimeout(() => location.reload(), 1200);
+  } catch(e) {
+    result.style.color='#f55'; result.textContent='Netzwerkfehler: ' + e;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeImport();
+});
+</script>
+</body>
+</html>

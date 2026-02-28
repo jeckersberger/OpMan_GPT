@@ -55,18 +55,97 @@ Hier geht es um die trupp-basierte Ansicht.
 
 ---
 
-### [ENHANCEMENT] Web Push Notifications für EVT-App
+### [ENHANCEMENT] Offline-Karten (Tile-Cache)
 **Label:** `enhancement`
 
-Aktuell erhält die EVT-App neue Einsätze nur über den 10-Sekunden-Poll und
-das Alarm-Overlay. Web Push würde Benachrichtigungen auch bei minimiertem Browser
-ermöglichen.
+Kartenkacheln vorab herunterladen und lokal cachen, damit die Karte auch ohne Internet funktioniert.
 
 **Technisch:**
-- Service Worker + Push API (Browser-seitig)
-- Push-Subscription in der Datenbank speichern
-- Server sendet Push bei neuem Alarm (`/api/missions` POST + Assignment)
-- Nur für HTTPS-Betrieb (bereits unterstützt)
+- Service Worker fängt Tile-Requests ab und cached sie
+- Oder: MBTiles-Datei + lokaler Tile-Server (z.B. `mbtileserver`)
+- Fallback auf gecachte Tiles wenn offline
+
+---
+
+### [ENHANCEMENT] Einsatz-Replay / Zeitraffer
+**Label:** `enhancement`
+
+Nach der Übung: Wiedergabe des Einsatzverlaufs als Animation auf der Karte.
+
+**Funktionen:**
+- Zeitstrahl mit Play/Pause/Geschwindigkeit
+- Trupp-Bewegungen (GPS-Trail) auf der Karte animieren
+- Statuswechsel als Farbänderung der Marker
+- Zeitpunkt-Einblendung: welches Team wo war, welcher Status
+
+---
+
+### [ENHANCEMENT] Checklisten pro Einsatzart
+**Label:** `enhancement`
+
+Vordefinierte Checklisten (z.B. „VU-Checkliste", „Internistischer Notfall") die dem EVT nach dem Alarm angezeigt werden.
+
+**Anwendung:**
+- EVT kann Punkte abhaken (z.B. „Absicherung", „Bodycheck", „Monitoring angelegt")
+- Ergebnisse werden gespeichert und in der Nachbesprechung ausgewertet
+- Checklisten im Admin-Bereich konfigurierbar
+
+---
+
+### [ENHANCEMENT] Nachrichten / Chat zwischen EL und EVT
+**Label:** `enhancement`
+
+Kurznachrichten vom Einsatzleiter an einzelne oder alle EVTs senden.
+
+**Funktionen:**
+- EL tippt Nachricht + wählt Empfänger (einzeln oder Broadcast)
+- EVT sieht Nachricht als Toast/Popup
+- Nützlich für Hinweise wie „Pause 10 Min" oder „Fall P3: Patient nicht auffindbar"
+
+---
+
+### [ENHANCEMENT] Bewertungsbogen / Noten pro EVT
+**Label:** `enhancement`
+
+Strukturierter Bewertungsbogen pro EVT nach Übungsende.
+
+**Kriterien:**
+- Zeitmanagement (Ausrückzeit, Vor-Ort-Zeit)
+- Dokumentationsqualität (PZC korrekt, ABCD vollständig)
+- Kommunikation (Funkdisziplin, korrekte Meldungen)
+- Gesamtnote / Punktesystem
+
+---
+
+### [ENHANCEMENT] Dark/Light Mode Umschalter
+**Label:** `enhancement`
+
+Auf der Leitstellenansicht zwischen hellem und dunklem Design wechseln.
+EVT-App ist bereits dunkel. Protokoll-Seite ebenfalls.
+
+---
+
+## Zu testen (Heutige Änderungen 28.02.2026)
+
+### Aktivierungs-Overlay (Audio-Freischaltung)
+- [ ] EVT-Seite laden mit gespeichertem EVT → „Tippe zum Starten" Overlay erscheint
+- [ ] Auf „Starten" tippen → Overlay verschwindet, Polling beginnt
+- [ ] Alarm auslösen → Alarmton spielt SOFORT (nicht erst nach Quittieren)
+- [ ] Seitenreload → Overlay erscheint erneut (nicht direkt lospolling)
+
+### Fertig-Checkbox verhindert Neualarmierung
+- [ ] In `/protokoll`: Fall als „Fertig" markieren (Checkbox)
+- [ ] Versuchen, denselben Fall erneut zu alarmieren → Fehlermeldung
+- [ ] Alarm-Button ist ausgegraut / disabled bei abgeschlossenen Fällen
+- [ ] EVT geht S1 → Fall wird NICHT recycelt (bleibt completed)
+
+### Web Push Notifications
+- [ ] EVT-Seite in Chrome/Edge öffnen → Notification-Permission wird angefragt
+- [ ] Erlauben → Push-Subscription wird an Server gesendet
+- [ ] **WICHTIG**: HTTPS erforderlich! Push funktioniert nur über HTTPS
+- [ ] Browser komplett schließen → Alarm vom EL auslösen → Push-Notification erscheint
+- [ ] Auf Notification tippen → EVT-App öffnet sich
+- [ ] Tipp: App auf Homescreen installieren (PWA) für beste Ergebnisse
 
 ---
 
@@ -90,3 +169,11 @@ ermöglichen.
 - [x] Verbindungsstatus-Banner im Dashboard
 - [x] GPS-Accuracy Farbfeedback im EVT (grün/gelb/orange)
 - [x] /health Monitoring-Endpoint
+- [x] Web Push Notifications für EVT-App (Service Worker + VAPID + pywebpush)
+- [x] Alarm-Sound: WAV-basierter Ansatz statt Web Audio API (iOS/Android-kompatibel)
+- [x] Aktivierungs-Overlay bei Seitenreload (Audio-Freischaltung vor erstem Alarm)
+- [x] Alarm-Persistenz in localStorage (kein erneutes Overlay nach Quittierung)
+- [x] Nachbesprechung: RMI/SK entfernt, PZC mit Komma-Soll, ABCD-Bewertung
+- [x] ABCD-Schema: Button-Selektion bleibt erhalten, korrekte Anzeige bei SK1 (6. Stelle)
+- [x] PZC-Eingabe löst sofortige Auswertung aus (kein Warten auf Debounce)
+- [x] Abgeschlossene Fälle sind nicht mehr alarmierbar (Server + Client)

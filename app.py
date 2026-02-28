@@ -7,7 +7,46 @@ import urllib.request
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig
+from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription
+
+# ---------------------------
+# Web-Push (VAPID)
+# ---------------------------
+_VAPID_KEYS_PATH = os.path.join(os.path.dirname(__file__), "vapid_keys.json")
+_VAPID_PRIVATE_PEM = None
+_VAPID_PUBLIC_KEY  = None
+if os.path.exists(_VAPID_KEYS_PATH):
+    with open(_VAPID_KEYS_PATH) as _f:
+        _vk = json.load(_f)
+        _VAPID_PRIVATE_PEM = _vk["private_pem"]
+        _VAPID_PUBLIC_KEY  = _vk["public_key_b64"]
+
+
+def _send_push(subscription_info: dict, title: str, body: str):
+    """Sendet eine Web-Push-Nachricht an ein einzelnes Abonnement."""
+    if not _VAPID_PRIVATE_PEM:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+        webpush(
+            subscription_info=subscription_info,
+            data=json.dumps({"title": title, "body": body}),
+            vapid_private_key=_VAPID_PRIVATE_PEM,
+            vapid_claims={"sub": "mailto:evt@brk-feucht.local"},
+        )
+    except Exception:
+        pass
+
+
+def _broadcast_push(evt_name: str, title: str, body: str, app_ctx=None):
+    """Sendet Push an alle Abonnements eines EVT."""
+    subs = PushSubscription.query.filter_by(evt_name=evt_name).all()
+    for sub in subs:
+        _send_push(
+            {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
+            title, body,
+        )
+
 
 # ---------------------------
 # Funkstatus (Code -> Text)
@@ -957,6 +996,36 @@ function show(id){
         return jsonify({"ok": True})
 
     # ---------------------------
+    # Web-Push Subscriptions
+    # ---------------------------
+    @app.get("/api/push/vapid-key")
+    def get_vapid_key():
+        return jsonify({"publicKey": _VAPID_PUBLIC_KEY or ""})
+
+    @app.post("/api/push/subscribe")
+    def push_subscribe():
+        data = request.get_json(force=True)
+        evt_name = (data.get("evt_name") or "").strip()
+        sub = data.get("subscription") or {}
+        endpoint = sub.get("endpoint") or ""
+        keys = sub.get("keys") or {}
+        p256dh = keys.get("p256dh") or ""
+        auth = keys.get("auth") or ""
+        if not evt_name or not endpoint or not p256dh or not auth:
+            return jsonify({"error": "missing fields"}), 400
+        # Upsert: vorhandenes Abo aktualisieren oder neu anlegen
+        existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+        if existing:
+            existing.evt_name = evt_name
+            existing.p256dh = p256dh
+            existing.auth = auth
+        else:
+            db.session.add(PushSubscription(
+                evt_name=evt_name, endpoint=endpoint, p256dh=p256dh, auth=auth))
+        db.session.commit()
+        return jsonify({"ok": True}), 201
+
+    # ---------------------------
     # Missions
     # ---------------------------
     @app.get("/api/missions")
@@ -1067,6 +1136,15 @@ function show(id){
                 _cdoc.assigned_evt = team.name
                 _cdoc.alarm_time   = _utcnow()
                 _cdoc.updated_at   = _utcnow()
+
+                # Web-Push an das zugewiesene EVT senden
+                _meta = EXERCISE_CASES.get(_mission_case_id, {})
+                _push_body = _meta.get("schlagwort", "")
+                _broadcast_push(
+                    team.name,
+                    f"NEUER EINSATZ – {_mission_case_id}",
+                    _push_body,
+                )
 
         db.session.commit()
         return jsonify(serialize_assignment(a)), 201

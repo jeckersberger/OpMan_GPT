@@ -116,6 +116,74 @@
       .sidebar { width: 100%; max-height: 35vh; border-right: none; border-bottom: 1px solid var(--border); }
       #map { min-height: 50vh; }
     }
+
+    /* ── QR Beamer Overlay ── */
+    #qrOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1.5rem 1.5rem;
+      overflow-y: auto;
+    }
+    #qrOverlay.active { display: flex; }
+    #qrOverlay h1 {
+      font-size: 1.6rem;
+      color: #fff;
+      margin-bottom: 1.5rem;
+      letter-spacing: .05em;
+    }
+    .qr-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      justify-content: center;
+      width: 100%;
+    }
+    .qr-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .6rem;
+    }
+    .qr-item img {
+      width: 200px;
+      height: 200px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px;
+    }
+    .qr-item .qr-label {
+      color: #fff;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+    .qr-item .qr-url {
+      color: #888;
+      font-size: .65rem;
+      font-family: monospace;
+      word-break: break-all;
+      text-align: center;
+      max-width: 210px;
+    }
+    #qrCloseBtn {
+      position: fixed;
+      top: 1rem;
+      right: 1.2rem;
+      background: #222;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: .4rem .9rem;
+      font-size: .85rem;
+      cursor: pointer;
+      z-index: 10000;
+    }
+    #qrCloseBtn:hover { background: #333; }
   </style>
 </head>
 <body>
@@ -123,9 +191,19 @@
     <div class="brand">👁 Beobachter</div>
     <span class="clock" id="clock"></span>
     <span class="hint">Live-Ansicht (read-only)</span>
+    <button onclick="toggleQr()" style="background:#162035;color:#4ea1ff;border:1px solid #4ea1ff;border-radius:6px;padding:.3rem .7rem;font-size:.85rem;cursor:pointer;">🏷 QR-Setup</button>
     <a href="/">← Einsatzleiter</a>
     <span class="conn-dot" id="connDot"></span>
   </header>
+
+  <!-- QR Beamer Overlay -->
+  <div id="qrOverlay">
+    <button id="qrCloseBtn" onclick="toggleQr()">✕ Schließen</button>
+    <h1>📱 EVT-App starten</h1>
+    <div class="qr-grid" id="qrGrid">
+      <div style="color:#888;">Lade QR-Codes…</div>
+    </div>
+  </div>
 
   <div class="main">
     <aside class="sidebar">
@@ -281,6 +359,40 @@ setTimeout(async () => {
   for (const [, m] of caseMarkers) pts.push(m.getLatLng());
   if (pts.length > 0) map.fitBounds(L.latLngBounds(pts).pad(0.15));
 }, 2000);
+
+// ── QR Beamer Overlay ──
+let _qrLoaded = false;
+
+async function loadQrCodes() {
+  const grid = document.getElementById('qrGrid');
+  try {
+    const res = await fetch('/api/qrcodes');
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    grid.innerHTML = data.codes.map(c => `
+      <div class="qr-item">
+        <img src="data:image/svg+xml;base64,${c.img_b64}" alt="${esc(c.name)}"/>
+        <div class="qr-label">${esc(c.name)}</div>
+        <div class="qr-url">${esc(c.url)}</div>
+      </div>
+    `).join('');
+  } catch (_) {
+    grid.innerHTML = '<div style="color:#f55;">Fehler beim Laden der QR-Codes.</div>';
+  }
+}
+
+function toggleQr() {
+  const overlay = document.getElementById('qrOverlay');
+  const isActive = overlay.classList.toggle('active');
+  if (isActive && !_qrLoaded) {
+    loadQrCodes();
+    _qrLoaded = true;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('qrOverlay').classList.remove('active');
+});
   </script>
 </body>
 </html>

@@ -160,6 +160,7 @@ def create_app():
             "w3w": "///familienname.haltung.aufdeckung", "w3w_alarm": None,
             "lat": 49.373262, "lng": 11.201692,
             "rmi_soll": "421", "sk_soll": "1", "pzc_soll": "421721",
+            "abcd_soll": {"A": 1, "B": 1, "C": 1, "D": 1},
             "besonderheit": "Stroke-Klinik. Fokus auf PZC / Klinikwahl. Antikoagulation beachten.",
         },
         "P6": {

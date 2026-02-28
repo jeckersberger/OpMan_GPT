@@ -549,8 +549,26 @@
 
 <!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
 <script>
-/* ── Statische Übungsdaten ───────────────────────────────── */
-const CASES_META = {{ cases | tojson }};
+/* ── Übungsdaten – initial per Jinja, danach live via API ── */
+let CASES_META = {{ cases | tojson }};
+let _caseMetaKeys = JSON.stringify(Object.keys(CASES_META).sort());
+
+async function refreshCasesMeta() {
+  try {
+    const r = await fetch('/api/cases/meta');
+    if (!r.ok) return;
+    const fresh = await r.json();
+    const freshKeys = JSON.stringify(Object.keys(fresh).sort());
+    if (freshKeys !== _caseMetaKeys) {
+      CASES_META = fresh;
+      _caseMetaKeys = freshKeys;
+      // Grids neu aufbauen, da sich die Fall-Liste geändert hat
+      renderAlarmGrid();
+      renderCaseGrid();
+      if (sectionOpen && sectionOpen.nbr) { renderNachbesprechung(); renderEvtBewertung(); }
+    }
+  } catch (_) {}
+}
 
 // Alarmtexte (aus Spickzettel – werden laut vorgelesen)
 const ALARM_TEXTS = {
@@ -1443,6 +1461,7 @@ async function softRefreshCaseDocs() {
   if(sectionOpen.tp)  renderTeamProgress();
 }
 setInterval(softRefreshCaseDocs, 10000);
+setInterval(refreshCasesMeta, 8000);   // Fälle live aktualisieren (Löschen / Hinzufügen)
 
 /* ── Init ────────────────────────────────────────────────── */
 refreshAll();

@@ -877,6 +877,10 @@ function show(id){
     @app.post("/cases/<string:case_id>/delete")
     def case_delete(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
+        # CaseDoc mitlöschen, damit kein verwaister Datensatz im Protokoll bleibt
+        doc = db.session.get(CaseDoc, case_id)
+        if doc:
+            db.session.delete(doc)
         db.session.delete(cd)
         db.session.commit()
         return redirect("/cases")
@@ -925,6 +929,11 @@ function show(id){
                 sampler[letter] = v
         cd.sampler_json = json.dumps(sampler, ensure_ascii=False) if sampler else None
         db.session.add(cd)
+
+    @app.get("/api/cases/meta")
+    def cases_meta():
+        """Liefert CASES_META-Dict live – für dynamische Updates in der Protokoll-Seite."""
+        return jsonify(_cases_dict())
 
     @app.get("/api/cases/export")
     def cases_export():
@@ -1362,6 +1371,13 @@ function show(id){
     @app.delete("/api/missions/<int:mission_id>")
     def delete_mission(mission_id: int):
         mission = db.get_or_404(Mission, mission_id)
+        # Wenn Mission einem Übungsfall zugeordnet war (Titel "P1: …"),
+        # assigned_evt im CaseDoc zurücksetzen damit die Protokoll-Seite stimmt.
+        if mission.title:
+            case_id = mission.title.split(':')[0].strip()
+            doc = db.session.get(CaseDoc, case_id)
+            if doc and doc.assigned_evt:
+                doc.assigned_evt = None
         db.session.delete(mission)
         db.session.commit()
         return jsonify({"ok": True})

@@ -169,6 +169,7 @@ def create_app():
             "w3w": "///obenrum.kranz.wählen", "w3w_alarm": None,
             "lat": 49.375283, "lng": 11.204709,
             "rmi_soll": "331", "sk_soll": "2/3", "pzc_soll": "331562,331563",
+            "abcd_soll": {"A": 1, "B": 1, "C": 1, "D": 1},
             "besonderheit": "ASS-Allergie! Fokus auf PZC / Klinikwahl.",
         },
     }

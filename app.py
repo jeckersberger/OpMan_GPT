@@ -239,6 +239,7 @@ def create_app():
             "ALTER TABLE teams ADD COLUMN test_alarm_at DATETIME",
             "ALTER TABLE teams ADD COLUMN test_alarm_text VARCHAR(200)",
             "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
+            "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -272,10 +273,13 @@ def create_app():
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
 
-    def _cases_dict():
-        """Gibt alle CaseDefinitions als dict zurück (rückwärtskompatibel mit EXERCISE_CASES-Format)."""
+    def _cases_dict(active_only: bool = False):
+        """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
+        q = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id)
+        if active_only:
+            q = q.filter(CaseDefinition.active == True)  # noqa: E712
         result = {}
-        for cd in CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all():
+        for cd in q.all():
             result[cd.id] = {
                 "schlagwort": cd.schlagwort or "", "szenario": cd.szenario,
                 "patient": cd.patient or "", "patient_alarm": cd.patient_alarm,
@@ -284,6 +288,7 @@ def create_app():
                 "lat": cd.lat, "lng": cd.lng,
                 "rmi_soll": cd.rmi_soll, "sk_soll": cd.sk_soll, "pzc_soll": cd.pzc_soll,
                 "besonderheit": cd.besonderheit, "kein_transport": cd.kein_transport,
+                "active": bool(cd.active),
             }
         return result
 
@@ -334,7 +339,7 @@ def create_app():
 
     @app.get("/protokoll")
     def protokoll():
-        return render_template("protokoll.html", cases=_cases_dict())
+        return render_template("protokoll.html", cases=_cases_dict(active_only=True))
 
     @app.get("/api/server-info")
     def server_info():
@@ -682,7 +687,7 @@ def create_app():
     def exercise_geodata():
         """Return exercise case coordinates from CaseDefinition DB."""
         result: dict = {"cases": {}, "startpunkt": None}
-        for cd in CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all():
+        for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
             result["cases"][cd.id] = {
                 "lat": cd.lat, "lng": cd.lng,
                 "schlagwort": cd.schlagwort or "",
@@ -932,8 +937,22 @@ function show(id){
 
     @app.get("/api/cases/meta")
     def cases_meta():
-        """Liefert CASES_META-Dict live – für dynamische Updates in der Protokoll-Seite."""
-        return jsonify(_cases_dict())
+        """Liefert nur AKTIVE Cases – für Protokoll und Karten-Anzeige."""
+        return jsonify(_cases_dict(active_only=True))
+
+    @app.get("/api/cases/all")
+    def cases_all():
+        """Liefert alle Cases inkl. inaktiver – für die EL-Sidebar."""
+        return jsonify(_cases_dict(active_only=False))
+
+    @app.patch("/api/cases/<string:case_id>/active")
+    def case_toggle_active(case_id: str):
+        """Setzt das active-Flag eines Falls (body: {active: true/false})."""
+        cd = db.get_or_404(CaseDefinition, case_id)
+        data = request.get_json(force=True) or {}
+        cd.active = bool(data.get("active", not cd.active))
+        db.session.commit()
+        return jsonify({"id": cd.id, "active": cd.active})
 
     @app.get("/api/cases/export")
     def cases_export():

@@ -141,6 +141,8 @@ class CaseDefinition(db.Model):
     besonderheit  = db.Column(db.Text, nullable=True)  # Hinweis für EL / Mime
     hinweis       = db.Column(db.Text, nullable=True)  # extra Instruktionstext
 
+    active        = db.Column(db.Boolean,     nullable=False, default=True)  # für diese Übung aktiv?
+
     sort_order    = db.Column(db.Integer, nullable=False, default=0)
     updated_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 

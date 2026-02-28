@@ -881,9 +881,9 @@ async function refreshAll(rebuild = true){
   assignments = data.assignments;
   casedocData = data.casedocs;
 
-  // Fälle live nachladen (separate API, da nicht im Dashboard)
+  // Alle Fälle nachladen (inkl. inaktiver, für die Sidebar)
   try {
-    const r = await fetch('/api/cases/meta');
+    const r = await fetch('/api/cases/all');
     if (r.ok) casesMeta = await r.json();
   } catch(_) {}
 
@@ -1416,26 +1416,54 @@ function renderCasesList() {
   for (const d of casedocData) byId[d.id] = d;
 
   el.innerHTML = ids.map(pid => {
-    const meta = casesMeta[pid] || {};
-    const doc  = byId[pid] || {};
+    const meta    = casesMeta[pid] || {};
+    const doc     = byId[pid] || {};
+    const active  = meta.active !== false;
     const alarmed = !!doc.alarm_time;
     const done    = !!doc.completed;
     const evtLabel = doc.assigned_evt ? ` → ${doc.assigned_evt}` : '';
-    const badge = done    ? `<span style="color:var(--green);font-size:.68rem;">✓ Abgeschlossen</span>`
-                : alarmed ? `<span style="color:var(--yellow);font-size:.68rem;">⚡ Alarmiert${evtLabel}</span>`
-                          : `<span style="color:var(--muted);font-size:.68rem;">○ Bereit</span>`;
-    const alarmBtn = !alarmed && !done
-      ? `<button onclick="showCaseAlarmModal('${pid}')" style="padding:.15rem .5rem;font-size:.7rem;background:#3a1800;color:#ff9f43;border:1px solid #ff9f43;border-radius:4px;cursor:pointer;white-space:nowrap;">🔔 Alarm</button>`
+
+    const toggleBtn = `<button onclick="toggleCaseActive('${pid}',${!active})"
+      title="${active ? 'Deaktivieren' : 'Aktivieren'}"
+      style="padding:.15rem .45rem;font-size:.68rem;border-radius:4px;cursor:pointer;white-space:nowrap;
+             background:${active ? '#0b2a0b' : '#1a1a2e'};
+             color:${active ? '#3ddc84' : '#666'};
+             border:1px solid ${active ? '#3ddc84' : '#444'};">
+      ${active ? '✓ Aktiv' : '○ Inaktiv'}
+    </button>`;
+
+    const alarmBtn = active && !alarmed && !done
+      ? `<button onclick="showCaseAlarmModal('${pid}')"
+           style="padding:.15rem .5rem;font-size:.7rem;background:#3a1800;color:#ff9f43;border:1px solid #ff9f43;border-radius:4px;cursor:pointer;white-space:nowrap;">🔔 Alarm</button>`
       : '';
-    return `<div style="padding:.35rem 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.1rem;">
+
+    const statusBadge = !active
+      ? ''
+      : done    ? `<span style="color:var(--green);font-size:.68rem;">✓ Abgeschlossen</span>`
+      : alarmed ? `<span style="color:var(--yellow);font-size:.68rem;">⚡ Alarmiert${evtLabel}</span>`
+               : `<span style="color:var(--muted);font-size:.68rem;">○ Bereit</span>`;
+
+    return `<div style="padding:.35rem 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.15rem;opacity:${active ? '1' : '0.5'};">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:.3rem;">
-        <span style="font-weight:700;font-size:.8rem;color:var(--accent);">${pid}</span>
+        <span style="font-weight:700;font-size:.8rem;color:${active ? 'var(--accent)' : 'var(--muted)'};">${pid}</span>
         <span style="font-size:.72rem;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 .3rem;">${esc(meta.schlagwort||'–')}</span>
         ${alarmBtn}
+        ${toggleBtn}
       </div>
-      ${badge}
+      ${statusBadge}
     </div>`;
   }).join('');
+}
+
+async function toggleCaseActive(pid, newActive) {
+  try {
+    await fetch(`/api/cases/${pid}/active`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: newActive }),
+    });
+    await refreshAll(false);
+  } catch(_) {}
 }
 
 function showCaseAlarmModal(pid) {

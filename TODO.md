@@ -55,6 +55,59 @@ Hier geht es um die trupp-basierte Ansicht.
 
 ---
 
+### [ENHANCEMENT] Meldezettel-Generator (PDF)
+**Label:** `enhancement`
+
+Automatisch ausgefüllter Meldezettel pro Fall als PDF zum Ausdrucken/Verteilen.
+
+**Datenquelle:** Patient, Schlagwort, w3w, PZC, ABCD, Zielklinik – alles bereits im System vorhanden.
+
+**Ausgabe:** PDF-Download pro Fall oder Sammel-PDF für alle Fälle.
+
+---
+
+### [ENHANCEMENT] Patientensimulation / Verlaufskarten
+**Label:** `enhancement`
+
+Zeitgesteuerte Anweisungen für Mimen, z.B. „Nach 5 Min: SpO2 sinkt auf 88%, Patient wird unruhig".
+
+**Funktionen:**
+- Verlaufskarten pro Fall konfigurierbar (Zeitpunkt + Anweisung)
+- EL sieht live welche Verlaufsstufe gerade aktiv ist
+- Macht die Übung dynamischer und standardisierter
+
+---
+
+### [ENHANCEMENT] Echtzeit-Übersicht für Beobachter/Ausbilder
+**Label:** `enhancement`
+
+Eigene Read-only Seite `/beobachter` mit Live-Karte und Statusübersicht.
+
+**Zweck:** Ausbilder an den Stationen können mitverfolgen ohne EL-Rechte zu brauchen.
+
+**Inhalt:** Live-Karte, Trupp-Status, Zeitstempel, Fall-Zuordnung – alles nur lesend.
+
+---
+
+### [ENHANCEMENT] Übungsvorlagen speichern & laden
+**Label:** `enhancement`
+
+Komplette Übungskonfiguration als JSON exportieren und bei der nächsten Übung wieder importieren.
+
+**Inhalt:** Fälle, Teams, Positionen, Konfiguration.
+Nächste Übung: Datei laden → fertig. Spart das komplette Neuanlegen.
+
+---
+
+### [ENHANCEMENT] QR-Code Setup für EVT-Geräte
+**Label:** `enhancement`
+
+Pro EVT einen QR-Code generieren. Handy scannt → EVT-Seite öffnet sich mit richtigem EVT vorausgewählt.
+
+**Vorteil:** Spart Fummelei bei der Einrichtung vor der Übung. QR-Codes können ausgedruckt und an die Geräte/Westen geheftet werden.
+
+---
+
 ## Zu testen (Heutige Änderungen 28.02.2026)
 
 ### Aktivierungs-Overlay (Audio-Freischaltung)

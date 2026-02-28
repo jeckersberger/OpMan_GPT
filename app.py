@@ -131,7 +131,7 @@ def create_app():
             "patient_alarm": "Lisa Schneider",   # falscher Name in der Alarmierung
             "w3w": "///vorweisen.kanone.möchte", "w3w_alarm": None,
             "lat": 49.377035, "lng": 11.202390,
-            "rmi_soll": "272", "sk_soll": "3", "pzc_soll": "272193",
+            "rmi_soll": "272", "sk_soll": "1-3", "pzc_soll": "272191,272192,272193",
             "besonderheit": "Name in Alarmierung falsch (Lisa Schneider). Buchstabieren erforderlich.",
         },
         "P3": {

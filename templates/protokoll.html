@@ -1056,15 +1056,29 @@ function renderNachbesprechung() {
   tbl.innerHTML=`<thead><tr>
     <th>Fall</th><th>Schlagwort</th><th>EVT</th>
     <th>Alarm</th><th>S4</th><th>Dauer A→S4</th><th>S8</th>
-    <th>RMI</th><th>SK</th><th>PZC</th><th>Zielklinik</th>
+    <th>PZC</th><th>ABCD</th><th>Zielklinik</th>
   </tr></thead><tbody>${ids.map(pid=>{
     const meta=CASES_META[pid]||{};
     const doc=caseDocs[pid]||{};
     function cell(rep,soll){
       if(!soll||soll==='—') return `<td class="nbr-na">n/a</td>`;
       if(!rep) return `<td class="nbr-na">–</td>`;
-      const ok=rep.trim()===soll.trim();
+      const opts=soll.split(',').map(v=>v.trim());
+      const ok=opts.some(v=>rep.trim()===v);
       return `<td class="${ok?'nbr-ok':'nbr-fail'}">${esc(rep)} ${ok?'✓':'✗'}</td>`;
+    }
+    function abcdCell(){
+      const pzc=(doc.pzc_reported||'').trim();
+      if(!pzc.endsWith('1')) return `<td class="nbr-na">n/a</td>`;
+      const obj=_parseAbcd(doc.abcde_schema);
+      const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
+      const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
+      if(!filled) return `<td class="nbr-fail">${vals} (unvollst.)</td>`;
+      const soll=meta.abcd_soll||{};
+      if(!soll.A) return `<td class="nbr-ok">${vals} ✓</td>`;
+      const ok=['A','B','C','D'].every(l=>obj[l]===soll[l]);
+      const sollStr=['A','B','C','D'].map(l=>soll[l]).join('-');
+      return `<td class="${ok?'nbr-ok':'nbr-fail'}">${vals} ${ok?'✓':'✗ ≠'+sollStr}</td>`;
     }
     const dur=fmtDur(doc.alarm_time,doc.status4_time);
     return `<tr>
@@ -1075,9 +1089,8 @@ function renderNachbesprechung() {
       <td>${fmtTime(doc.status4_time)||'–'}</td>
       <td class="nbr-dur">${dur||'–'}</td>
       <td>${fmtTime(doc.status8_time)||'–'}</td>
-      ${cell(doc.rmi_reported,meta.rmi_soll)}
-      ${cell(doc.sk_reported, meta.sk_soll)}
       ${cell(doc.pzc_reported,meta.pzc_soll)}
+      ${abcdCell()}
       <td>${esc(doc.zielklinik||'–')}</td>
     </tr>`;
   }).join('')}</tbody>`;
@@ -1094,16 +1107,23 @@ function renderEvtBewertung() {
     if(!evt) return;
     if(!evtData[evt]) evtData[evt]={cases:[],ok:0,total:0};
     evtData[evt].cases.push(pid);
-    const checks=[
-      [doc.rmi_reported,meta.rmi_soll],
-      [doc.sk_reported,meta.sk_soll],
-      [doc.pzc_reported,meta.pzc_soll],
-    ];
-    checks.forEach(([rep,soll])=>{
-      if(!soll||soll==='—') return;
+    // PZC bewerten (kommaseparierte Soll-Werte)
+    const pzcSoll=meta.pzc_soll;
+    if(pzcSoll&&pzcSoll!=='—'){
       evtData[evt].total++;
-      if(rep&&rep.trim()===soll.trim()) evtData[evt].ok++;
-    });
+      if(doc.pzc_reported){
+        const opts=pzcSoll.split(',').map(v=>v.trim());
+        if(opts.some(v=>doc.pzc_reported.trim()===v)) evtData[evt].ok++;
+      }
+    }
+    // ABCD bewerten (nur wenn SK1 = PZC endet auf 1)
+    const pzc=(doc.pzc_reported||'').trim();
+    if(pzc.endsWith('1')&&meta.abcd_soll&&meta.abcd_soll.A){
+      evtData[evt].total++;
+      const obj=_parseAbcd(doc.abcde_schema);
+      const ok=['A','B','C','D'].every(l=>obj[l]===meta.abcd_soll[l]);
+      if(ok) evtData[evt].ok++;
+    }
   });
   const tbl=document.getElementById('evtTable');
   if(!Object.keys(evtData).length){
@@ -1376,7 +1396,7 @@ async function softRefreshCaseDocs() {
       document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
     }
 
-    // Eval-Badges (RMI/SK/PZC)
+    // Eval-Badges (PZC/ABCD)
     refreshEvalRow(pid);
   });
 

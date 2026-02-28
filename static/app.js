@@ -16,6 +16,8 @@ let assignedTeamIds = new Set(); // Teams, die bereits irgendwo zugewiesen sind
 // Exercise layer (Funkübung)
 let exerciseGeodata = null;       // geodata from /api/exercise/geodata
 let casedocData = [];             // from /api/casedocs
+let casesMeta   = {};             // from /api/cases/meta
+let _alarmPid   = null;           // currently open alarm modal
 let exerciseMarkers = new Map();  // caseId (string) -> L.Marker
 let connectionLines = [];         // L.Polyline[] team <-> case
 let startpunktMarker = null;
@@ -879,12 +881,19 @@ async function refreshAll(rebuild = true){
   assignments = data.assignments;
   casedocData = data.casedocs;
 
+  // Fälle live nachladen (separate API, da nicht im Dashboard)
+  try {
+    const r = await fetch('/api/cases/meta');
+    if (r.ok) casesMeta = await r.json();
+  } catch(_) {}
+
   normalizeRadioLabels();
   computeAssignedTeamIds();
 
   renderTeams();
   renderMissions();
   renderAssignments();
+  renderCasesList();
   setSelectionLabel();
 
   if (rebuild){
@@ -1394,3 +1403,82 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   loadLanInfo();
 });
+// ── Übungsfälle-Liste ──────────────────────────────────────────
+function renderCasesList() {
+  const el = $("casesList");
+  if (!el) return;
+  const ids = Object.keys(casesMeta).sort();
+  if (!ids.length) {
+    el.innerHTML = '<div class="tiny" style="color:var(--muted);">Keine Fälle. <a href="/cases" target="_blank" style="color:var(--accent);">Fallgenerator</a></div>';
+    return;
+  }
+  const byId = {};
+  for (const d of casedocData) byId[d.id] = d;
+
+  el.innerHTML = ids.map(pid => {
+    const meta = casesMeta[pid] || {};
+    const doc  = byId[pid] || {};
+    const alarmed = !!doc.alarm_time;
+    const done    = !!doc.completed;
+    const evtLabel = doc.assigned_evt ? ` → ${doc.assigned_evt}` : '';
+    const badge = done    ? `<span style="color:var(--green);font-size:.68rem;">✓ Abgeschlossen</span>`
+                : alarmed ? `<span style="color:var(--yellow);font-size:.68rem;">⚡ Alarmiert${evtLabel}</span>`
+                          : `<span style="color:var(--muted);font-size:.68rem;">○ Bereit</span>`;
+    const alarmBtn = !alarmed && !done
+      ? `<button onclick="showCaseAlarmModal('${pid}')" style="padding:.15rem .5rem;font-size:.7rem;background:#3a1800;color:#ff9f43;border:1px solid #ff9f43;border-radius:4px;cursor:pointer;white-space:nowrap;">🔔 Alarm</button>`
+      : '';
+    return `<div style="padding:.35rem 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.3rem;">
+        <span style="font-weight:700;font-size:.8rem;color:var(--accent);">${pid}</span>
+        <span style="font-size:.72rem;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 .3rem;">${esc(meta.schlagwort||'–')}</span>
+        ${alarmBtn}
+      </div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function showCaseAlarmModal(pid) {
+  _alarmPid = pid;
+  const meta = casesMeta[pid] || {};
+  $("caseAlarmInfo").innerHTML = `<b>${pid}</b>: ${esc(meta.schlagwort || '–')}<br><span style="font-size:.75rem;">${meta.patient ? esc(meta.patient) + (meta.alter ? ', ' + meta.alter + ' J.' : '') : ''}</span>`;
+  const sel = $("caseAlarmEvt");
+  const freeTeams = teams.filter(t => !assignedTeamIds.has(t.id));
+  sel.innerHTML = freeTeams.map(t => `<option value="${esc(t.name)}">${esc(t.name)}${t.callsign?' ('+esc(t.callsign)+')':''}</option>`).join('');
+  if (!freeTeams.length) sel.innerHTML = '<option value="">— kein freies EVT —</option>';
+  $("caseAlarmModal").style.display = 'flex';
+}
+
+async function doCaseAlarm() {
+  const pid = _alarmPid;
+  if (!pid) return;
+  const evt = $("caseAlarmEvt").value;
+  $("caseAlarmModal").style.display = 'none';
+  try {
+    if (evt) await api(`/api/casedocs/${pid}`, { method: 'PATCH', body: JSON.stringify({ assigned_evt: evt }) });
+    await api(`/api/casedocs/${pid}/stamp`, { method: 'POST', body: JSON.stringify({ field: 'alarm_time' }) });
+    await refreshAll(false);
+  } catch (_) {}
+}
+
+function showCaseImportModal() {
+  $("caseImportJson").value = '';
+  $("caseImportResult").textContent = '';
+  $("caseImportModal").style.display = 'flex';
+}
+
+async function doCaseImport() {
+  const raw = $("caseImportJson").value.trim();
+  const res = $("caseImportResult");
+  if (!raw) { res.style.color = 'var(--red)'; res.textContent = 'Kein JSON eingegeben.'; return; }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { res.style.color = 'var(--red)'; res.textContent = 'JSON-Fehler: ' + e.message; return; }
+  res.style.color = 'var(--muted)'; res.textContent = 'Importiere…';
+  try {
+    const r = await fetch('/api/cases/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(parsed) });
+    const data = await r.json();
+    if (!r.ok) { res.style.color = 'var(--red)'; res.textContent = 'Fehler: ' + (data.error || r.status); return; }
+    res.style.color = 'var(--green)'; res.textContent = `✓ ${data.created} neu, ${data.updated} aktualisiert.`;
+    await refreshAll(false);
+  } catch(e) { res.style.color = 'var(--red)'; res.textContent = 'Netzwerkfehler: ' + e; }
+}

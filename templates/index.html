@@ -58,6 +58,34 @@
     </nav>
   </header>
 
+  <!-- Case-Alarm Modal -->
+  <div id="caseAlarmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:2px solid #ff9f43;border-radius:12px;padding:1.5rem;max-width:380px;width:90%;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#ff9f43;">🔔 Fall alarmieren</h3>
+      <div id="caseAlarmInfo" style="font-size:.82rem;color:#a6b3d1;margin-bottom:1rem;"></div>
+      <label style="font-size:.8rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">EVT zuweisen:</label>
+      <select id="caseAlarmEvt" style="width:100%;margin-bottom:1rem;padding:.4rem .5rem;background:#0b1220;border:1px solid #ff9f43;color:#fff;border-radius:6px;font-family:inherit;font-size:.85rem;"></select>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('caseAlarmModal').style.display='none'" style="padding:.45rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Abbrechen</button>
+        <button onclick="doCaseAlarm()" style="padding:.45rem 1.2rem;background:#ff9f43;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">🔔 Alarm ausgeben</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case JSON Import Modal -->
+  <div id="caseImportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:2px solid #3ddc84;border-radius:12px;padding:1.5rem;max-width:540px;width:95%;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#3ddc84;">📥 Übungsfälle importieren</h3>
+      <p style="font-size:.78rem;color:#a6b3d1;margin-bottom:.5rem;">JSON einfügen (Format wie beim <a href="/cases" target="_blank" style="color:#4ea1ff;">Fallgenerator-Export</a>):</p>
+      <textarea id="caseImportJson" style="width:100%;height:180px;background:#0b1220;border:1px solid #3ddc84;color:#e7eefc;font-family:monospace;font-size:.72rem;padding:.6rem;border-radius:6px;resize:vertical;box-sizing:border-box;"></textarea>
+      <div id="caseImportResult" style="font-size:.75rem;margin:.4rem 0;min-height:1.2em;"></div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('caseImportModal').style.display='none'" style="padding:.45rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Schließen</button>
+        <button onclick="doCaseImport()" style="padding:.45rem 1.2rem;background:#3ddc84;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Importieren</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Reset Modal -->
   <div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;">
     <div style="background:#1a0808;border:2px solid #ff6b6b;border-radius:12px;padding:1.5rem;max-width:400px;width:90%;">
@@ -156,6 +184,17 @@
     <!-- Left: Teams -->
     <aside class="sidebar left">
       <h2>Einsatztrupps</h2>
+
+      <!-- ── Übungsfälle ── -->
+      <section class="panel">
+        <h3>Übungsfälle</h3>
+        <div style="display:flex;gap:.35rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <a href="/api/cases/export" download="uebungsfaelle.json" style="flex:1;text-align:center;padding:.3rem .4rem;font-size:.75rem;border:1px solid var(--accent);border-radius:5px;color:var(--accent);text-decoration:none;">📤 JSON</a>
+          <button onclick="showCaseImportModal()" style="flex:1;padding:.3rem .4rem;font-size:.75rem;background:transparent;border:1px solid var(--green);color:var(--green);border-radius:5px;cursor:pointer;">📥 Import</button>
+          <a href="/cases" target="_blank" style="flex:1;text-align:center;padding:.3rem .4rem;font-size:.75rem;border:1px solid var(--border);border-radius:5px;color:var(--muted);text-decoration:none;">✏️ Bearbeiten</a>
+        </div>
+        <div id="casesList" class="list"></div>
+      </section>
 
       <section class="panel">
         <h3>Neues EVT</h3>

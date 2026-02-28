@@ -106,3 +106,14 @@ class ExerciseConfig(db.Model):
     __tablename__ = "exercise_config"
     id = db.Column(db.Integer, primary_key=True)
     evt_count = db.Column(db.Integer, nullable=False, default=6)
+
+
+class PushSubscription(db.Model):
+    """Web-Push-Abonnement eines EVT-Geräts."""
+    __tablename__ = "push_subscriptions"
+    id = db.Column(db.Integer, primary_key=True)
+    evt_name   = db.Column(db.String(30), nullable=False)            # z.B. "EVT 1"
+    endpoint   = db.Column(db.Text,       nullable=False, unique=True)
+    p256dh     = db.Column(db.Text,       nullable=False)
+    auth       = db.Column(db.Text,       nullable=False)
+    created_at = db.Column(db.DateTime,   nullable=False, default=datetime.utcnow)

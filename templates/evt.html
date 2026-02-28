@@ -6,6 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="theme-color" content="#0b1220"/>
+  <link rel="manifest" href="/static/manifest.json"/>
   <title>EVT Mobile – BRK Feucht</title>
   <style>
     :root {
@@ -522,10 +523,27 @@ evtSelect.addEventListener('change', () => {
   if (v) {
     poll();
     pollHandle = setInterval(poll, 10000);
+    // Push-Abo aktualisieren mit neuem EVT-Namen
+    _updatePushSubscription(v);
   } else {
     document.getElementById('mainContent').innerHTML = '';
   }
 });
+
+async function _updatePushSubscription(evtName) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub && evtName) {
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ evt_name: evtName, subscription: sub.toJSON() }),
+      });
+    }
+  } catch (_) {}
+}
 
 // Bei gespeicherter Auswahl: Aktivierungs-Overlay zeigen (Audio-Freischaltung)
 if (savedEvt) {
@@ -1186,6 +1204,50 @@ function maybeStartGps() {
     if (_gpsWatchId == null) startGps();
   }
 }
+
+// ── Service Worker + Web-Push ────────────────────────────────
+(async function registerPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/static/sw.js');
+
+    // VAPID-Public-Key vom Server holen
+    const keyRes = await fetch('/api/push/vapid-key');
+    const keyData = await keyRes.json();
+    if (!keyData.publicKey) return;
+
+    // URL-safe base64 → Uint8Array
+    const rawKey = keyData.publicKey.replace(/-/g,'+').replace(/_/g,'/');
+    const pad = '='.repeat((4 - rawKey.length % 4) % 4);
+    const bytes = atob(rawKey + pad);
+    const applicationServerKey = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) applicationServerKey[i] = bytes.charCodeAt(i);
+
+    // Notification-Permission anfragen
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+
+    // Push-Subscription (erstellt Browser-seitig Schlüsselpaar)
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey,
+      });
+    }
+
+    // Subscription + EVT-Name an Server senden
+    const evtName = selectedEvt || localStorage.getItem('evt_selected') || '';
+    if (evtName && sub) {
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ evt_name: evtName, subscription: sub.toJSON() }),
+      });
+    }
+  } catch (_) { /* Push nicht verfügbar */ }
+})();
 </script>
 </body>
 </html>

@@ -315,6 +315,44 @@
       margin-bottom: 1rem;
       line-height: 1.6;
     }
+    /* Aktivierungs-Overlay: Nutzer muss tippen um Audio freizuschalten */
+    .activate-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 998;
+      padding: 1.5rem;
+    }
+    .activate-overlay.show { display: flex; }
+    .activate-box {
+      background: var(--panel);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 2rem 1.5rem;
+      max-width: 340px;
+      width: 100%;
+      text-align: center;
+    }
+    .activate-box .act-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    .activate-box .act-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-bottom: .5rem; }
+    .activate-box .act-desc { font-size: .85rem; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.5; }
+    .activate-btn {
+      width: 100%;
+      padding: 1rem;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .activate-btn:active { opacity: .8; }
     .alarm-detail .alarm-w3w { color: var(--accent); font-family: monospace; font-weight: 700; }
     .alarm-detail .alarm-patient { font-weight: 700; }
 
@@ -372,6 +410,16 @@
       Dies ist kein echter Einsatz.<br>Quittiere zur Bestätigung.
     </div>
     <button class="alarm-dismiss" id="testAlarmDismiss" style="background:#f5c842;color:#000;">✓ Quittieren</button>
+  </div>
+</div>
+
+<!-- ══ AKTIVIERUNGS-OVERLAY (Audio-Freischaltung) ══ -->
+<div class="activate-overlay" id="activateOverlay">
+  <div class="activate-box">
+    <div class="act-icon">🔊</div>
+    <div class="act-title">Alarmton aktivieren</div>
+    <div class="act-desc">Tippe auf den Button, um Alarmsignale empfangen zu können.</div>
+    <button class="activate-btn" id="activateBtn">Starten</button>
   </div>
 </div>
 
@@ -479,11 +527,18 @@ evtSelect.addEventListener('change', () => {
   }
 });
 
+// Bei gespeicherter Auswahl: Aktivierungs-Overlay zeigen (Audio-Freischaltung)
 if (savedEvt) {
   selectedEvt = savedEvt;
+  document.getElementById('activateOverlay').classList.add('show');
+}
+
+document.getElementById('activateBtn').addEventListener('click', () => {
+  _unlockAudio();  // Audio sofort freischalten per User-Geste
+  document.getElementById('activateOverlay').classList.remove('show');
   poll();
   pollHandle = setInterval(poll, 5000);
-}
+});
 
 // ── Polling ──────────────────────────────────────────────────
 async function poll() {

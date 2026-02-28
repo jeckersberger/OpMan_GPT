@@ -46,6 +46,8 @@
       <div class="divider"></div>
       <a href="/evt" class="navbtn" style="text-decoration:none;">📱 EVT Mobile</a>
       <div class="divider"></div>
+      <a href="/beobachter" class="navbtn" style="text-decoration:none;" target="_blank">👁 Beobachter</a>
+      <div class="divider"></div>
       <button id="btnTestAlarm" class="navbtn" style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;" onclick="showTestAlarmModal()">🔔 Testalarm</button>
       <div class="divider"></div>
       <button class="navbtn" style="background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b;" onclick="showResetModal()">🔄 Reset</button>
@@ -124,7 +126,25 @@
         <li>„OpMan-GPT Local" aktivieren</li>
       </ol>
       <p style="font-size:.7rem;color:#777;margin-bottom:.75rem;">Das Zertifikat ist nur lokal im WLAN gültig.</p>
-      <button onclick="document.getElementById('lanModal').style.display='none'" style="padding:.5rem 1.2rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+      <hr style="border:none;border-top:1px solid #223152;margin:1rem 0;">
+      <button onclick="showQrSetup()" style="padding:.5rem 1rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;font-size:.85rem;">🏷 QR-Codes pro EVT (zum Ausdrucken)</button>
+      <div style="font-size:.7rem;color:#777;margin-top:.4rem;">Jedes Team bekommt einen eigenen QR-Code. Scannen = EVT-App mit richtigem Team vorausgewählt.</div>
+      <div style="margin-top:.75rem;">
+        <button onclick="document.getElementById('lanModal').style.display='none'" style="padding:.5rem 1.2rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR-Setup Modal -->
+  <div id="qrSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center;overflow-y:auto;">
+    <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:700px;width:95%;margin:2rem auto;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#c084fc;">🏷 QR-Codes pro EVT</h3>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Jeder QR-Code öffnet die EVT-App mit dem richtigen Team vorausgewählt. Ausdrucken und an Weste / Gerät heften.</p>
+      <div id="qrGrid" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:1rem;"></div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="printQrCodes()" style="padding:.5rem 1rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;">🖨 Drucken</button>
+        <button onclick="document.getElementById('qrSetupModal').style.display='none'" style="padding:.5rem 1rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+      </div>
     </div>
   </div>
 

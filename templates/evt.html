@@ -407,8 +407,15 @@
     <div class="alarm-icon">🔔</div>
     <div class="alarm-title" style="color:#f5c842;">TESTALARM</div>
     <div class="alarm-pid-big" style="font-size:1.4rem;margin-bottom:.8rem;" id="testAlarmText">–</div>
-    <div style="font-size:.8rem;color:#ccc;margin-bottom:1.2rem;">
+    <div style="font-size:.8rem;color:#ccc;margin-bottom:.6rem;">
       Dies ist kein echter Einsatz.<br>Quittiere zur Bestätigung.
+    </div>
+    <div style="margin-bottom:1.2rem;padding:.6rem .8rem;background:rgba(0,0,0,.35);border-radius:8px;border:1px solid rgba(245,200,66,0.3);">
+      <div style="font-size:.7rem;color:#a6b3d1;margin-bottom:.3rem;">Startpunkt (teste den Link!):</div>
+      <a id="testAlarmW3w" href="https://what3words.com/{{ startpunkt_w3w }}" target="_blank"
+         style="color:#4ea1ff;font-size:.95rem;font-weight:600;text-decoration:none;">
+        📍 ///{{ startpunkt_w3w }}
+      </a>
     </div>
     <button class="alarm-dismiss" id="testAlarmDismiss" style="background:#f5c842;color:#000;">✓ Quittieren</button>
   </div>
@@ -507,9 +514,19 @@ setInterval(tick, 1000);
 // ── EVT-Auswahl ───────────────────────────────────────────────
 const evtSelect = document.getElementById('evtSelect');
 
-// Gespeicherte Auswahl laden
-const savedEvt = localStorage.getItem('evt_selected') || '';
-if (savedEvt) evtSelect.value = savedEvt;
+// URL-Parameter ?team=EVT%201 → automatische Vorauswahl
+const _urlTeam = new URLSearchParams(window.location.search).get('team');
+if (_urlTeam) {
+  // Sicherstellen dass die Option existiert
+  for (const opt of evtSelect.options) {
+    if (opt.value === _urlTeam) { evtSelect.value = _urlTeam; break; }
+  }
+  localStorage.setItem('evt_selected', evtSelect.value);
+}
+
+// Gespeicherte Auswahl laden (URL-Parameter hat Vorrang)
+const savedEvt = _urlTeam || localStorage.getItem('evt_selected') || '';
+if (savedEvt && !_urlTeam) evtSelect.value = savedEvt;
 
 evtSelect.addEventListener('change', () => {
   _unlockAudio();  // Audio-Context beim ersten Tippen entsperren

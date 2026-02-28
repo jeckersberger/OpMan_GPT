@@ -143,6 +143,7 @@ def create_app():
             "w3w_alarm": "///geiger.kerzen.besonders",
             "lat": 49.379595, "lng": 11.208106,
             "rmi_soll": "312", "sk_soll": "1-3", "pzc_soll": "312621,312622,312623",
+            "abcd_soll": {"A": 1, "B": 2, "C": 1, "D": 1},
             "besonderheit": "Adressfalle: Alarmadresse falsch. Korrektur erst nach Rückmeldung 'keine Lage'.",
         },
         "P4": {

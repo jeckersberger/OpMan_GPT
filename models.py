@@ -20,6 +20,7 @@ class CaseDoc(db.Model):
     rmi_reported   = db.Column(db.String(20),  nullable=True)
     sk_reported    = db.Column(db.String(5),   nullable=True)
     pzc_reported   = db.Column(db.String(20),  nullable=True)
+    abcde_schema   = db.Column(db.Text,        nullable=True)   # ABCDE-Schema bei SK1
     zielklinik     = db.Column(db.String(120), nullable=True)
 
     notes          = db.Column(db.Text,        nullable=True)

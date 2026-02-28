@@ -350,7 +350,7 @@ def create_app():
         data = request.get_json(force=True)
 
         for field in ("assigned_evt", "rmi_reported", "sk_reported",
-                      "pzc_reported", "zielklinik", "notes"):
+                      "pzc_reported", "abcde_schema", "zielklinik", "notes"):
             if field in data:
                 setattr(doc, field, (data[field] or "").strip() or None)
 
@@ -1154,6 +1154,7 @@ def serialize_casedoc(d: CaseDoc):
         "rmi_reported":  d.rmi_reported,
         "sk_reported":   d.sk_reported,
         "pzc_reported":  d.pzc_reported,
+        "abcde_schema":  d.abcde_schema,
         "zielklinik":    d.zielklinik,
         "notes":         d.notes,
         "completed":     d.completed,

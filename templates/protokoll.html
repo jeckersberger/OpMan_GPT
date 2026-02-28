@@ -794,7 +794,12 @@ function buildCaseCard(pid) {
     <div class="form-row">
       <div><label class="form-label">PZC (ist)</label>
         <input id="pzc_${pid}" type="text" placeholder="${esc(meta.pzc_soll||'–')}"
-          value="${esc(doc.pzc_reported||'')}" oninput="debounceSave('${pid}')"></div>
+          value="${esc(doc.pzc_reported||'')}" oninput="onPzcInput('${pid}')"></div>
+    </div>
+    <div id="abcde_wrap_${pid}" style="display:${(doc.pzc_reported||'').endsWith('1')?'block':'none'}">
+      <label class="form-label">ABCDE-Schema (bei SK1 Pflicht)</label>
+      <textarea id="abcde_${pid}" placeholder="A: Atemweg frei / verlegt&#10;B: Atmung (AF, SpO2, Auskultation)&#10;C: Kreislauf (HF, RR, Rekapzeit)&#10;D: Neurologie (GCS, Pupillen, BZ)&#10;E: Exploration (Verletzungen, Temperatur)"
+        oninput="debounceSave('${pid}')" style="min-height:6rem;">${esc(doc.abcde_schema||'')}</textarea>
     </div>
     <div><label class="form-label">Zielklinik</label>
       <input id="klinik_${pid}" type="text" placeholder="Klinik…"
@@ -863,9 +868,10 @@ async function toggleDone(pid) {
 async function saveCase(pid) {
   const payload={
     assigned_evt: document.getElementById('evt_'+pid)?.value||null,
-    pzc_reported: document.getElementById('pzc_'+pid)?.value||null,
-    zielklinik:   document.getElementById('klinik_'+pid)?.value||null,
-    notes:        document.getElementById('notes_'+pid)?.value||null,
+    pzc_reported:  document.getElementById('pzc_'+pid)?.value||null,
+    abcde_schema:  document.getElementById('abcde_'+pid)?.value||null,
+    zielklinik:    document.getElementById('klinik_'+pid)?.value||null,
+    notes:         document.getElementById('notes_'+pid)?.value||null,
   };
   const res=await fetch(`/api/casedocs/${pid}`,{
     method:'PATCH', headers:{'Content-Type':'application/json'},
@@ -874,6 +880,12 @@ async function saveCase(pid) {
   if(res.ok){ caseDocs[pid]=await res.json(); flashSaved(pid); refreshEvalRow(pid); renderAlarmGrid(); }
 }
 function debounceSave(pid){ clearTimeout(debTimers[pid]); debTimers[pid]=setTimeout(()=>saveCase(pid),800); }
+function onPzcInput(pid){
+  const val=(document.getElementById('pzc_'+pid)?.value||'').trim();
+  const wrap=document.getElementById('abcde_wrap_'+pid);
+  if(wrap) wrap.style.display=val.endsWith('1')?'block':'none';
+  debounceSave(pid);
+}
 function flashSaved(pid){ const el=document.getElementById('saved_'+pid); if(!el)return; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); }
 
 function refreshEvalRow(pid) {
@@ -888,7 +900,16 @@ function refreshEvalRow(pid) {
     return `<span class="eval-badge ${ok?'ok':'fail'}">${l}: ${esc(r)} ${ok?'✓':'≠'+opts[0]}</span>`;
   }
   const el=document.getElementById('eval_'+pid);
-  if(el) el.innerHTML=eb('PZC',doc.pzc_reported,meta.pzc_soll);
+  let html=eb('PZC',doc.pzc_reported,meta.pzc_soll);
+  // Bei SK1 (PZC endet auf 1): ABCDE-Schema Pflicht
+  const pzc=(doc.pzc_reported||'').trim();
+  if(pzc.endsWith('1')){
+    const has=!!(doc.abcde_schema||'').trim();
+    html+=has
+      ?'<span class="eval-badge ok">ABCDE ✓</span>'
+      :'<span class="eval-badge fail">ABCDE fehlt</span>';
+  }
+  if(el) el.innerHTML=html;
 }
 
 /* ── Team Progress ───────────────────────────────────────── */

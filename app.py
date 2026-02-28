@@ -185,6 +185,7 @@ def create_app():
             "ALTER TABLE teams ADD COLUMN gps_updated_at DATETIME",
             "ALTER TABLE teams ADD COLUMN test_alarm_at DATETIME",
             "ALTER TABLE teams ADD COLUMN test_alarm_text VARCHAR(200)",
+            "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:

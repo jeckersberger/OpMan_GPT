@@ -41,6 +41,13 @@
     .case-item .cbadge { font-size:.65rem; padding:.1rem .35rem; border-radius:3px; flex-shrink:0; }
     .cbadge.full  { background:#1a3a1a; color:var(--green); border:1px solid var(--green); }
     .cbadge.empty { background:#2a1a00; color:var(--yellow); border:1px solid var(--yellow); }
+    .case-item.case-inactive { opacity:.45; }
+    .toggle-active {
+      font-size:.62rem; padding:.1rem .35rem; border-radius:3px; flex-shrink:0;
+      cursor:pointer; border:1px solid; background:transparent; font-family:inherit;
+    }
+    .toggle-active.on  { color:var(--green); border-color:var(--green); }
+    .toggle-active.off { color:#555; border-color:#444; }
 
     /* ── Editor ── */
     .editor { flex:1; padding:1.5rem 2rem; overflow-y:auto; }
@@ -144,13 +151,18 @@
       <a href="/cases/new" style="font-size:.75rem;padding:.2rem .5rem;">+ Neu</a>
     </div>
     {% for c in cases %}
-    <div class="case-item {% if editing is defined and editing.id == c.id %}active{% endif %}"
+    <div class="case-item {% if editing is defined and editing.id == c.id %}active{% endif %} {% if not c.active %}case-inactive{% endif %}"
          onclick="location.href='/cases/{{ c.id }}/edit'">
       <span class="cid">{{ c.id }}</span>
       <span class="ctitle">{{ c.schlagwort or '—' }}</span>
       <span class="cbadge {% if c.vitals_json and c.abcde_json %}full{% else %}empty{% endif %}">
         {% if c.vitals_json and c.abcde_json %}✓{% else %}leer{% endif %}
       </span>
+      <button class="toggle-active {% if c.active %}on{% else %}off{% endif %}"
+              title="{% if c.active %}Für Übung deaktivieren{% else %}Für Übung aktivieren{% endif %}"
+              onclick="event.stopPropagation(); toggleActive('{{ c.id }}', {{ 'false' if c.active else 'true' }}, this)">
+        {% if c.active %}● Aktiv{% else %}○ Inaktiv{% endif %}
+      </button>
     </div>
     {% else %}
     <div style="padding:1rem;color:var(--muted);font-size:.8rem;">Noch keine Fälle. Anlegen oder importieren.</div>
@@ -523,6 +535,32 @@ async function doImport() {
   } catch(e) {
     result.style.color='#f55'; result.textContent='Netzwerkfehler: ' + e;
   }
+}
+
+async function toggleActive(cid, newActive, btn) {
+  try {
+    const r = await fetch(`/api/cases/${cid}/active`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: newActive === true || newActive === 'true' }),
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const item = btn.closest('.case-item');
+    if (data.active) {
+      btn.textContent = '● Aktiv';
+      btn.className = 'toggle-active on';
+      btn.title = 'Für Übung deaktivieren';
+      btn.setAttribute('onclick', `event.stopPropagation(); toggleActive('${cid}', false, this)`);
+      item.classList.remove('case-inactive');
+    } else {
+      btn.textContent = '○ Inaktiv';
+      btn.className = 'toggle-active off';
+      btn.title = 'Für Übung aktivieren';
+      btn.setAttribute('onclick', `event.stopPropagation(); toggleActive('${cid}', true, this)`);
+      item.classList.add('case-inactive');
+    }
+  } catch(e) { console.error(e); }
 }
 
 </script>

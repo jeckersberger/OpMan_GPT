@@ -123,6 +123,7 @@ def create_app():
             "w3w": "///erstes.arbeitswelt.spülmittel", "w3w_alarm": None,
             "lat": 49.377493, "lng": 11.206863,
             "rmi_soll": "211", "sk_soll": "1", "pzc_soll": "211271",
+            "abcd_soll": {"A": 1, "B": 2, "C": 4, "D": 2},
             "besonderheit": "Pflichtfall ABCD-Schema (SK1). RD + POL auf Anfahrt.",
         },
         "P2": {
@@ -132,6 +133,7 @@ def create_app():
             "w3w": "///vorweisen.kanone.möchte", "w3w_alarm": None,
             "lat": 49.377035, "lng": 11.202390,
             "rmi_soll": "272", "sk_soll": "1-3", "pzc_soll": "272191,272192,272193",
+            "abcd_soll": {"A": 1, "B": 1, "C": 1, "D": 1},
             "besonderheit": "Name in Alarmierung falsch (Lisa Schneider). Buchstabieren erforderlich.",
         },
         "P3": {

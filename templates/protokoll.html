@@ -151,6 +151,15 @@
     .save-indicator { font-size:.7rem; color:var(--green); opacity:0; transition:opacity .4s; }
     .save-indicator.show { opacity:1; }
 
+    /* ABCD Buttons */
+    .abcd-btn {
+      width:2.2rem; height:2.2rem; border-radius:8px; border:2px solid var(--border);
+      background:var(--panel2); color:var(--muted); font-weight:800; font-size:.9rem;
+      cursor:pointer; font-family:inherit; transition:all .15s;
+    }
+    .abcd-btn:hover { border-color:var(--accent); }
+    .abcd-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
     /* ── Nachbesprechungs-Tabelle ── */
     .nbr-wrap { overflow-x:auto; }
     table.nbr-table {
@@ -781,6 +790,7 @@ function buildCaseCard(pid) {
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
     <div class="soll-row">
       <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
+      ${meta.abcd_soll?`<span class="soll-chip">ABCD: ${meta.abcd_soll.A}-${meta.abcd_soll.B}-${meta.abcd_soll.C}-${meta.abcd_soll.D}</span>`:''}
     </div>
     <hr class="divider" style="margin:0;">
     <div>
@@ -797,9 +807,19 @@ function buildCaseCard(pid) {
           value="${esc(doc.pzc_reported||'')}" oninput="onPzcInput('${pid}')"></div>
     </div>
     <div id="abcde_wrap_${pid}" style="display:${(doc.pzc_reported||'').endsWith('1')?'block':'none'}">
-      <label class="form-label">ABCDE-Schema (bei SK1 Pflicht)</label>
-      <textarea id="abcde_${pid}" placeholder="A: Atemweg frei / verlegt&#10;B: Atmung (AF, SpO2, Auskultation)&#10;C: Kreislauf (HF, RR, Rekapzeit)&#10;D: Neurologie (GCS, Pupillen, BZ)&#10;E: Exploration (Verletzungen, Temperatur)"
-        oninput="debounceSave('${pid}')" style="min-height:6rem;">${esc(doc.abcde_schema||'')}</textarea>
+      <label class="form-label">ABCD-Schema (bei SK1 Pflicht) – Punkte 1–4</label>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .6rem;align-items:center;">
+        ${['A','B','C','D'].map(letter => {
+          const val = _abcdVal(doc.abcde_schema, letter);
+          return `<span style="font-weight:700;font-size:.9rem;">${letter}</span>
+          <div style="display:flex;gap:.35rem;">
+            ${[1,2,3,4].map(n =>
+              `<button type="button" class="abcd-btn${val==n?' active':''}"
+                onclick="setAbcd('${pid}','${letter}',${n})">${n}</button>`
+            ).join('')}
+          </div>`;
+        }).join('')}
+      </div>
     </div>
     <div><label class="form-label">Zielklinik</label>
       <input id="klinik_${pid}" type="text" placeholder="Klinik…"
@@ -865,11 +885,43 @@ async function toggleDone(pid) {
   }
 }
 
+// ABCD-Schema Helfer
+function _parseAbcd(raw) {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch(_) { return {}; }
+}
+function _abcdVal(raw, letter) {
+  return _parseAbcd(raw)[letter] || 0;
+}
+function _getAbcdJson(pid) {
+  const doc = caseDocs[pid] || {};
+  const obj = _parseAbcd(doc.abcde_schema);
+  // Nur speichern wenn mindestens ein Wert gesetzt
+  return Object.keys(obj).length ? JSON.stringify(obj) : null;
+}
+function setAbcd(pid, letter, val) {
+  const doc = caseDocs[pid] || {};
+  const obj = _parseAbcd(doc.abcde_schema);
+  obj[letter] = val;
+  doc.abcde_schema = JSON.stringify(obj);
+  caseDocs[pid] = doc;
+  // Buttons aktualisieren
+  const wrap = document.getElementById('abcde_wrap_' + pid);
+  if (wrap) {
+    wrap.querySelectorAll('.abcd-btn').forEach(btn => {
+      const row = btn.parentElement.previousElementSibling?.textContent?.trim();
+      const n = parseInt(btn.textContent);
+      btn.classList.toggle('active', row === letter && n === val);
+    });
+  }
+  debounceSave(pid);
+}
+
 async function saveCase(pid) {
   const payload={
     assigned_evt: document.getElementById('evt_'+pid)?.value||null,
     pzc_reported:  document.getElementById('pzc_'+pid)?.value||null,
-    abcde_schema:  document.getElementById('abcde_'+pid)?.value||null,
+    abcde_schema:  _getAbcdJson(pid),
     zielklinik:    document.getElementById('klinik_'+pid)?.value||null,
     notes:         document.getElementById('notes_'+pid)?.value||null,
   };
@@ -901,13 +953,24 @@ function refreshEvalRow(pid) {
   }
   const el=document.getElementById('eval_'+pid);
   let html=eb('PZC',doc.pzc_reported,meta.pzc_soll);
-  // Bei SK1 (PZC endet auf 1): ABCDE-Schema Pflicht
+  // Bei SK1 (PZC endet auf 1): ABCD-Schema Pflicht
   const pzc=(doc.pzc_reported||'').trim();
   if(pzc.endsWith('1')){
-    const has=!!(doc.abcde_schema||'').trim();
-    html+=has
-      ?'<span class="eval-badge ok">ABCDE ✓</span>'
-      :'<span class="eval-badge fail">ABCDE fehlt</span>';
+    const obj=_parseAbcd(doc.abcde_schema);
+    const soll=meta.abcd_soll||{};
+    const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
+    const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
+    if(!filled){
+      html+=`<span class="eval-badge fail">ABCD: ${vals} – unvollständig</span>`;
+    } else if(soll.A){
+      const sollStr=['A','B','C','D'].map(l=>soll[l]).join('-');
+      const ok=['A','B','C','D'].every(l=>obj[l]===soll[l]);
+      html+=ok
+        ?`<span class="eval-badge ok">ABCD: ${vals} ✓</span>`
+        :`<span class="eval-badge fail">ABCD: ${vals} ≠${sollStr}</span>`;
+    } else {
+      html+=`<span class="eval-badge ok">ABCD: ${vals} ✓</span>`;
+    }
   }
   if(el) el.innerHTML=html;
 }

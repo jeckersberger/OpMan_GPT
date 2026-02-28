@@ -427,7 +427,11 @@ let selectedEvt   = '';
 let currentTeamId = null;
 let currentRs     = null;
 let pollHandle    = null;
-let seenAlarms    = new Set();  // in-memory; resets on page load → EVT sieht Alarm erneut
+// Quittierte Alarme persistent speichern (kein erneutes Overlay nach Reload)
+let seenAlarms = new Set(JSON.parse(localStorage.getItem('evt_seenAlarms') || '[]'));
+function _persistSeenAlarms() {
+  localStorage.setItem('evt_seenAlarms', JSON.stringify([...seenAlarms]));
+}
 
 // ── HTML escaping ────────────────────────────────────────────
 function esc(s) {
@@ -679,6 +683,7 @@ let _alarmDoc = null;
 function triggerAlarm(doc, meta) {
   const key = `${doc.id}:${doc.alarm_time}`;
   seenAlarms.add(key);  // schon jetzt als gesehen markieren, verhindert Doppelt-Anzeige
+  _persistSeenAlarms();
 
   _playAlarmTone();  // spielt in Schleife bis quittiert
   if (navigator.vibrate) navigator.vibrate([400, 120, 400, 120, 800, 500, 400, 120, 400, 120, 800]);
@@ -716,12 +721,13 @@ document.getElementById('alarmDismiss').addEventListener('click', async () => {
 });
 
 // ── Testalarm ────────────────────────────────────────────────
-let _testAlarmShown = null;  // timestamp-string des aktuellen Testalarms
+let _testAlarmShown = localStorage.getItem('evt_testAlarmShown') || null;
 
 function showTestAlarm(team) {
   const key = team.test_alarm_at;
   if (_testAlarmShown === key) return;  // bereits angezeigt
   _testAlarmShown = key;
+  localStorage.setItem('evt_testAlarmShown', key);
   _playTestAlarmTone();  // spielt in Schleife
   if (navigator.vibrate) navigator.vibrate([300, 100, 300, 500, 300, 100, 300]);
   document.getElementById('testAlarmText').textContent = team.test_alarm_text || 'Testalarm';
@@ -741,6 +747,7 @@ document.getElementById('testAlarmDismiss').addEventListener('click', async () =
     ]);
   }
   _testAlarmShown = null;
+  localStorage.removeItem('evt_testAlarmShown');
 });
 
 // ── Render ───────────────────────────────────────────────────

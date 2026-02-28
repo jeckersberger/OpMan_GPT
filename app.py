@@ -818,8 +818,8 @@ function show(id){
                         _cfg = db.session.get(ExerciseConfig, 1)
                         _total = _cfg.evt_count if _cfg else 6
                         _globally_done = len(_evts) >= _total
-                        if _globally_done:
-                            # Alle EVTs durch → global abschließen
+                        if _globally_done or _doc.completed:
+                            # Alle EVTs durch ODER manuell als fertig markiert
                             _doc.completed = True
                         else:
                             # Noch weitere EVTs → Felder zurücksetzen für nächsten Einsatz

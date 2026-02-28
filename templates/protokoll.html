@@ -674,7 +674,7 @@ function renderAlarmGrid() {
       <span class="${pidCls}" id="apid_${pid}">${pid}</span>
       <select id="aevt_${pid}"${completed?' disabled':''}>${evtOpts}</select>
       <button class="btn ${completed?'btn-success':alarmed?'btn-ghost':'btn-warn'} btn-sm"
-        onclick="alarmCase('${pid}')">
+        onclick="alarmCase('${pid}')" ${completed?'disabled':''}>
         ${completed?'✓ Fertig':alarmed?'✓ '+esc(fmtTime(doc.alarm_time)):'🔔 Alarm'}
       </button>
       ${completed?`<span class="alarm-done-label">⛔ Station erledigt</span>`:''}
@@ -684,6 +684,7 @@ function renderAlarmGrid() {
 
 async function alarmCase(pid) {
   const doc = caseDocs[pid]||{};
+  if (doc.completed) { alert(`${pid} ist als fertig markiert – keine Alarmierung mehr möglich.`); return; }
   if (doc.alarm_time && !confirm(`${pid} wurde bereits um ${fmtTime(doc.alarm_time)} alarmiert. Erneut stempeln?`)) return;
 
   const evt = document.getElementById('aevt_'+pid)?.value || null;

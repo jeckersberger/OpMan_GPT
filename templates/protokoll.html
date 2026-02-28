@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Funkprotokoll – BRK Übung Feucht</title>
+  <style>
+    :root {
+      --bg:      #0b1220;
+      --panel:   #111b2e;
+      --panel2:  #162035;
+      --text:    #e7eefc;
+      --accent:  #4ea1ff;
+      --green:   #3ddc84;
+      --yellow:  #f5c842;
+      --red:     #ff4f4f;
+      --orange:  #ff9f43;
+      --muted:   #a6b3d1;
+      --border:  #223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+    /* ── Topbar ── */
+    .topbar {
+      display:flex; align-items:center; gap:.75rem; padding:0 1.1rem;
+      height:52px; background:var(--panel); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:100;
+    }
+    .topbar a.back {
+      color:var(--accent); text-decoration:none; font-size:.82rem;
+      padding:.28rem .65rem; border:1px solid var(--accent); border-radius:6px; white-space:nowrap;
+    }
+    .topbar a.back:hover { background:rgba(78,161,255,.12); }
+    .topbar h1 { font-size:.95rem; font-weight:700; flex:1; }
+    .topbar .clock { font-size:.8rem; color:var(--muted); white-space:nowrap; }
+
+    .btn {
+      padding:.32rem .7rem; border-radius:6px; border:none; cursor:pointer;
+      font-size:.8rem; font-family:inherit; font-weight:600; transition:opacity .15s; white-space:nowrap;
+    }
+    .btn:hover { opacity:.85; }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-success { background:var(--green);  color:#000; }
+    .btn-warn    { background:var(--yellow); color:#000; }
+    .btn-danger  { background:var(--red);    color:#fff; }
+    .btn-ghost   { background:transparent; color:var(--muted); border:1px solid var(--border); }
+    .btn-orange  { background:var(--orange); color:#000; }
+    .btn-sm      { padding:.2rem .45rem; font-size:.74rem; }
+
+    /* ── Sections ── */
+    .section { padding:1rem 1.1rem; }
+    .section-title {
+      font-size:.8rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+      color:var(--muted); margin-bottom:.65rem; display:flex; align-items:center; gap:.5rem;
+    }
+    .section-title.collapsible { cursor:pointer; user-select:none; }
+    .section-title.collapsible:hover { color:var(--text); }
+    .collapse-arrow { transition:transform .2s; display:inline-block; }
+    .collapse-arrow.open { transform:rotate(90deg); }
+    .collapsible-body { overflow:hidden; transition:max-height .25s ease; }
+
+    hr.divider { border:none; border-top:1px solid var(--border); margin:0 1.1rem; }
+
+    /* ── EVT Board ── */
+    .evt-board { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.5rem; }
+    .evt-card {
+      background:var(--panel); border:1px solid var(--border); border-radius:8px;
+      padding:.55rem .75rem;
+    }
+    .evt-card .name  { font-weight:700; font-size:.88rem; }
+    .evt-card .sbadge {
+      display:inline-block; margin-top:.22rem; padding:.1rem .45rem;
+      border-radius:10px; font-size:.7rem; font-weight:600;
+      background:var(--panel2); color:var(--muted);
+    }
+    .evt-card.s1 .sbadge,.evt-card.s2 .sbadge { background:#1a3a20; color:var(--green); }
+    .evt-card.s3 .sbadge  { background:#2a2000; color:var(--yellow); }
+    .evt-card.s4 .sbadge  { background:#1a2a3a; color:var(--accent); }
+    .evt-card.s7 .sbadge,.evt-card.s8 .sbadge { background:#2a1a00; color:var(--orange); }
+    .evt-card.s0 .sbadge,.evt-card.s5 .sbadge { background:#3a1a1a; color:var(--red); }
+
+    /* ── Schnell-Alarm ── */
+    .alarm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.6rem; }
+    .alarm-row {
+      display:flex; align-items:center; gap:.5rem;
+      background:var(--panel); border:1px solid var(--border); border-radius:8px;
+      padding:.5rem .7rem;
+    }
+    .alarm-pid {
+      font-weight:800; font-size:.95rem; min-width:28px;
+      background:var(--accent); color:#fff; border-radius:5px;
+      padding:.05rem .35rem; text-align:center;
+    }
+    .alarm-pid.alarmed { background:var(--green); color:#000; }
+    .alarm-row select { flex:1; }
+    .alarm-text {
+      font-size:.7rem; color:var(--muted); margin-top:.2rem;
+      display:none; grid-column:1/-1; line-height:1.5; font-style:italic;
+    }
+    .alarm-text.show { display:block; }
+
+    /* ── Case Grid ── */
+    .case-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:.85rem; }
+    .case-card { background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .case-card.done { border-color:var(--green); opacity:.85; }
+    .case-header {
+      display:flex; align-items:center; gap:.55rem; padding:.6rem .8rem;
+      background:var(--panel2); border-bottom:1px solid var(--border);
+    }
+    .case-id { font-size:.95rem; font-weight:800; background:var(--accent); color:#fff; padding:.08rem .48rem; border-radius:5px; flex-shrink:0; }
+    .case-id.done { background:var(--green); color:#000; }
+    .case-title   { font-size:.8rem; font-weight:600; flex:1; }
+    .case-body    { padding:.7rem .8rem; display:flex; flex-direction:column; gap:.5rem; }
+    .case-meta    { display:grid; grid-template-columns:1fr 1fr; gap:.2rem .5rem; font-size:.76rem; color:var(--muted); }
+    .case-meta span b { color:var(--text); }
+    .hint-box {
+      font-size:.72rem; background:rgba(245,200,66,.07);
+      border:1px solid rgba(245,200,66,.25); border-radius:6px; padding:.32rem .5rem; color:#c8a800;
+    }
+    .soll-row { display:flex; gap:.4rem; flex-wrap:wrap; font-size:.73rem; }
+    .soll-chip { padding:.15rem .45rem; border-radius:10px; background:rgba(78,161,255,.1); border:1px solid rgba(78,161,255,.25); color:var(--accent); }
+
+    label.form-label { font-size:.72rem; color:var(--muted); display:block; margin-bottom:.15rem; }
+    .form-row { display:flex; gap:.45rem; align-items:flex-end; flex-wrap:wrap; }
+    .form-row > div { flex:1; min-width:100px; }
+    input,select,textarea {
+      width:100%; padding:.32rem .45rem; border-radius:6px; border:1px solid var(--border);
+      background:#0d1525; color:var(--text); font-size:.78rem; font-family:inherit;
+    }
+    textarea { resize:vertical; min-height:48px; }
+    input:focus,select:focus,textarea:focus { outline:none; border-color:var(--accent); }
+
+    /* Timestamps */
+    .ts-row { display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+    .ts-chip {
+      display:flex; align-items:center; gap:.28rem; font-size:.72rem;
+      background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:.18rem .4rem;
+    }
+    .ts-chip .ts-label { color:var(--muted); }
+    .ts-chip .ts-val   { font-weight:700; }
+    .ts-chip .ts-val.empty { color:var(--border); }
+
+    /* Eval */
+    .eval-row { display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+    .eval-badge { display:inline-flex; align-items:center; gap:.2rem; font-size:.72rem; padding:.12rem .45rem; border-radius:10px; }
+    .eval-badge.ok   { background:rgba(61,220,132,.12); color:var(--green); border:1px solid rgba(61,220,132,.3); }
+    .eval-badge.fail { background:rgba(255,79,79,.1);   color:var(--red);   border:1px solid rgba(255,79,79,.3); }
+    .eval-badge.na   { background:rgba(166,179,209,.07); color:var(--muted); border:1px solid var(--border); }
+
+    .save-indicator { font-size:.7rem; color:var(--green); opacity:0; transition:opacity .4s; }
+    .save-indicator.show { opacity:1; }
+
+    /* ABCD Buttons */
+    .abcd-btn {
+      width:2.2rem; height:2.2rem; border-radius:8px; border:2px solid var(--border);
+      background:var(--panel2); color:var(--muted); font-weight:800; font-size:.9rem;
+      cursor:pointer; font-family:inherit; transition:all .15s;
+    }
+    .abcd-btn:hover { border-color:var(--accent); }
+    .abcd-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+    /* ── Nachbesprechungs-Tabelle ── */
+    .nbr-wrap { overflow-x:auto; }
+    table.nbr-table {
+      width:100%; border-collapse:collapse; font-size:.76rem;
+      background:var(--panel); border-radius:8px; overflow:hidden;
+    }
+    table.nbr-table th {
+      background:var(--panel2); color:var(--muted); text-align:left;
+      padding:.45rem .6rem; font-weight:600; font-size:.7rem;
+      text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border);
+    }
+    table.nbr-table td { padding:.42rem .6rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+    table.nbr-table tr:last-child td { border-bottom:none; }
+    table.nbr-table tr:hover td { background:rgba(255,255,255,.02); }
+    .nbr-ok   { color:var(--green); font-weight:700; }
+    .nbr-fail { color:var(--red);   font-weight:700; }
+    .nbr-na   { color:var(--muted); }
+    .nbr-pid  { font-weight:800; }
+    .nbr-dur  { font-size:.7rem; color:var(--muted); }
+    .score-bar {
+      display:inline-block; height:8px; border-radius:4px;
+      background:var(--green); margin-left:.4rem; vertical-align:middle;
+    }
+
+    /* ── Zeitleiste ── */
+    .tl-container { display:flex; flex-direction:column; gap:.4rem; }
+    .tl-row { display:grid; grid-template-columns:40px 1fr; gap:.5rem; align-items:center; }
+    .tl-label { font-weight:800; font-size:.82rem; color:var(--text); text-align:right; }
+    .tl-track {
+      position:relative; height:22px;
+      background:var(--panel2); border:1px solid var(--border); border-radius:4px; overflow:visible;
+    }
+    .tl-seg {
+      position:absolute; top:2px; bottom:2px; border-radius:3px;
+      transition:opacity .2s;
+    }
+    .tl-seg:hover { opacity:.8; }
+    .tl-seg.seg-alarm    { background:rgba(245,200,66,.6); }
+    .tl-seg.seg-vor-ort  { background:rgba(78,161,255,.6); }
+    .tl-seg.seg-transport{ background:rgba(255,159,67,.6); }
+    .tl-marker {
+      position:absolute; top:-5px; width:14px; height:14px;
+      border-radius:50%; display:flex; align-items:center; justify-content:center;
+      font-size:.55rem; font-weight:800; transform:translateX(-50%);
+      z-index:2; cursor:default;
+    }
+    .tl-marker.mk-alarm { background:var(--yellow); color:#000; }
+    .tl-marker.mk-s4    { background:var(--accent); color:#fff; }
+    .tl-marker.mk-s8    { background:var(--green);  color:#000; }
+    .tl-axis-row { display:grid; grid-template-columns:40px 1fr; gap:.5rem; }
+    .tl-axis { position:relative; height:16px; font-size:.65rem; color:var(--muted); }
+    .tl-legend { display:flex; gap:.8rem; font-size:.72rem; color:var(--muted); margin-top:.5rem; flex-wrap:wrap; }
+    .tl-legend span { display:flex; align-items:center; gap:.3rem; }
+    .tl-legend-dot { width:12px; height:8px; border-radius:2px; }
+
+    /* ── Funkprotokoll ── */
+    .log-form {
+      display:grid; grid-template-columns:1fr 1fr 1fr 90px 70px 1fr auto;
+      gap:.45rem; align-items:end;
+      background:var(--panel); border:1px solid var(--border); border-radius:8px;
+      padding:.7rem; margin-bottom:.7rem;
+    }
+    @media (max-width:1100px) { .log-form { grid-template-columns:1fr 1fr; } }
+    .log-list { display:flex; flex-direction:column; gap:.3rem; }
+    .log-entry {
+      display:grid;
+      grid-template-columns:72px 115px 90px 60px 45px 1fr 24px;
+      gap:.35rem; align-items:start;
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:7px; padding:.4rem .65rem; font-size:.76rem;
+    }
+    @media (max-width:1000px) { .log-entry { grid-template-columns:1fr; } }
+    .log-entry .l-ts   { color:var(--muted); font-size:.7rem; }
+    .log-entry .l-from { font-weight:700; }
+    .log-entry .l-to   { color:var(--muted); }
+    .log-entry .l-fms  {
+      display:inline-block; padding:.08rem .35rem; border-radius:10px;
+      background:rgba(78,161,255,.1); color:var(--accent); font-weight:700; font-size:.7rem;
+    }
+    .log-entry .l-ref  {
+      display:inline-block; padding:.08rem .35rem; border-radius:10px;
+      background:rgba(61,220,132,.08); color:var(--green); font-size:.7rem; font-weight:700;
+    }
+    .log-entry .l-del  {
+      background:none; border:none; color:var(--muted); cursor:pointer; font-size:.85rem; line-height:1; padding:0;
+    }
+    .log-entry .l-del:hover { color:var(--red); }
+    .log-empty { color:var(--muted); font-size:.82rem; padding:.5rem; }
+    .text-muted { color:var(--muted); font-size:.8rem; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.65);
+      display:none; align-items:center; justify-content:center; z-index:200;
+    }
+    .modal-overlay.show { display:flex; }
+    .modal-box {
+      background:var(--panel); border:1px solid var(--border); border-radius:12px;
+      padding:1.5rem; max-width:420px; width:90%; display:flex; flex-direction:column; gap:.9rem;
+    }
+    .modal-box h2 { font-size:1rem; }
+    .modal-box p  { font-size:.84rem; color:var(--muted); line-height:1.5; }
+    .modal-actions { display:flex; gap:.6rem; justify-content:flex-end; flex-wrap:wrap; }
+
+    /* ── Team Progress ── */
+    .tp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.5rem; }
+    .tp-card {
+      background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:.55rem .75rem;
+      display:flex; flex-direction:column; gap:.35rem;
+    }
+    .tp-card.all-done { border-color:var(--green); background:rgba(61,220,132,.04); }
+    .tp-name { font-weight:700; font-size:.88rem; }
+    .tp-section-label { font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:.2rem; }
+    .station-chips { display:flex; flex-wrap:wrap; gap:.25rem; min-height:18px; }
+    .station-chip { display:inline-block; padding:.1rem .42rem; border-radius:10px; font-size:.72rem; font-weight:600; white-space:nowrap; }
+    .station-chip.done      { background:rgba(61,220,132,.12); color:var(--green);  border:1px solid rgba(61,220,132,.3); }
+    .station-chip.inprogress{ background:rgba(78,161,255,.1);  color:var(--accent); border:1px solid rgba(78,161,255,.3); }
+    .station-chip.open      { background:rgba(166,179,209,.07); color:var(--muted); border:1px solid var(--border); }
+
+    /* ── Alarm completed row ── */
+    .alarm-pid.completed  { background:#1a4a2a; color:var(--green); text-decoration:line-through; }
+    .alarm-row.done-row   { border-color:var(--green); opacity:.8; }
+    .alarm-done-label     { font-size:.68rem; color:var(--green); white-space:nowrap; }
+
+    /* ── EVT count selector ── */
+    .evt-count-sel {
+      display:flex; align-items:center; gap:.4rem; font-size:.78rem; color:var(--muted); margin-left:auto;
+    }
+    .evt-count-sel select { width:56px; padding:.15rem .3rem; }
+
+    /* ── Sprechwunsch-Panel ── */
+    .sw-panel{position:fixed;bottom:1.25rem;right:1.25rem;z-index:500;width:310px;
+      background:var(--panel);border:1px solid var(--border);border-radius:10px;
+      box-shadow:0 6px 30px rgba(0,0,0,.55);overflow:hidden;
+      transform:translateX(120%);opacity:0;pointer-events:none;
+      transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .25s ease;}
+    .sw-panel.sw-visible{transform:translateX(0);opacity:1;pointer-events:auto;}
+    .sw-header{display:flex;align-items:center;gap:.5rem;padding:.45rem .85rem;
+      font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+      background:rgba(245,200,66,.1);color:#f5c842;border-bottom:1px solid rgba(245,200,66,.18);}
+    .sw-list{list-style:none;margin:0;padding:0;max-height:320px;overflow-y:auto;}
+    .sw-item{display:flex;align-items:center;gap:.55rem;padding:.42rem .8rem;
+      border-bottom:1px solid var(--border);transition:background .15s;}
+    .sw-item:last-child{border-bottom:none;}
+    .sw-item.s0{background:rgba(255,79,79,.13);border-left:3px solid #ff4f4f;}
+    .sw-item.s5{background:rgba(245,200,66,.04);border-left:3px solid transparent;}
+    .sw-badge{font-size:.72rem;font-weight:800;padding:.12rem .4rem;border-radius:4px;white-space:nowrap;flex-shrink:0;}
+    .sw-badge.s0{background:#3a1212;color:#ff4f4f;border:1px solid rgba(255,79,79,.45);}
+    .sw-badge.s5{background:#2e2600;color:#f5c842;border:1px solid rgba(245,200,66,.4);}
+    .sw-name{font-weight:700;font-size:.85rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .sw-time{font-size:.72rem;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+    .sw-quit{padding:.28rem .55rem;background:transparent;border:1px solid var(--border);
+      border-radius:5px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer;
+      font-family:inherit;white-space:nowrap;flex-shrink:0;
+      transition:background .12s,color .12s,border-color .12s;}
+    .sw-quit:hover{background:rgba(78,161,255,.15);border-color:var(--accent);color:var(--accent);}
+    @media print{ .sw-panel{display:none!important;} }
+
+    /* ── Print ── */
+    @media print {
+      body { background:#fff; color:#000; }
+      .topbar,.no-print { display:none !important; }
+      hr.divider { border-color:#ccc; }
+      .section { padding:.5rem 0; }
+      .case-card,.nbr-table,.tl-track,.log-entry {
+        border:1px solid #ccc; background:#fff; color:#000;
+      }
+      .case-header,.case-body,.nbr-table th { background:#f5f5f5; color:#000; }
+      .case-id,.eval-badge.ok,.nbr-ok { color:#006600; }
+      .eval-badge.fail,.nbr-fail { color:#cc0000; }
+      .soll-chip,.hint-box,.ts-chip { border-color:#ccc; color:#333; background:#f9f9f9; }
+      input,select,textarea { display:none; }
+      .form-label { display:none; }
+      .form-row,.ts-row > .btn { display:none; }
+      .save-indicator { display:none; }
+      .btn { display:none; }
+      .alarm-grid,.alarm-row { display:none; }
+      .evt-board { display:none; }
+      .case-grid { grid-template-columns:1fr 1fr; }
+      .log-entry { grid-template-columns:80px 100px 100px 70px 50px 1fr; }
+      .log-entry .l-del { display:none; }
+      a { color:#000; text-decoration:none; }
+      .log-form { display:none; }
+      .nbr-table { font-size:.7rem; }
+      .tl-seg.seg-alarm    { background:#f0d040 !important; }
+      .tl-seg.seg-vor-ort  { background:#6090cc !important; }
+      .tl-seg.seg-transport{ background:#cc9030 !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<div class="topbar">
+  <a class="back no-print" href="/">← Einsatzleiter</a>
+  <a class="back no-print" href="/evt" style="text-decoration:none;">📱 EVT Mobile</a>
+  <h1>BRK Funkübung Feucht – Übungsprotokoll</h1>
+  <span class="clock" id="clock"></span>
+  <button class="btn btn-ghost no-print" onclick="refreshAll()">⟳</button>
+  <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Drucken</button>
+  <button class="btn btn-danger no-print" onclick="showResetModal()">↺ Reset</button>
+</div>
+
+<!-- Sprechwunsch-Panel -->
+<div id="swPanel" class="sw-panel no-print"></div>
+
+<!-- ═══ RESET MODAL ═══ -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal-box">
+    <h2>Übung zurücksetzen?</h2>
+    <p>Alle Zeitstempel, Ist-Werte, Zuweisungen und Notizen werden gelöscht. Dies kann nicht rückgängig gemacht werden.</p>
+    <label style="display:flex;align-items:center;gap:.5rem;font-size:.84rem;cursor:pointer;">
+      <input type="checkbox" id="resetLog"> Auch den Funklog löschen
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="hideResetModal()">Abbrechen</button>
+      <button class="btn btn-danger" onclick="doReset()">Ja, zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ EVT STATUS ═══ -->
+<div class="section no-print">
+  <div class="section-title">
+    EVT-Status (Live – alle 10 s)
+  </div>
+  <div class="evt-board" id="evtBoard"><div class="text-muted">Lade…</div></div>
+</div>
+
+<hr class="divider no-print">
+
+<!-- ═══ TEAM PROGRESS ═══ -->
+<div class="section no-print">
+  <div class="section-title collapsible" onclick="toggleSection('tp')">
+    <span class="collapse-arrow" id="arr-tp">▶</span> Trupps – Stationsübersicht
+  </div>
+  <div class="collapsible-body" id="sec-tp" style="max-height:0;">
+    <div id="teamProgressPanel" style="padding-top:.5rem;"></div>
+  </div>
+</div>
+
+<hr class="divider no-print">
+
+<!-- ═══ SCHNELL-ALARM ═══ -->
+<div class="section no-print">
+  <div class="section-title">Schnell-Alarmierung</div>
+  <div class="alarm-grid" id="alarmGrid"></div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ FALLDOKUMENTATION ═══ -->
+<div class="section">
+  <div class="section-title">Falldokumentation P1 – P6</div>
+  <div class="case-grid" id="caseGrid"><div class="text-muted">Lade…</div></div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ NACHBESPRECHUNG ═══ -->
+<div class="section">
+  <div class="section-title collapsible" onclick="toggleSection('nbr')">
+    <span class="collapse-arrow" id="arr-nbr">▶</span> Nachbesprechung &amp; Auswertung
+  </div>
+  <div class="collapsible-body" id="sec-nbr" style="max-height:0;">
+    <div style="padding-top:.5rem;">
+      <div class="section-title" style="margin-bottom:.5rem;">Fallergebnis</div>
+      <div class="nbr-wrap"><table class="nbr-table" id="nbrTable"></table></div>
+      <div class="section-title" style="margin-top:1rem;margin-bottom:.5rem;">Bewertung je EVT-Team</div>
+      <div class="nbr-wrap"><table class="nbr-table" id="evtTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ ZEITLEISTE ═══ -->
+<div class="section">
+  <div class="section-title collapsible" onclick="toggleSection('tl')">
+    <span class="collapse-arrow" id="arr-tl">▶</span> Zeitleiste
+  </div>
+  <div class="collapsible-body" id="sec-tl" style="max-height:0;">
+    <div style="padding-top:.5rem;">
+      <div class="tl-container" id="timeline"></div>
+      <div class="tl-legend">
+        <span><span class="tl-legend-dot" style="background:rgba(245,200,66,.6)"></span>Alarm → S4</span>
+        <span><span class="tl-legend-dot" style="background:rgba(78,161,255,.6)"></span>S4 → S7/S8</span>
+        <span><span class="tl-legend-dot" style="background:rgba(255,159,67,.6)"></span>Transport</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ FUNKPROTOKOLL ═══ -->
+<div class="section">
+  <div class="section-title">Funkprotokoll</div>
+
+  <div class="log-form no-print">
+    <div>
+      <label class="form-label">Von</label>
+      <input id="logSender" type="text" placeholder="Äskulap Feucht / EVT X" list="sList"/>
+      <datalist id="sList">
+        <option value="Äskulap Feucht"/>
+        <option value="EVT 1"/><option value="EVT 2"/><option value="EVT 3"/>
+        <option value="EVT 4"/><option value="EVT 5"/><option value="EVT 6"/>
+      </datalist>
+    </div>
+    <div>
+      <label class="form-label">An</label>
+      <input id="logReceiver" type="text" placeholder="Äskulap Feucht / EVT X" list="rList"/>
+      <datalist id="rList">
+        <option value="Äskulap Feucht"/>
+        <option value="EVT 1"/><option value="EVT 2"/><option value="EVT 3"/>
+        <option value="EVT 4"/><option value="EVT 5"/><option value="EVT 6"/>
+      </datalist>
+    </div>
+    <div>
+      <label class="form-label">Vorlage</label>
+      <select id="logVorlage" onchange="fillVorlage()">
+        <option value="">– Vorlage –</option>
+        <option value="s5">Sprechwunsch (S5)</option>
+        <option value="s0">Dring. Sprechwunsch (S0)</option>
+        <option value="pzc">PZC-Anmeldung</option>
+        <option value="pzc_sk1">PZC-Anmeldung SK1</option>
+        <option value="addr">Adresskorrektur w3w</option>
+        <option value="name">Namenskorrektur + Buchst.</option>
+        <option value="lage">Lagemeldung + Nachforderung</option>
+        <option value="klinik">Zielklinik-Meldung</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Status</label>
+      <select id="logFms">
+        <option value="">–</option>
+        <option value="0">S0 – Dring.</option>
+        <option value="1">S1 – Frei Funk</option>
+        <option value="2">S2 – Frei Wache</option>
+        <option value="3">S3 – Unterwegs</option>
+        <option value="4">S4 – Einsatzst.</option>
+        <option value="5">S5 – Sprechwunsch</option>
+        <option value="6">S6 – Außer Dienst</option>
+        <option value="7">S7 – Transport</option>
+        <option value="8">S8 – Ziel</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Fall</label>
+      <select id="logCase">
+        <option value="">–</option>
+        <option value="P1">P1</option><option value="P2">P2</option>
+        <option value="P3">P3</option><option value="P4">P4</option>
+        <option value="P5">P5</option><option value="P6">P6</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Nachricht / Inhalt</label>
+      <input id="logMsg" type="text" placeholder="Funkspruch oder Notiz…" onkeydown="if(event.key==='Enter')addLogEntry()"/>
+    </div>
+    <div>
+      <label class="form-label">&nbsp;</label>
+      <button class="btn btn-primary" onclick="addLogEntry()">+ Eintrag</button>
+    </div>
+  </div>
+
+  <div class="log-list" id="logList"><div class="log-empty">Keine Einträge.</div></div>
+</div>
+
+<!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
+<script>
+/* ── Statische Übungsdaten ───────────────────────────────── */
+const CASES_META = {{ cases | tojson }};
+
+// Alarmtexte (aus Spickzettel – werden laut vorgelesen)
+const ALARM_TEXTS = {
+  P1: 'Äskulap Feucht an EVT __: Einsatz P1. Schlagwort VU – RD. Polizei auf Anfahrt. Adresse ///erstes.arbeitswelt.spülmittel. Patient: Lennart Voigt, 27 Jahre. Ende.',
+  P2: 'Äskulap Feucht an EVT __: Einsatz P2. Schlagwort Sturz – RD. Adresse ///vorweisen.kanone.möchte. Patient: Lisa Schneider, 19 Jahre. Ende.',
+  P3: 'Äskulap Feucht an EVT __: Einsatz P3. Schlagwort Atemnot – RD. Adresse ///geiger.kerzen.besonders. Patient: Hakan Yilmaz, 62 Jahre. Ende.',
+  P4: 'Äskulap Feucht an EVT __: Einsatz P4. Schlagwort VU – nur RD. Adresse ///zumal.genügt.hellbraun. Patient: Kevin Schäfer, 31 Jahre. Ende.',
+  P5: 'Äskulap Feucht an EVT __: Einsatz P5. Schlagwort Schlaganfall – RD. Adresse ///familienname.haltung.aufdeckung. Patient: Jürgen Krämer, 72 Jahre. Ende.',
+  P6: 'Äskulap Feucht an EVT __: Einsatz P6. Schlagwort Brustschmerz – RD. Adresse ///obernum.kranz.wählen. Patient: Sabine Lutz, 56 Jahre. Ende.',
+};
+
+const VORLAGEN = {
+  s5:     { msg:'S5, kommen.', fms:'5' },
+  s0:     { msg:'S0, kommen.', fms:'0' },
+  pzc:    { msg:'1 Patient [m/w], __ Jahre, PZC ______, Zielklinik ___, Eintreffzeit ca. __ min.', fms:'' },
+  pzc_sk1:{ msg:'1 Patient [m/w], __ Jahre, SK1, PZC ______, A: ___ B: ___ C: ___ D: ___. Zielklinik ___.', fms:'' },
+  addr:   { msg:'Korrektur Einsatzadresse what3words ///wort1.wort2.wort3.', fms:'' },
+  name:   { msg:'Name korrigiert: [Nachname], ich buchstabiere: …', fms:'' },
+  lage:   { msg:'Lagemeldung: Lage ___, Anzahl Patienten ___, Gefahren: ___, Nachforderung: ___.', fms:'0' },
+  klinik: { msg:'Zielklinik: ___. Patient: ___, __ Jahre, PZC ______. Eintreffzeit: ca. __ min.', fms:'' },
+};
+
+const FMS_LABELS = {
+  0:'S0 Dring.SW', 1:'S1 Frei Funk', 2:'S2 Frei Wache',
+  3:'S3 Unterwegs', 4:'S4 Einsatzst.', 5:'S5 Sprechwunsch',
+  6:'S6 Außer Dienst', 7:'S7 Transport', 8:'S8 Ziel'
+};
+
+const AUTO_MSG = {
+  alarm_time:   'Alarmierung ausgegeben',
+  status3_time: 'S3 – Einsatz übernommen',
+  status4_time: 'S4 – Am Einsatzort',
+  status7_time: 'S7 – Patient aufgenommen',
+  status8_time: 'S8 – Am Transportziel',
+};
+const AUTO_FMS = { alarm_time:null, status3_time:3, status4_time:4, status7_time:7, status8_time:8 };
+
+/* ── State ───────────────────────────────────────────────── */
+let caseDocs  = {};
+let teams     = [];
+let logEntries = [];
+let evtCount  = 6;  // Anzahl der teilnehmenden EVT-Teams (konfigurierbar)
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function esc(s) {
+  if (s==null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtTime(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function fmtDur(isoA, isoB) {
+  if (!isoA||!isoB) return null;
+  const s = Math.round((new Date(isoB)-new Date(isoA))/1000);
+  if (s<60) return s+'s';
+  return Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';
+}
+
+/* ── EVT helpers ─────────────────────────────────────────── */
+function evtList() {
+  // Gibt die tatsächlichen Team-Namen aus der DB zurück
+  if (teams && teams.length > 0) return teams.map(t => t.name);
+  // Fallback solange teams noch nicht geladen
+  const out = [];
+  for (let i = 1; i <= evtCount; i++) out.push('EVT ' + i);
+  return out;
+}
+
+function updateDatalistOptions() {
+  const opts = ['<option value="Äskulap Feucht"/>',
+    ...evtList().map(v => `<option value="${v}"/>`)].join('');
+  const sList = document.getElementById('sList');
+  const rList = document.getElementById('rList');
+  if (sList) sList.innerHTML = opts;
+  if (rList) rList.innerHTML = opts;
+}
+
+function applyEvtCount() {
+  evtCount = teams.length || evtCount;
+  updateDatalistOptions();
+}
+
+/* ── Clock ───────────────────────────────────────────────── */
+setInterval(()=>{ document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-DE'); },1000);
+document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-DE');
+
+/* ── Collapsible Sections ────────────────────────────────── */
+const sectionOpen = { nbr:false, tl:false, tp:false };
+function toggleSection(id) {
+  sectionOpen[id] = !sectionOpen[id];
+  const body  = document.getElementById('sec-'+id);
+  const arrow = document.getElementById('arr-'+id);
+  if (sectionOpen[id]) {
+    body.style.maxHeight = body.scrollHeight + 2000 + 'px';
+    arrow.classList.add('open');
+    if (id==='nbr') { renderNachbesprechung(); renderEvtBewertung(); }
+    if (id==='tl')  { renderTimeline(); }
+    if (id==='tp')  { renderTeamProgress(); }
+  } else {
+    body.style.maxHeight = '0';
+    arrow.classList.remove('open');
+  }
+}
+
+/* ── EVT Board ───────────────────────────────────────────── */
+function renderEvtBoard() {
+  const board = document.getElementById('evtBoard');
+  const evts  = teams.filter(t=>/^EVT\s*\d/i.test(t.name))
+                     .sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  if (!evts.length) {
+    board.innerHTML='<div class="text-muted">Keine EVT-Teams in der DB. Im Einsatzleiter anlegen.</div>';
+    return;
+  }
+  board.innerHTML = evts.map(t=>{
+    const rs=t.radio_status;
+    const cls=[0,5].includes(rs)?'s0':`s${rs}`;
+    return `<div class="evt-card ${cls}">
+      <div class="name">${esc(t.name)}</div>
+      <div class="sbadge">${FMS_LABELS[rs]||'S'+rs}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Schnell-Alarm Grid ──────────────────────────────────── */
+function renderAlarmGrid() {
+  const grid = document.getElementById('alarmGrid');
+  grid.innerHTML = ['P1','P2','P3','P4','P5','P6'].map(pid=>{
+    const doc       = caseDocs[pid]||{};
+    const alarmed   = !!doc.alarm_time;
+    const completed = !!doc.completed;
+    const evtOpts   = ['',...evtList()]
+      .map(v=>`<option value="${v}" ${doc.assigned_evt===v?'selected':''}>${v||'– EVT wählen –'}</option>`)
+      .join('');
+    let pidCls = 'alarm-pid';
+    if (completed) pidCls += ' completed';
+    else if (alarmed) pidCls += ' alarmed';
+    return `<div class="alarm-row${completed?' done-row':''}" id="arow_${pid}">
+      <span class="${pidCls}" id="apid_${pid}">${pid}</span>
+      <select id="aevt_${pid}"${completed?' disabled':''}>${evtOpts}</select>
+      <button class="btn ${completed?'btn-success':alarmed?'btn-ghost':'btn-warn'} btn-sm"
+        onclick="alarmCase('${pid}')">
+        ${completed?'✓ Fertig':alarmed?'✓ '+esc(fmtTime(doc.alarm_time)):'🔔 Alarm'}
+      </button>
+      ${completed?`<span class="alarm-done-label">⛔ Station erledigt</span>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function alarmCase(pid) {
+  const doc = caseDocs[pid]||{};
+  if (doc.alarm_time && !confirm(`${pid} wurde bereits um ${fmtTime(doc.alarm_time)} alarmiert. Erneut stempeln?`)) return;
+
+  const evt = document.getElementById('aevt_'+pid)?.value || null;
+  if (!evt) {
+    alert(`Bitte zuerst ein EVT für ${pid} auswählen, bevor alarmiert wird.`);
+    document.getElementById('aevt_'+pid)?.focus();
+    return;
+  }
+
+  // Zeitstempel setzen
+  const stampRes = await fetch(`/api/casedocs/${pid}/stamp`,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({field:'alarm_time'}),
+  });
+  if (!stampRes.ok) return;
+  const updated = await stampRes.json();
+  caseDocs[pid] = updated;
+  if (evt) {
+    const saveRes = await fetch(`/api/casedocs/${pid}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({assigned_evt:evt}),
+    });
+    if (saveRes.ok) caseDocs[pid] = await saveRes.json();
+  }
+
+  // Log-Eintrag
+  const alarmTxt = (ALARM_TEXTS[pid]||`Alarmierung ${pid}`)
+    .replace('EVT __', evt||'EVT __');
+  await fetch('/api/radiolog',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      sender:'Führungsstelle', receiver:evt||null,
+      fms_status:null, case_ref:pid, message:alarmTxt,
+      timestamp:new Date().toISOString(),
+    }),
+  });
+
+  // UI aktualisieren
+  const logRes = await fetch('/api/radiolog');
+  if (logRes.ok) { logEntries=await logRes.json(); renderLogList(); }
+  renderAlarmGrid();
+  // Karte aktualisieren ohne komplett neu zu rendern
+  const card = document.getElementById('card_'+pid);
+  if (card) {
+    const el = document.getElementById(`ts_${pid}_alarm_time`);
+    if (el) { el.textContent=fmtTime(caseDocs[pid].alarm_time)||'–'; el.classList.remove('empty'); }
+    document.getElementById(`apid_${pid}`)?.classList.add('alarmed');
+  }
+}
+
+/* ── Case Grid ───────────────────────────────────────────── */
+function renderCaseGrid() {
+  const grid=document.getElementById('caseGrid');
+  grid.innerHTML=['P1','P2','P3','P4','P5','P6'].map(pid=>buildCaseCard(pid)).join('');
+}
+
+function buildCaseCard(pid) {
+  const meta=CASES_META[pid]||{};
+  const doc =caseDocs[pid]||{};
+  const done=doc.completed;
+  const evtOpts=['',...evtList()]
+    .map(v=>`<option value="${v}" ${doc.assigned_evt===v?'selected':''}>${v||'– nicht zugewiesen –'}</option>`)
+    .join('');
+
+  const tsFields=[
+    {f:'alarm_time',l:'Alarm'},{f:'status3_time',l:'S3'},
+    {f:'status4_time',l:'S4'},{f:'status7_time',l:'S7'},{f:'status8_time',l:'S8'},
+  ];
+  const tsRow=tsFields.map(({f,l})=>{
+    const val=doc[f]; const t=val?fmtTime(val):'–';
+    return `<div class="ts-chip">
+      <span class="ts-label">${l}</span>
+      <span class="ts-val${val?'':' empty'}" id="ts_${pid}_${f}">${t}</span>
+      <button class="btn btn-ghost btn-sm no-print" title="Jetzt stempeln + log"
+        onclick="stampTime('${pid}','${f}')">⏱</button>
+    </div>`;
+  }).join('');
+
+  function eb(label,rep,soll){
+    if(!soll||soll==='—') return `<span class="eval-badge na">${label}: n/a</span>`;
+    if(!rep) return `<span class="eval-badge na">${label}: –</span>`;
+    const ok=rep.trim()===soll.trim();
+    return `<span class="eval-badge ${ok?'ok':'fail'}">${label}: ${esc(rep)} ${ok?'✓':'≠'+soll}</span>`;
+  }
+
+  return `<div class="case-card${done?' done':''}" id="card_${pid}">
+  <div class="case-header">
+    <span class="case-id${done?' done':''}">${pid}</span>
+    <div class="case-title">${esc(meta.schlagwort||'')}</div>
+    <label style="display:flex;align-items:center;gap:.3rem;font-size:.73rem;cursor:pointer;white-space:nowrap;">
+      <input type="checkbox" id="chk_${pid}" ${done?'checked':''} onchange="toggleDone('${pid}')">Fertig
+    </label>
+  </div>
+  <div class="case-body">
+    <div class="case-meta">
+      <span><b>${esc(meta.patient||'–')}</b></span>
+      <span>${meta.alter||'–'} J., ${meta.geschlecht==='m'?'männl.':meta.geschlecht==='w'?'weibl.':'–'}</span>
+      <span style="grid-column:1/-1;font-size:.7rem;">
+        📍 <a href="https://what3words.com/${(meta.w3w||'').replace('///','')}" style="color:var(--accent);text-decoration:none;" target="_blank">${esc(meta.w3w||'–')}</a>
+        ${meta.w3w_alarm?`<span style="color:var(--yellow);margin-left:.4rem;">⚠ Alarm: ${esc(meta.w3w_alarm)}</span>`:''}
+      </span>
+      ${meta.patient_alarm?`<span style="grid-column:1/-1;font-size:.7rem;color:var(--yellow);">⚠ Alarmname: ${esc(meta.patient_alarm)}</span>`:''}
+    </div>
+    ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
+    <div class="soll-row">
+      <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
+      ${meta.abcd_soll?`<span class="soll-chip">ABCD: ${meta.abcd_soll.A}-${meta.abcd_soll.B}-${meta.abcd_soll.C}-${meta.abcd_soll.D}</span>`:''}
+    </div>
+    <hr class="divider" style="margin:0;">
+    <div>
+      <label class="form-label">Zugewiesenes EVT-Team</label>
+      <select id="evt_${pid}" onchange="saveCase('${pid}')"><option value="">– nicht zugewiesen –</option>${evtOpts}</select>
+    </div>
+    <div>
+      <label class="form-label">Zeitstempel (⏱ = jetzt + automatischer Funkeintrag)</label>
+      <div class="ts-row">${tsRow}</div>
+    </div>
+    <div class="form-row">
+      <div><label class="form-label">PZC (ist)</label>
+        <input id="pzc_${pid}" type="text" placeholder="${esc(meta.pzc_soll||'–')}"
+          value="${esc(doc.pzc_reported||'')}" oninput="onPzcInput('${pid}')"></div>
+    </div>
+    <div id="abcde_wrap_${pid}" style="display:${((doc.pzc_reported||'').length>=6&&(doc.pzc_reported||'')[5]==='1')?'block':'none'}">
+      <label class="form-label">ABCD-Schema (bei SK1 Pflicht) – Punkte 1–4</label>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .6rem;align-items:center;">
+        ${['A','B','C','D'].map(letter => {
+          const val = _abcdVal(doc.abcde_schema, letter);
+          return `<span style="font-weight:700;font-size:.9rem;">${letter}</span>
+          <div style="display:flex;gap:.35rem;">
+            ${[1,2,3,4].map(n =>
+              `<button type="button" class="abcd-btn${val==n?' active':''}"
+                onclick="setAbcd('${pid}','${letter}',${n})">${n}</button>`
+            ).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div><label class="form-label">Zielklinik</label>
+      <input id="klinik_${pid}" type="text" placeholder="Klinik…"
+        value="${esc(doc.zielklinik||'')}" oninput="debounceSave('${pid}')"></div>
+    <div><label class="form-label">Notizen / Beobachtungen</label>
+      <textarea id="notes_${pid}" oninput="debounceSave('${pid}')">${esc(doc.notes||'')}</textarea></div>
+    <div class="eval-row" id="eval_${pid}">
+      ${eb('PZC',doc.pzc_reported,meta.pzc_soll)}
+    </div>
+    <div style="display:flex;justify-content:flex-end;">
+      <span class="save-indicator" id="saved_${pid}">✓ gespeichert</span>
+    </div>
+  </div>
+</div>`;
+}
+
+/* ── Stamp + Auto-Log ────────────────────────────────────── */
+const debTimers={};
+async function stampTime(pid, field) {
+  const doc=caseDocs[pid]||{};
+  const evt=doc.assigned_evt||document.getElementById('evt_'+pid)?.value||'';
+  const isSender=(field==='alarm_time');
+  const sender=isSender?'Führungsstelle':(evt||'EVT ?');
+  const receiver=isSender?(evt||'EVT ?'):'Führungsstelle';
+
+  const res=await fetch(`/api/casedocs/${pid}/stamp`,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({field}),
+  });
+  if (!res.ok) return;
+  const updated=await res.json();
+  caseDocs[pid]=updated;
+  const el=document.getElementById(`ts_${pid}_${field}`);
+  if(el){ el.textContent=fmtTime(updated[field])||'–'; el.classList.remove('empty'); }
+
+  // Auto-Funkeintrag
+  await fetch('/api/radiolog',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      sender, receiver,
+      fms_status:AUTO_FMS[field]??null,
+      case_ref:pid,
+      message:AUTO_MSG[field]||field,
+      timestamp:new Date().toISOString(),
+    }),
+  });
+  const logRes=await fetch('/api/radiolog');
+  if(logRes.ok){ logEntries=await logRes.json(); renderLogList(); }
+  // Alarm-Grid aktualisieren wenn alarm_time gestempelt
+  if(field==='alarm_time') renderAlarmGrid();
+}
+
+async function toggleDone(pid) {
+  const checked=document.getElementById('chk_'+pid)?.checked;
+  const res=await fetch(`/api/casedocs/${pid}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({completed:checked}),
+  });
+  if(res.ok){
+    caseDocs[pid]=await res.json();
+    document.getElementById('card_'+pid)?.classList.toggle('done',checked);
+    document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',checked);
+  }
+}
+
+// ABCD-Schema Helfer
+function _parseAbcd(raw) {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch(_) { return {}; }
+}
+function _abcdVal(raw, letter) {
+  return _parseAbcd(raw)[letter] || 0;
+}
+function _getAbcdJson(pid) {
+  const doc = caseDocs[pid] || {};
+  const obj = _parseAbcd(doc.abcde_schema);
+  // Nur speichern wenn mindestens ein Wert gesetzt
+  return Object.keys(obj).length ? JSON.stringify(obj) : null;
+}
+function setAbcd(pid, letter, val) {
+  const doc = caseDocs[pid] || {};
+  const obj = _parseAbcd(doc.abcde_schema);
+  obj[letter] = val;
+  doc.abcde_schema = JSON.stringify(obj);
+  caseDocs[pid] = doc;
+  // Buttons aktualisieren – nur die Zeile des geklickten Buchstabens
+  const wrap = document.getElementById('abcde_wrap_' + pid);
+  if (wrap) {
+    wrap.querySelectorAll('.abcd-btn').forEach(btn => {
+      const row = btn.parentElement.previousElementSibling?.textContent?.trim();
+      if (row !== letter) return;  // andere Zeilen nicht anfassen
+      const n = parseInt(btn.textContent);
+      btn.classList.toggle('active', n === val);
+    });
+  }
+  debounceSave(pid);
+}
+
+async function saveCase(pid) {
+  const payload={
+    assigned_evt: document.getElementById('evt_'+pid)?.value||null,
+    pzc_reported:  document.getElementById('pzc_'+pid)?.value||null,
+    abcde_schema:  _getAbcdJson(pid),
+    zielklinik:    document.getElementById('klinik_'+pid)?.value||null,
+    notes:         document.getElementById('notes_'+pid)?.value||null,
+  };
+  const res=await fetch(`/api/casedocs/${pid}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+  });
+  if(res.ok){ caseDocs[pid]=await res.json(); flashSaved(pid); refreshEvalRow(pid); renderAlarmGrid(); }
+}
+function debounceSave(pid){ clearTimeout(debTimers[pid]); debTimers[pid]=setTimeout(()=>saveCase(pid),800); }
+function onPzcInput(pid){
+  const val=(document.getElementById('pzc_'+pid)?.value||'').trim();
+  const wrap=document.getElementById('abcde_wrap_'+pid);
+  if(wrap) wrap.style.display=(val.length>=6&&val[5]==='1')?'block':'none';
+  // PZC lokal aktualisieren für sofortige Eval-Anzeige
+  const doc=caseDocs[pid]||(caseDocs[pid]={});
+  doc.pzc_reported=val||null;
+  refreshEvalRow(pid);
+  debounceSave(pid);
+}
+function flashSaved(pid){ const el=document.getElementById('saved_'+pid); if(!el)return; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); }
+
+function refreshEvalRow(pid) {
+  const meta=CASES_META[pid]||{};
+  const doc=caseDocs[pid]||{};
+  function eb(l,r,s){
+    if(!s||s==='—') return `<span class="eval-badge na">${l}: n/a</span>`;
+    if(!r) return `<span class="eval-badge na">${l}: –</span>`;
+    // Mehrere Soll-Werte (kommasepariert) unterstützen
+    const opts=s.split(',').map(v=>v.trim());
+    const ok=opts.some(v=>r.trim()===v);
+    return `<span class="eval-badge ${ok?'ok':'fail'}">${l}: ${esc(r)} ${ok?'✓':'≠'+opts[0]}</span>`;
+  }
+  const el=document.getElementById('eval_'+pid);
+  let html=eb('PZC',doc.pzc_reported,meta.pzc_soll);
+  // Bei SK1 (PZC endet auf 1): ABCD-Schema Pflicht
+  const pzc=(doc.pzc_reported||'').trim();
+  if(pzc.length>=6&&pzc[5]==='1'){
+    const obj=_parseAbcd(doc.abcde_schema);
+    const soll=meta.abcd_soll||{};
+    const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
+    const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
+    if(!filled){
+      html+=`<span class="eval-badge fail">ABCD: ${vals} – unvollständig</span>`;
+    } else if(soll.A){
+      const sollStr=['A','B','C','D'].map(l=>soll[l]).join('-');
+      const ok=['A','B','C','D'].every(l=>obj[l]===soll[l]);
+      html+=ok
+        ?`<span class="eval-badge ok">ABCD: ${vals} ✓</span>`
+        :`<span class="eval-badge fail">ABCD: ${vals} ≠${sollStr}</span>`;
+    } else {
+      html+=`<span class="eval-badge ok">ABCD: ${vals} ✓</span>`;
+    }
+  }
+  if(el) el.innerHTML=html;
+}
+
+/* ── Team Progress ───────────────────────────────────────── */
+function renderTeamProgress() {
+  const panel = document.getElementById('teamProgressPanel');
+  if (!panel) return;
+  const allCases = ['P1','P2','P3','P4','P5','P6'];
+
+  if (!teams.length) {
+    panel.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Keine Trupps angelegt.</div>';
+    return;
+  }
+
+  const rows = teams.map(teamData => {
+    const evtName = teamData.name;
+    const rs = teamData.radio_status ?? null;
+    const rsCls = rs !== null ? ([0,5].includes(rs) ? 's0' : `s${rs}`) : '';
+
+    // Cases done by this team (in completed_evts list OR globally completed)
+    const done = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      const evts = d.completed_evts || [];
+      return evts.includes(evtName) || (d.completed && d.assigned_evt === evtName);
+    });
+    // Cases in progress (assigned to this team, not yet completed by this team, has activity)
+    const inProg = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      const evts = d.completed_evts || [];
+      return d.assigned_evt === evtName && !evts.includes(evtName) && !d.completed
+        && (d.alarm_time || d.status3_time || d.status4_time);
+    });
+    // Open cases: not globally done AND this EVT hasn't done them yet
+    const open = allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      const evts = d.completed_evts || [];
+      return !d.completed && !evts.includes(evtName);
+    });
+
+    const allDone = done.length === allCases.filter(pid => {
+      const d = caseDocs[pid]||{};
+      return d.assigned_evt === evtName;
+    }).length && inProg.length === 0 && open.length === 0;
+
+    const doneChips = done.length
+      ? done.map(p=>`<span class="station-chip done">${p} ✓</span>`).join('')
+      : `<span style="font-size:.72rem;color:var(--muted)">–</span>`;
+
+    const progChips = inProg.map(p=>{
+      const d = caseDocs[p]||{};
+      const s = d.status4_time ? 'S4' : d.status3_time ? 'S3' : 'Alarm';
+      return `<span class="station-chip inprogress">${p} (${s})</span>`;
+    }).join('');
+
+    const openChips = open.length
+      ? open.map(p=>`<span class="station-chip open">${p}</span>`).join('')
+      : `<span style="font-size:.72rem;color:var(--green)">Alle abgeschlossen ✓</span>`;
+
+    return `<div class="tp-card ${done.length>0&&inProg.length===0&&open.length===0?'all-done':''}">
+      <div class="evt-card ${rsCls}" style="padding:.35rem .5rem;border:none;background:transparent;">
+        <div class="name">${esc(evtName)}</div>
+        <div class="sbadge">${FMS_LABELS[rs]||'S'+rs}</div>
+      </div>
+      <div>
+        <div class="tp-section-label">Erledigt ${done.length>0?'('+done.length+')':''}</div>
+        <div class="station-chips">${doneChips}${progChips}</div>
+      </div>
+      <div>
+        <div class="tp-section-label">Noch offen (global)</div>
+        <div class="station-chips">${openChips}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `<div class="tp-grid">${rows || '<div class="text-muted">Keine EVTs konfiguriert.</div>'}</div>`;
+}
+
+/* ── Nachbesprechung ─────────────────────────────────────── */
+function renderNachbesprechung() {
+  const ids=['P1','P2','P3','P4','P5','P6'];
+  const tbl=document.getElementById('nbrTable');
+  tbl.innerHTML=`<thead><tr>
+    <th>Fall</th><th>Schlagwort</th><th>EVT</th>
+    <th>Alarm</th><th>S4</th><th>Dauer A→S4</th><th>S8</th>
+    <th>PZC</th><th>ABCD</th><th>Zielklinik</th>
+  </tr></thead><tbody>${ids.map(pid=>{
+    const meta=CASES_META[pid]||{};
+    const doc=caseDocs[pid]||{};
+    function cell(rep,soll){
+      if(!soll||soll==='—') return `<td class="nbr-na">n/a</td>`;
+      if(!rep) return `<td class="nbr-na">–</td>`;
+      const opts=soll.split(',').map(v=>v.trim());
+      const ok=opts.some(v=>rep.trim()===v);
+      return `<td class="${ok?'nbr-ok':'nbr-fail'}">${esc(rep)} ${ok?'✓':'✗'}</td>`;
+    }
+    function abcdCell(){
+      const pzc=(doc.pzc_reported||'').trim();
+      if(!(pzc.length>=6&&pzc[5]==='1')) return `<td class="nbr-na">n/a</td>`;
+      const obj=_parseAbcd(doc.abcde_schema);
+      const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
+      const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
+      if(!filled) return `<td class="nbr-fail">${vals} (unvollst.)</td>`;
+      const soll=meta.abcd_soll||{};
+      if(!soll.A) return `<td class="nbr-ok">${vals} ✓</td>`;
+      const ok=['A','B','C','D'].every(l=>obj[l]===soll[l]);
+      const sollStr=['A','B','C','D'].map(l=>soll[l]).join('-');
+      return `<td class="${ok?'nbr-ok':'nbr-fail'}">${vals} ${ok?'✓':'✗ ≠'+sollStr}</td>`;
+    }
+    const dur=fmtDur(doc.alarm_time,doc.status4_time);
+    return `<tr>
+      <td class="nbr-pid">${pid}</td>
+      <td>${esc(meta.schlagwort||'–')}</td>
+      <td>${esc(doc.assigned_evt||'–')}</td>
+      <td>${fmtTime(doc.alarm_time)||'–'}</td>
+      <td>${fmtTime(doc.status4_time)||'–'}</td>
+      <td class="nbr-dur">${dur||'–'}</td>
+      <td>${fmtTime(doc.status8_time)||'–'}</td>
+      ${cell(doc.pzc_reported,meta.pzc_soll)}
+      ${abcdCell()}
+      <td>${esc(doc.zielklinik||'–')}</td>
+    </tr>`;
+  }).join('')}</tbody>`;
+}
+
+function renderEvtBewertung() {
+  const ids=['P1','P2','P3','P4','P5','P6'];
+  // Sammle Daten pro EVT
+  const evtData={};
+  ids.forEach(pid=>{
+    const doc=caseDocs[pid]||{};
+    const meta=CASES_META[pid]||{};
+    const evt=doc.assigned_evt;
+    if(!evt) return;
+    if(!evtData[evt]) evtData[evt]={cases:[],ok:0,total:0};
+    evtData[evt].cases.push(pid);
+    // PZC bewerten (kommaseparierte Soll-Werte)
+    const pzcSoll=meta.pzc_soll;
+    if(pzcSoll&&pzcSoll!=='—'){
+      evtData[evt].total++;
+      if(doc.pzc_reported){
+        const opts=pzcSoll.split(',').map(v=>v.trim());
+        if(opts.some(v=>doc.pzc_reported.trim()===v)) evtData[evt].ok++;
+      }
+    }
+    // ABCD bewerten (nur wenn SK1 = PZC endet auf 1)
+    const pzc=(doc.pzc_reported||'').trim();
+    if(pzc.length>=6&&pzc[5]==='1'&&meta.abcd_soll&&meta.abcd_soll.A){
+      evtData[evt].total++;
+      const obj=_parseAbcd(doc.abcde_schema);
+      const ok=['A','B','C','D'].every(l=>obj[l]===meta.abcd_soll[l]);
+      if(ok) evtData[evt].ok++;
+    }
+  });
+  const tbl=document.getElementById('evtTable');
+  if(!Object.keys(evtData).length){
+    tbl.innerHTML='<tbody><tr><td colspan="4" style="padding:.5rem;color:var(--muted)">Noch keine EVT-Zuweisungen dokumentiert.</td></tr></tbody>';
+    return;
+  }
+  const sorted=Object.entries(evtData).sort((a,b)=>a[0].localeCompare(b[0],'de'));
+  tbl.innerHTML=`<thead><tr><th>EVT</th><th>Fälle</th><th>Richtig / Gesamt</th><th>Score</th></tr></thead>
+  <tbody>${sorted.map(([evt,d])=>{
+    const pct=d.total?Math.round(d.ok/d.total*100):0;
+    const barW=pct+'%';
+    return `<tr>
+      <td><b>${esc(evt)}</b></td>
+      <td>${esc(d.cases.join(', '))}</td>
+      <td>${d.ok} / ${d.total}</td>
+      <td>
+        <span>${pct}%</span>
+        <span class="score-bar" style="width:${barW};min-width:${pct?'4px':'0'}"></span>
+      </td>
+    </tr>`;
+  }).join('')}</tbody>`;
+}
+
+/* ── Zeitleiste ──────────────────────────────────────────── */
+function renderTimeline() {
+  const container=document.getElementById('timeline');
+  const ids=['P1','P2','P3','P4','P5','P6'];
+  const allTs=[];
+  ids.forEach(pid=>{
+    const d=caseDocs[pid]||{};
+    ['alarm_time','status3_time','status4_time','status7_time','status8_time'].forEach(f=>{
+      if(d[f]) allTs.push(new Date(d[f]).getTime());
+    });
+  });
+  if(allTs.length<2){
+    container.innerHTML='<div class="text-muted">Noch zu wenig Zeitdaten. Mindestens 2 Stempel erforderlich.</div>';
+    return;
+  }
+  const tMin=Math.min(...allTs);
+  const tMax=Math.max(...allTs);
+  const range=tMax-tMin||1;
+  const toP=ts=>ts?((new Date(ts).getTime()-tMin)/range*100):null;
+
+  const axisLabels=[0,25,50,75,100].map(p=>{
+    const t=new Date(tMin+p/100*range);
+    return `<span style="position:absolute;left:${p}%;transform:translateX(-50%);font-size:.6rem;color:var(--muted);">${t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>`;
+  }).join('');
+
+  container.innerHTML=`
+  <div class="tl-axis-row"><div></div><div class="tl-axis">${axisLabels}</div></div>
+  ${ids.map(pid=>{
+    const d=caseDocs[pid]||{};
+    const pA=toP(d.alarm_time);
+    const p3=toP(d.status3_time);
+    const p4=toP(d.status4_time);
+    const p7=toP(d.status7_time);
+    const p8=toP(d.status8_time);
+    const segs=[];
+    // Alarm → S4 (gelb)
+    if(pA!==null && p4!==null)
+      segs.push(`<div class="tl-seg seg-alarm" style="left:${pA.toFixed(1)}%;width:${(p4-pA).toFixed(1)}%" title="Alarm→S4"></div>`);
+    else if(pA!==null)
+      segs.push(`<div class="tl-seg seg-alarm" style="left:${pA.toFixed(1)}%;width:1.5%" title="Alarm"></div>`);
+    // S4 → S7/S8 (blau)
+    const pEnd=p8??p7;
+    if(p4!==null && pEnd!==null)
+      segs.push(`<div class="tl-seg seg-vor-ort" style="left:${p4.toFixed(1)}%;width:${(pEnd-p4).toFixed(1)}%" title="S4→Ende"></div>`);
+    // S7 → S8 (orange)
+    if(p7!==null && p8!==null)
+      segs.push(`<div class="tl-seg seg-transport" style="left:${p7.toFixed(1)}%;width:${(p8-p7).toFixed(1)}%" title="Transport"></div>`);
+    const markers=[];
+    if(pA!==null) markers.push(`<div class="tl-marker mk-alarm" style="left:${pA.toFixed(1)}%" title="Alarm ${fmtTime(d.alarm_time)}">A</div>`);
+    if(p4!==null) markers.push(`<div class="tl-marker mk-s4"    style="left:${p4.toFixed(1)}%" title="S4 ${fmtTime(d.status4_time)}">4</div>`);
+    if(p8!==null) markers.push(`<div class="tl-marker mk-s8"    style="left:${p8.toFixed(1)}%" title="S8 ${fmtTime(d.status8_time)}">8</div>`);
+    return `<div class="tl-row">
+      <div class="tl-label">${pid}</div>
+      <div class="tl-track">${segs.join('')}${markers.join('')}</div>
+    </div>`;
+  }).join('')}`;
+}
+
+/* ── Funkprotokoll ───────────────────────────────────────── */
+function fillVorlage() {
+  const sel=document.getElementById('logVorlage').value;
+  if(!sel) return;
+  const v=VORLAGEN[sel]; if(!v) return;
+  document.getElementById('logMsg').value=v.msg;
+  if(v.fms) document.getElementById('logFms').value=v.fms;
+  document.getElementById('logVorlage').value='';
+  document.getElementById('logMsg').focus();
+}
+
+function renderLogList() {
+  const list=document.getElementById('logList');
+  if(!logEntries.length){ list.innerHTML='<div class="log-empty">Keine Einträge.</div>'; return; }
+  list.innerHTML=[...logEntries]
+    .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp))
+    .map(e=>{
+      const fms=e.fms_status!=null?(FMS_LABELS[e.fms_status]||'S'+e.fms_status):'';
+      return `<div class="log-entry">
+        <span class="l-ts">${fmtTime(e.timestamp)||'–'}</span>
+        <span class="l-from">${esc(e.sender)}</span>
+        <span class="l-to">${e.receiver?'→ '+esc(e.receiver):''}</span>
+        <span class="l-fms">${fms}</span>
+        <span class="l-ref">${e.case_ref?esc(e.case_ref):''}</span>
+        <span class="l-msg">${esc(e.message)}</span>
+        <button class="l-del no-print" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+      </div>`;
+    }).join('');
+}
+
+async function addLogEntry() {
+  const sender  =document.getElementById('logSender').value.trim();
+  const receiver=document.getElementById('logReceiver').value.trim();
+  const fms     =document.getElementById('logFms').value;
+  const caseRef =document.getElementById('logCase').value;
+  const msg     =document.getElementById('logMsg').value.trim();
+  if(!sender||!msg){ alert('Von und Nachricht sind erforderlich.'); return; }
+  const res=await fetch('/api/radiolog',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      sender, receiver:receiver||null,
+      fms_status:fms!==''?parseInt(fms):null,
+      case_ref:caseRef||null, message:msg,
+      timestamp:new Date().toISOString(),
+    }),
+  });
+  if(res.ok){
+    logEntries.unshift(await res.json());
+    renderLogList();
+    document.getElementById('logMsg').value='';
+    document.getElementById('logFms').value='';
+    document.getElementById('logCase').value='';
+  }
+}
+
+async function deleteLogEntry(id) {
+  if(!confirm('Eintrag löschen?')) return;
+  const res=await fetch(`/api/radiolog/${id}`,{method:'DELETE'});
+  if(res.ok){ logEntries=logEntries.filter(e=>e.id!==id); renderLogList(); }
+}
+
+/* ── Reset ───────────────────────────────────────────────── */
+function showResetModal(){ document.getElementById('resetModal').classList.add('show'); }
+function hideResetModal(){ document.getElementById('resetModal').classList.remove('show'); }
+
+async function doReset() {
+  const inclLog=document.getElementById('resetLog').checked;
+  hideResetModal();
+  const res=await fetch('/api/reset',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({include_log:inclLog}),
+  });
+  if(res.ok){ await refreshAll(); }
+  else alert('Reset fehlgeschlagen.');
+}
+
+/* ── Data & Render ───────────────────────────────────────── */
+async function fetchAll() {
+  // Dashboard + Radiolog in 2 Requests (statt 3)
+  const [dashRes,logRes]=await Promise.all([
+    fetch('/api/dashboard'), fetch('/api/radiolog'),
+  ]);
+  if(dashRes.ok) {
+    const d=await dashRes.json();
+    d.casedocs.forEach(c=>{caseDocs[c.id]=c;});
+    teams=d.teams; evtCount=teams.length||evtCount;
+  }
+  if(logRes.ok) { logEntries=await logRes.json(); }
+}
+
+async function refreshAll() {
+  await fetchAll();
+  applyEvtCount();
+  renderEvtBoard();
+  renderAlarmGrid();
+  renderCaseGrid();
+  renderLogList();
+  renderSprechwunschPanel();
+  if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
+  if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tp)  renderTeamProgress();
+}
+
+/* ── Sprechwunsch-Panel ──────────────────────────────────── */
+function _playSWTone(prio) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const schedule = prio
+      ? [[440,0.00,0.12],[550,0.13,0.12],[660,0.26,0.18]]
+      : [[520,0.00,0.10],[520,0.12,0.10]];
+    schedule.forEach(([freq,start,dur]) => {
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value=freq; osc.type='sine';
+      gain.gain.setValueAtTime(0.35,ctx.currentTime+start);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+start+dur);
+      osc.start(ctx.currentTime+start); osc.stop(ctx.currentTime+start+dur+0.05);
+    });
+  } catch(_){}
+}
+const _swKnownIds = new Set();
+
+function renderSprechwunschPanel() {
+  const panel = document.getElementById('swPanel');
+  if (!panel) return;
+  const byTime = (a,b) => new Date(a.updated_at) - new Date(b.updated_at);
+  const s0 = teams.filter(t => t.radio_status === 0).sort(byTime);
+  const s5 = teams.filter(t => t.radio_status === 5).sort(byTime);
+  const sw = [...s0, ...s5];
+  if (!sw.length) { panel.classList.remove('sw-visible'); _swKnownIds.clear(); return; }
+  // Ton für neue Einträge
+  sw.forEach(t => { if(!_swKnownIds.has(t.id)){ _swKnownIds.add(t.id); _playSWTone(t.radio_status===0); }});
+  const swIds = new Set(sw.map(t=>t.id));
+  for(const id of _swKnownIds){ if(!swIds.has(id)) _swKnownIds.delete(id); }
+  panel.className = 'sw-panel sw-visible no-print';
+  const label = s0.length ? '🚨 Sprechwunsch' : '📻 Sprechwunsch';
+  const rows = sw.map(t => {
+    const cls   = t.radio_status === 0 ? 's0' : 's5';
+    const badge = t.radio_status === 0 ? 'S0 PRIO' : 'S5';
+    const time  = new Date(t.updated_at).toLocaleTimeString('de-DE',
+                    {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<li class="sw-item ${cls}">
+      <span class="sw-badge ${cls}">${badge}</span>
+      <span class="sw-name">${esc(t.name)}${t.callsign
+        ? ` <span style="font-weight:400;color:var(--muted)">(${esc(t.callsign)})</span>` : ''}</span>
+      <span class="sw-time">${time}</span>
+      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+    </li>`;
+  }).join('');
+  panel.innerHTML = `<div class="sw-header">${label}&nbsp;<span style="opacity:.7">${sw.length}</span></div>
+    <ul class="sw-list">${rows}</ul>`;
+}
+
+async function quittieren(teamId) {
+  const res = await fetch(`/api/teams/${teamId}/quittieren`, {method:'POST'});
+  if (!res.ok) { alert('Quittierung fehlgeschlagen.'); return; }
+  await refreshAll();
+}
+
+/* ── Auto-Refresh ────────────────────────────────────────── */
+setInterval(async()=>{ const r=await fetch('/api/radiolog'); if(r.ok){logEntries=await r.json(); renderLogList();} },15000);
+
+// CaseDoc soft-refresh: alle 10 s, ohne aktive Eingabefelder zu überschreiben
+const TS_FIELDS=['alarm_time','status3_time','status4_time','status7_time','status8_time'];
+async function softRefreshCaseDocs() {
+  const [docsRes,teamsRes]=await Promise.all([fetch('/api/casedocs'),fetch('/api/teams')]);
+  if(docsRes.ok)  { const arr=await docsRes.json(); arr.forEach(d=>{caseDocs[d.id]=d;}); }
+  if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); renderSprechwunschPanel(); }
+
+  const focused=document.activeElement;
+  ['P1','P2','P3','P4','P5','P6'].forEach(pid=>{
+    const d=caseDocs[pid]||{};
+
+    // Zeitstempel-Chips in-place
+    TS_FIELDS.forEach(f=>{
+      const el=document.getElementById(`ts_${pid}_${f}`);
+      if(el){ el.textContent=d[f]?fmtTime(d[f]):'–'; el.classList.toggle('empty',!d[f]); }
+    });
+
+    // EVT-Dropdown (Falldoku + Alarmgrid) – nur wenn nicht gerade fokussiert
+    const evtSel=document.getElementById(`evt_${pid}`);
+    if(evtSel && evtSel!==focused) evtSel.value=d.assigned_evt||'';
+
+    // Fertig-Checkbox + Karten-Styling
+    const chk=document.getElementById(`chk_${pid}`);
+    if(chk && chk!==focused){
+      chk.checked=!!d.completed;
+      document.getElementById(`card_${pid}`)?.classList.toggle('done',!!d.completed);
+      document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
+    }
+
+    // ABCD-Buttons synchronisieren
+    const wrap=document.getElementById('abcde_wrap_'+pid);
+    if(wrap){
+      const obj=_parseAbcd(d.abcde_schema);
+      wrap.querySelectorAll('.abcd-btn').forEach(btn=>{
+        const row=btn.parentElement.previousElementSibling?.textContent?.trim();
+        const n=parseInt(btn.textContent);
+        btn.classList.toggle('active',obj[row]===n);
+      });
+    }
+
+    // Eval-Badges (PZC/ABCD)
+    refreshEvalRow(pid);
+  });
+
+  renderAlarmGrid();
+  if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
+  if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tp)  renderTeamProgress();
+}
+setInterval(softRefreshCaseDocs, 10000);
+
+/* ── Init ────────────────────────────────────────────────── */
+refreshAll();
+</script>
+</body>
+</html>

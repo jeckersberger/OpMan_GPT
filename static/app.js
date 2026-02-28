@@ -13,24 +13,45 @@ let missionMarkers = new Map();  // missionId -> L.Marker
 
 let assignedTeamIds = new Set(); // Teams, die bereits irgendwo zugewiesen sind
 
+// Exercise layer (Funkübung)
+let exerciseGeodata = null;       // geodata from /api/exercise/geodata
+let casedocData = [];             // from /api/casedocs
+let exerciseMarkers = new Map();  // caseId (string) -> L.Marker
+let connectionLines = [];         // L.Polyline[] team <-> case
+let startpunktMarker = null;
+
 const $ = (id) => document.getElementById(id);
 
 // ---- Funkstatus (nur 0-9) ----
 const RADIO_OPTIONS = [
-  [1, "1 – Frei auf Funk"],
-  [2, "2 – Frei auf Wache"],
-  [3, "3 – Auf Anfahrt"],
-  [4, "4 – Am Einsatzort"],
-  [5, "5 – Sprechwunsch"],
-  [6, "6 – nicht Einsatzbereit"],
-  [7, "7 – gebunden"],
-  [8, "8 – Bedingt Einsatzbereit"],
-  [9, "9 – Fremdanmeldung"],
-  [0, "0 – prio. Sprechwunsch"],
+  [1, "S1 – Frei auf Funk"],
+  [2, "S2 – Frei auf Wache"],
+  [3, "S3 – Einsatz übernommen"],
+  [4, "S4 – Am Einsatzort"],
+  [5, "S5 – Sprechwunsch"],
+  [6, "S6 – nicht Einsatzbereit"],
+  [7, "S7 – Patient aufgenommen"],
+  [8, "S8 – Am Transportziel"],
+  [9, "S9 – Sonderfunktion"],
+  [0, "S0 – prio. Sprechwunsch"],
 ];
 
-const RADIO_LABELS = new Map(RADIO_OPTIONS.map(([c, t]) => [c, t.replace(/^\d+\s–\s/, "")]));
-const DISPATCHABLE_CODES = new Set([1, 2]); // "frei" = nur Funk 1/2
+const RADIO_LABELS = new Map(RADIO_OPTIONS.map(([c, t]) => [c, t.replace(/^S\d+\s–\s/, "")]));
+const DISPATCHABLE_CODES = new Set([1, 2]); // "frei" = nur S1/S2
+
+// Statusfarben (einheitlich für Marker, Badges, etc.)
+const STATUS_COLORS = new Map([
+  [1, "#22cc66"],   // grün
+  [2, "#0d7a3a"],   // dunkelgrün
+  [3, "#f5c842"],   // gelb
+  [4, "#2299ff"],   // blau
+  [5, "#888888"],   // grau
+  [6, "#888888"],   // grau
+  [7, "#ff8800"],   // orange
+  [8, "#9b59b6"],   // lila
+  [9, "#888888"],   // grau
+  [0, "#ff3333"],   // rot
+]);
 
 function esc(s){
   return String(s ?? "")
@@ -43,13 +64,17 @@ function esc(s){
 function badge(text){ return `<span class="badge">${esc(text)}</span>`; }
 function priorityBadge(p){ return `<span class="badge">P${esc(p)}</span>`; }
 
-function radioText(code, label){
+function radioText(code, label, pending=false){
   const l = label || RADIO_LABELS.get(code) || "";
-  return `Funk ${code}${l ? " – " + l : ""}`;
+  return `S${code}${l ? " – " + l : ""}${pending ? " ·P" : ""}`;
 }
 
-function radioBadge(code, label){
-  return `<span class="badge">${esc(radioText(code, label))}</span>`;
+function radioBadge(code, label, pending=false){
+  const col = STATUS_COLORS.get(code) || "#888";
+  const extra = pending
+    ? ` style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;font-weight:700;"`
+    : ` style="background:${col}22;color:${col};border:1px solid ${col};"`;
+  return `<span class="badge"${extra}>${esc(radioText(code, label, pending))}</span>`;
 }
 
 function colorDot(hex){
@@ -82,19 +107,29 @@ async function api(url, options){
 
 // ---------------- Map ----------------
 function initMap(){
-  map = L.map("map").setView([52.52, 13.405], 12); // Default: Berlin
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(map);
+  map = L.map("map").setView([49.3783, 11.2134], 15); // Default: Feucht
+
+  const layers = {
+    "🗺 OpenStreetMap": L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap"
+    }),
+    "🛰 Satellite": L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 19, attribution: "&copy; Esri World Imagery"
+    }),
+    "🏔 Topo": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+      maxZoom: 17, attribution: "&copy; OpenTopoMap"
+    }),
+  };
+
+  layers["🗺 OpenStreetMap"].addTo(map);
+  L.control.layers(layers, {}, { position: "topright", collapsed: false }).addTo(map);
 
   map.on("click", (e) => {
     lastClickedLatLng = e.latlng;
     $("lastClick").textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
 
     // quick-fill create forms
-    $("teamLat").value = e.latlng.lat.toFixed(6);
-    $("teamLng").value = e.latlng.lng.toFixed(6);
     $("missionLat").value = e.latlng.lat.toFixed(6);
     $("missionLng").value = e.latlng.lng.toFixed(6);
   });
@@ -102,25 +137,51 @@ function initMap(){
 
 // ---------------- Marker styles ----------------
 
+// GPS-Alter in Sekunden (null wenn kein GPS)
+function gpsAgeSec(t) {
+  if (!t.gps_updated_at) return null;
+  return (Date.now() - new Date(t.gps_updated_at).getTime()) / 1000;
+}
+
 // Teams: Kreis + permanentes Label "Name | Aktueller Status"
 function upsertTeamMarker(t){
-  if (t.lat == null || t.lng == null) return;
+  // Wenn kein GPS / keine Position: am Startpunkt anzeigen (grau, halbtransparent)
+  const hasPosition = t.lat != null && t.lng != null;
+  const sp = exerciseGeodata?.startpunkt;
+  if (!hasPosition && !sp) return;  // kein Startpunkt bekannt → kein Marker
+
+  const atStart = !hasPosition;
 
   const key = t.id;
-  const ll = [t.lat, t.lng];
+  const ll = atStart ? [sp.lat, sp.lng] : [t.lat, t.lng];
 
   const statusText = radioText(t.radio_status, t.radio_status_label);
-  const tooltipText = `${t.name} | ${statusText}`;
+  const statusCol = STATUS_COLORS.get(t.radio_status) || "#888";
+  const age = gpsAgeSec(t);
+  const isLiveGps = !atStart && age !== null && age < 120;  // live = GPS-Update vor < 2 Min
+  const gpsInfo = atStart
+    ? " | wartet auf GPS"
+    : (t.gps_updated_at
+        ? ` | GPS ${new Date(t.gps_updated_at).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit", second:"2-digit"})}`
+        : " | manuell");
+  const tooltipText = `${t.name} | ${statusText}${gpsInfo}`;
+  const tooltipHtml = `<span style="background:${statusCol};color:#fff;padding:1px 5px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap;">${esc(t.name)} | ${esc(statusText)}</span>`;
   const popupHtml =
     `${esc(t.name)}${t.callsign ? " (" + esc(t.callsign) + ")" : ""}<br>` +
-    `${esc(statusText)}`;
-
+    `${esc(statusText)}<br>` +
+    (atStart
+      ? `<span style="color:#888">⏳ Wartet auf GPS – am Startpunkt</span>`
+      : isLiveGps
+        ? `<span style="color:#3ddc84">● Live-GPS (${Math.round(age)}s)</span>`
+        : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
+  // Punkt: GPS-Status (grau = kein GPS, blau = GPS aktiv/live)
+  const gpsCol = atStart ? "#888" : (isLiveGps ? "#2299ff" : "#888");
   const style = {
-    radius: 7,
-    color: t.color || "#4ea1ff",
+    radius: atStart ? 5 : 7,
+    color: atStart ? "#666" : (isLiveGps ? "#2299ff" : "#666"),
     weight: 3,
-    fillColor: t.color || "#4ea1ff",
-    fillOpacity: 0.95,
+    fillColor: gpsCol,
+    fillOpacity: atStart ? 0.45 : 0.95,
   };
 
   if (teamMarkers.has(key)){
@@ -129,30 +190,41 @@ function upsertTeamMarker(t){
     marker.setStyle(style);
     marker.setPopupContent(popupHtml);
 
-    // Tooltip-Text aktualisieren (Leaflet: tooltip exists after bindTooltip)
+    // Puls-Klasse setzen/entfernen je nach Live-GPS-Status
+    const el = marker.getElement();
+    if (el) el.classList.toggle("gps-live", isLiveGps);
+
+    // Tooltip aktualisieren (Leaflet: tooltip exists after bindTooltip)
     if (marker.getTooltip()){
-      marker.setTooltipContent(tooltipText);
-    } else {
-      marker.bindTooltip(tooltipText, {
-        permanent: true,
-        direction: "right",
-        offset: [10, 0],
-        opacity: 0.95,
-      });
+      marker.unbindTooltip();
     }
-  } else {
-    const marker = L.circleMarker(ll, style).addTo(map).bindPopup(popupHtml);
-    marker.bindTooltip(tooltipText, {
+    marker.bindTooltip(tooltipHtml, {
       permanent: true,
       direction: "right",
       offset: [10, 0],
       opacity: 0.95,
+      className: "team-tt",
+    });
+  } else {
+    const marker = L.circleMarker(ll, style).addTo(map).bindPopup(popupHtml);
+    marker.bindTooltip(tooltipHtml, {
+      permanent: true,
+      direction: "right",
+      offset: [10, 0],
+      opacity: 0.95,
+      className: "team-tt",
     });
 
     marker.on("click", () => {
       selectedTeamId = t.id;
       renderTeams();
       setSelectionLabel();
+    });
+
+    // Puls-Klasse direkt nach Erstellen setzen
+    marker.on("add", () => {
+      const el = marker.getElement();
+      if (el && isLiveGps) el.classList.add("gps-live");
     });
 
     teamMarkers.set(key, marker);
@@ -191,8 +263,160 @@ function missionColor(m){
   return anyGreen ? "green" : "yellow";
 }
 
+// ---------------- Exercise Layer helpers ----------------
+
+// Color by CaseDoc status: grey → yellow → orange → blue → green → dark (done)
+function exerciseCaseColor(doc) {
+  if (doc?.completed) return "#444444";                    // dark: station done, don't dispatch
+  if (!doc || !doc.alarm_time) return "#777777";           // grey: not alarmed
+  if (doc.status8_time || doc.status7_time) return "#22cc66"; // green: S7/S8
+  if (doc.status4_time) return "#2299ff";                  // blue: S4 on scene
+  if (doc.status3_time) return "#ff8800";                  // orange: S3 en route
+  return "#ffcc00";                                        // yellow: alarmed, pre-S3
+}
+
+// Straight-line distance (Haversine) in km
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function walkingTimeStr(km) {
+  const mins = Math.round(km / 4.5 * 60);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}min`;
+}
+
+function makeExerciseIcon(color, label, completed) {
+  const bg = color || "#777777";
+  const border = completed ? "2px dashed #3ddc84" : "2px solid rgba(0,0,0,0.55)";
+  const strike = completed ? "text-decoration:line-through;opacity:0.85;" : "";
+  const check = completed
+    ? `<div style="position:absolute;top:-5px;right:-5px;background:#3ddc84;color:#000;` +
+      `border-radius:50%;width:14px;height:14px;display:flex;align-items:center;` +
+      `justify-content:center;font-size:8px;font-weight:bold;line-height:1;">✓</div>`
+    : "";
+  const html = `<div style="position:relative;width:30px;height:30px;">` +
+    `<div style="background:${bg};color:#fff;width:30px;height:30px;border-radius:50%;` +
+    `border:${border};display:flex;align-items:center;justify-content:center;` +
+    `font-weight:bold;font-size:11px;box-shadow:0 2px 5px rgba(0,0,0,0.5);font-family:monospace;${strike}">${label}</div>` +
+    `${check}</div>`;
+  return L.divIcon({ className: "", html, iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -17] });
+}
+
+function makeStartpunktIcon() {
+  const html = `<div style="background:#9933cc;color:#fff;width:40px;height:20px;border-radius:4px;` +
+    `border:2px solid rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;` +
+    `font-weight:bold;font-size:10px;box-shadow:0 2px 5px rgba(0,0,0,0.5);">START</div>`;
+  return L.divIcon({ className: "", html, iconSize: [40, 20], iconAnchor: [20, 10], popupAnchor: [0, -12] });
+}
+
+function refreshExerciseLayer() {
+  if (!exerciseGeodata) return;
+
+  // Remove old connection lines
+  for (const line of connectionLines) line.remove();
+  connectionLines = [];
+
+  const cases = exerciseGeodata.cases || {};
+
+  for (const [id, data] of Object.entries(cases)) {
+    if (data.lat == null || data.lng == null) continue;
+
+    const doc = casedocData.find(d => d.id === id);
+    const color = exerciseCaseColor(doc);
+    const completed = !!doc?.completed;
+    const ll = [data.lat, data.lng];
+
+    // Draw dashed line from assigned EVT team to this case (skip if completed)
+    let walkExtra = "";
+    if (doc?.assigned_evt && !completed) {
+      const team = teams.find(t => t.name === doc.assigned_evt || t.callsign === doc.assigned_evt);
+      if (team?.lat != null) {
+        const km = haversine(team.lat, team.lng, data.lat, data.lng);
+        walkExtra = ` | ~${walkingTimeStr(km)} Fußweg`;
+        const line = L.polyline([[team.lat, team.lng], ll], {
+          color, weight: 2, dashArray: "6 4", opacity: 0.75,
+        }).addTo(map);
+        connectionLines.push(line);
+      }
+    }
+
+    const tooltipText = `${completed ? "✓ FERTIG | " : ""}${id}: ${data.schlagwort}${walkExtra}`;
+    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}` +
+      (completed ? `<br><b style="color:#3ddc84">✓ Station abgeschlossen</b>` : "");
+
+    if (exerciseMarkers.has(id)) {
+      const marker = exerciseMarkers.get(id);
+      marker.setLatLng(ll);
+      marker.setIcon(makeExerciseIcon(color, id, completed));
+      if (marker.getTooltip()) {
+        marker.setTooltipContent(tooltipText);
+      } else {
+        marker.bindTooltip(tooltipText, { permanent: true, direction: "right", offset: [18, 0], opacity: 0.9 });
+      }
+      marker.setPopupContent(popupHtml);
+    } else {
+      const marker = L.marker(ll, { icon: makeExerciseIcon(color, id, completed) })
+        .addTo(map)
+        .bindTooltip(tooltipText, { permanent: true, direction: "right", offset: [18, 0], opacity: 0.9 })
+        .bindPopup(popupHtml);
+      exerciseMarkers.set(id, marker);
+    }
+  }
+
+  // Startpunkt marker
+  const sp = exerciseGeodata.startpunkt;
+  if (sp?.lat != null) {
+    if (!startpunktMarker) {
+      startpunktMarker = L.marker([sp.lat, sp.lng], { icon: makeStartpunktIcon() })
+        .addTo(map)
+        .bindTooltip("Startpunkt", { permanent: true, direction: "right", offset: [22, 0], opacity: 0.9 })
+        .bindPopup("Startpunkt der Funkübung");
+    } else {
+      startpunktMarker.setLatLng([sp.lat, sp.lng]);
+    }
+  }
+}
+
+async function loadExerciseLayer() {
+  try {
+    [exerciseGeodata, casedocData] = await Promise.all([
+      api("/api/exercise/geodata"),
+      api("/api/casedocs"),
+    ]);
+  } catch (e) {
+    console.warn("Exercise layer konnte nicht geladen werden:", e);
+    return;
+  }
+
+  refreshExerciseLayer();
+
+  // Auto-fit map bounds to all exercise locations
+  const pts = [];
+  for (const data of Object.values(exerciseGeodata.cases || {})) {
+    if (data.lat != null) pts.push([data.lat, data.lng]);
+  }
+  const sp = exerciseGeodata.startpunkt;
+  if (sp?.lat != null) pts.push([sp.lat, sp.lng]);
+  if (pts.length > 0) {
+    map.fitBounds(L.latLngBounds(pts).pad(0.15));
+  }
+}
+
 function upsertMissionMarker(m){
   if (m.lat == null || m.lng == null) return;
+
+  // Übungsfälle werden bereits als Exercise-Marker dargestellt → kein doppelter Pin
+  if (exerciseGeodata) {
+    const caseMatch = m.title.match(/^(P\d+):/);
+    if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) return;
+  }
 
   const key = m.id;
   const ll = [m.lat, m.lng];
@@ -234,7 +458,37 @@ function upsertMissionMarker(m){
   }
 }
 
+function cleanupMarkers(){
+  const currentMissionIds = new Set(missions.map(m => m.id));
+  for (const [id, marker] of missionMarkers.entries()) {
+    if (!currentMissionIds.has(id)) {
+      marker.remove();
+      missionMarkers.delete(id);
+    }
+  }
+  // Mission-Marker entfernen die jetzt als Exercise-Marker dargestellt werden
+  if (exerciseGeodata) {
+    for (const [id, marker] of missionMarkers.entries()) {
+      const m = missions.find(x => x.id === id);
+      if (!m) continue;
+      const caseMatch = m.title.match(/^(P\d+):/);
+      if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) {
+        marker.remove();
+        missionMarkers.delete(id);
+      }
+    }
+  }
+  const currentTeamIds = new Set(teams.map(t => t.id));
+  for (const [id, marker] of teamMarkers.entries()) {
+    if (!currentTeamIds.has(id)) {
+      marker.remove();
+      teamMarkers.delete(id);
+    }
+  }
+}
+
 function rebuildMarkers(){
+  cleanupMarkers();
   for (const t of teams) upsertTeamMarker(t);
   for (const m of missions) upsertMissionMarker(m);
 }
@@ -266,8 +520,21 @@ function renderTeams(){
             ${t.callsign ? `<span class="badge">${esc(t.callsign)}</span>` : ""}
           </div>
           <div style="margin-top:4px;">
-            ${radioBadge(t.radio_status, t.radio_status_label)}
-            ${t.lat!=null ? `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span>` : `<span class="badge">ohne Position</span>`}
+            ${radioBadge(t.radio_status, t.radio_status_label, !!t.pending_alarm)}
+            ${(t.radio_group||"regelfunk")==="bettenkanal"
+              ? `<span class="badge" style="color:#c084fc;border-color:#c084fc;">🏥 Betten</span>`
+              : `<span class="badge" style="color:#4ea1ff;border-color:#4ea1ff;">📻 Regel</span>`}
+            ${(()=>{
+              if (t.lat == null) return `<span class="badge">ohne Position</span>`;
+              const age = gpsAgeSec(t);
+              const live = age !== null && age < 120;
+              const gpsLabel = live
+                ? `<span class="badge" style="color:#3ddc84;border-color:#3ddc84;">● GPS live</span>`
+                : (t.gps_updated_at
+                    ? `<span class="badge" style="color:#f5c842;border-color:#f5c842;" title="GPS ${new Date(t.gps_updated_at).toLocaleTimeString('de-DE')}">○ GPS ${new Date(t.gps_updated_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>`
+                    : `<span class="badge">manuell</span>`);
+              return `<span class="badge">${Number(t.lat).toFixed(4)}, ${Number(t.lng).toFixed(4)}</span> ${gpsLabel}`;
+            })()}
             ${assignedTeamIds.has(t.id) ? `<span class="badge">zugewiesen</span>` : ""}
           </div>
         </div>
@@ -315,7 +582,7 @@ function renderTeams(){
     btn.addEventListener("click", () => {
       const id = parseInt(btn.getAttribute("data-team-pan"), 10);
       const t = teams.find(x => x.id === id);
-      if (t?.lat != null) map.setView([t.lat, t.lng], 15);
+      if (t?.lat != null) map.setView([t.lat, t.lng], map.getZoom());
       if (teamMarkers.has(id)) teamMarkers.get(id).openPopup();
     });
   });
@@ -476,7 +743,18 @@ function renderMissions(){
     btn.addEventListener("click", () => {
       const id = parseInt(btn.getAttribute("data-mission-pan"), 10);
       const m = missions.find(x => x.id === id);
-      if (m?.lat != null) map.setView([m.lat, m.lng], 15);
+      if (!m) return;
+
+      // Übungsfall? → zum Exercise-Marker springen
+      const caseMatch = m.title.match(/^(P\d+):/);
+      if (caseMatch && exerciseMarkers.has(caseMatch[1])) {
+        const exMarker = exerciseMarkers.get(caseMatch[1]);
+        map.setView(exMarker.getLatLng(), map.getZoom());
+        exMarker.openPopup();
+        return;
+      }
+
+      if (m.lat != null) map.setView([m.lat, m.lng], map.getZoom());
       if (missionMarkers.has(id)) missionMarkers.get(id).openPopup();
     });
   });
@@ -588,9 +866,18 @@ function normalizeRadioLabels(){
 }
 
 async function refreshAll(rebuild = true){
-  teams = await api("/api/teams");
-  missions = await api("/api/missions");
-  assignments = await api("/api/assignments");
+  // Beim ersten Laden: eingebettete Daten nutzen (kein Request nötig)
+  let data;
+  if (window.__INITIAL_DATA__) {
+    data = window.__INITIAL_DATA__;
+    delete window.__INITIAL_DATA__;
+  } else {
+    data = await api("/api/dashboard");
+  }
+  teams = data.teams;
+  missions = data.missions;
+  assignments = data.assignments;
+  casedocData = data.casedocs;
 
   normalizeRadioLabels();
   computeAssignedTeamIds();
@@ -603,9 +890,112 @@ async function refreshAll(rebuild = true){
   if (rebuild){
     rebuildMarkers();
   } else {
+    cleanupMarkers();
     for (const t of teams) upsertTeamMarker(t);
     for (const m of missions) upsertMissionMarker(m);
   }
+
+  if (exerciseGeodata) refreshExerciseLayer();
+  renderSprechwunschPanel();
+}
+
+// ---------------- Sprechwunsch-Panel ----------------
+// Web Audio API – Benachrichtigungston erzeugen (kein Audio-Datei-Download nötig)
+function _playSWTone(prio) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const schedule = prio
+      ? [[440, 0.00, 0.12], [550, 0.13, 0.12], [660, 0.26, 0.18]]   // S0: 3 aufsteigende Töne
+      : [[520, 0.00, 0.10], [520, 0.12, 0.10]];                       // S5: 2 kurze gleiche Töne
+    schedule.forEach(([freq, start, dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.05);
+    });
+  } catch (_) { /* AudioContext nicht verfügbar */ }
+}
+
+const _swKnownIds = new Set();  // IDs der bereits bekannten Sprechwunsch-Teams
+
+function _swRows(teamList) {
+  const byTime = (a, b) => new Date(a.updated_at) - new Date(b.updated_at);
+  const s0 = teamList.filter(t => t.radio_status === 0).sort(byTime);
+  const s5 = teamList.filter(t => t.radio_status === 5).sort(byTime);
+  return [...s0, ...s5].map(t => {
+    const cls   = t.radio_status === 0 ? "s0" : "s5";
+    const badge = t.radio_status === 0 ? "S0 PRIO" : "S5";
+    const time  = new Date(t.updated_at).toLocaleTimeString("de-DE",
+                    {hour:"2-digit", minute:"2-digit"});
+    // Show both name and callsign when they differ
+    const hasCallsign = t.callsign && t.callsign !== t.name;
+    const mainLine  = hasCallsign ? t.callsign : t.name;
+    const subLine   = hasCallsign ? t.name : null;
+    return `<li class="sw-item ${cls}">
+      <div class="sw-names">
+        <span class="sw-callsign">${esc(mainLine)}</span>
+        ${subLine ? `<span class="sw-subname">${esc(subLine)}</span>` : ""}
+      </div>
+      <div class="sw-meta">
+        <span class="sw-badge ${cls}">${badge}</span>
+        <span class="sw-time">${time}</span>
+        <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+      </div>
+    </li>`;
+  }).join("") || `<li style="padding:.6rem 1rem;font-size:.8rem;color:var(--muted);">–</li>`;
+}
+
+function renderSprechwunschPanel() {
+  const panel = document.getElementById("swPanel");
+  if (!panel) return;
+
+  const sw = teams.filter(t => t.radio_status === 0 || t.radio_status === 5);
+
+  if (sw.length === 0) {
+    panel.classList.remove("sw-visible");
+    _swKnownIds.clear();
+    return;
+  }
+
+  // Ton abspielen für neu hinzugekommene Einträge
+  sw.forEach(t => {
+    if (!_swKnownIds.has(t.id)) {
+      _swKnownIds.add(t.id);
+      _playSWTone(t.radio_status === 0);
+    }
+  });
+  // Quittierte entfernen
+  const swIds = new Set(sw.map(t => t.id));
+  for (const id of _swKnownIds) { if (!swIds.has(id)) _swKnownIds.delete(id); }
+
+  const regel  = sw.filter(t => (t.radio_group || "regelfunk") === "regelfunk");
+  const betten = sw.filter(t => (t.radio_group || "regelfunk") === "bettenkanal");
+  const hasS0  = sw.some(t => t.radio_status === 0);
+  const label  = hasS0 ? "🚨 Sprechwunsch" : "📻 Sprechwunsch";
+
+  panel.className = "sw-panel sw-visible";
+  panel.innerHTML = `
+    <div class="sw-header">${label}&nbsp;<span style="opacity:.7;font-weight:400">${sw.length}</span></div>
+    <div class="sw-cols">
+      <div class="sw-col">
+        <div class="sw-col-header c-regel">📻 Regelfunk&nbsp;<span style="opacity:.6">${regel.length}</span></div>
+        <ul class="sw-list">${_swRows(regel)}</ul>
+      </div>
+      <div class="sw-col">
+        <div class="sw-col-header c-betten">🏥 Bettenkanal&nbsp;<span style="opacity:.6">${betten.length}</span></div>
+        <ul class="sw-list">${_swRows(betten)}</ul>
+      </div>
+    </div>`;
+}
+
+async function quittieren(teamId) {
+  await api(`/api/teams/${teamId}/quittieren`, { method: "POST" });
+  await refreshAll(false);
 }
 
 // ---------------- UI Wiring ----------------
@@ -629,12 +1019,8 @@ function wireUI(){
 
   $("btnCreateTeam").addEventListener("click", async () => {
     const payload = {
-      name: $("teamName").value.trim(),
-      callsign: $("teamCallsign").value.trim(),
-      radio_status: parseInt($("teamRadioStatus").value, 10),
+      callsign: $("teamCallsign").value.trim() || undefined,
       color: $("teamColor").value,
-      lat: $("teamLat").value ? parseFloat($("teamLat").value) : null,
-      lng: $("teamLng").value ? parseFloat($("teamLng").value) : null,
     };
 
     const t = await api("/api/teams", {
@@ -644,7 +1030,6 @@ function wireUI(){
     });
 
     selectedTeamId = t.id;
-    $("teamName").value = "";
     $("teamCallsign").value = "";
     await refreshAll();
   });
@@ -670,6 +1055,28 @@ function wireUI(){
     $("missionDesc").value = "";
     await refreshAll();
   });
+
+  const btnImport = $("btnImportExercise");
+  if (btnImport) {
+    btnImport.addEventListener("click", async () => {
+      btnImport.disabled = true;
+      btnImport.textContent = "Importiere…";
+      try {
+        const result = await api("/api/exercise/import-missions", { method: "POST" });
+        const created = result.created || [];
+        const newOnes = created.filter(c => !c.skipped).length;
+        const skipped = created.filter(c => c.skipped).length;
+        alert(`Import: ${newOnes} neu angelegt, ${skipped} übersprungen (bereits vorhanden).`);
+        await refreshAll(true);
+        if (typeof loadExerciseLayer === "function") await loadExerciseLayer();
+      } catch (e) {
+        // error already shown by api()
+      } finally {
+        btnImport.disabled = false;
+        btnImport.textContent = "📥 Übungsfälle als Einsätze importieren (P1–P6)";
+      }
+    });
+  }
 
   // global Assign (links+rechts auswählen)
   const btnAssign = $("btnAssign");
@@ -704,9 +1111,238 @@ function wireUI(){
   }
 }
 
+// ---------------- Connection-Status + Auto-Refresh ----------------
+let _connOk = true;
+let _connFailCount = 0;
+
+function _showConnBanner(ok) {
+  let banner = document.getElementById("connBanner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "connBanner";
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;padding:6px 12px;" +
+      "text-align:center;font-size:.85rem;font-weight:600;transition:transform .3s;transform:translateY(-100%);";
+    document.body.appendChild(banner);
+  }
+  if (!ok) {
+    _connFailCount++;
+    banner.style.background = "#b91c1c";
+    banner.style.color = "#fff";
+    banner.textContent = `⚠ Verbindung zum Server verloren (${_connFailCount}x)`;
+    banner.style.transform = "translateY(0)";
+  } else if (_connOk !== ok && _connFailCount > 0) {
+    banner.style.background = "#15803d";
+    banner.style.color = "#fff";
+    banner.textContent = "✓ Verbindung wiederhergestellt";
+    banner.style.transform = "translateY(0)";
+    _connFailCount = 0;
+    setTimeout(() => { banner.style.transform = "translateY(-100%)"; }, 3000);
+  } else {
+    banner.style.transform = "translateY(-100%)";
+  }
+  _connOk = ok;
+}
+
+async function _silentRefreshAll() {
+  // Fetch mit 15s Timeout (Flask dev-server + HTTPS kann langsam sein)
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch("/api/dashboard", { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
+    teams = data.teams;
+    missions = data.missions;
+    assignments = data.assignments;
+    casedocData = data.casedocs;
+    normalizeRadioLabels();
+    computeAssignedTeamIds();
+    renderTeams(); renderMissions(); renderAssignments(); setSelectionLabel();
+    cleanupMarkers();
+    for (const t of teams) upsertTeamMarker(t);
+    for (const m of missions) upsertMissionMarker(m);
+    if (exerciseGeodata) refreshExerciseLayer();
+    renderSprechwunschPanel();
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
+// Polling: Banner erst nach 5 aufeinanderfolgenden Fehlern anzeigen
+let _pollFailStreak = 0;
+let _pollBusy = false;
+setInterval(async () => {
+  if (_pollBusy) return;  // vorheriger Poll noch nicht fertig
+  _pollBusy = true;
+  try {
+    await _silentRefreshAll();
+    _pollFailStreak = 0;
+    _showConnBanner(true);
+  } catch (_) {
+    _pollFailStreak++;
+    if (_pollFailStreak >= 8) _showConnBanner(false);
+  } finally {
+    _pollBusy = false;
+  }
+}, 15000);
+
+// ---------------- LAN-Info (Handy-Zugang) ----------------
+let _lanInfo = null;
+
+async function loadLanInfo() {
+  try {
+    const res = await fetch("/api/server-info");
+    if (!res.ok) return;
+    _lanInfo = await res.json();
+    const el = document.getElementById("lanInfo");
+    if (el) el.textContent = `📡 ${_lanInfo.ip}:${_lanInfo.port}`;
+  } catch (_) { /* silent */ }
+}
+
+function showLanModal() {
+  if (!_lanInfo) return;
+  document.getElementById("lanUrl").textContent = _lanInfo.evt_url;
+  document.getElementById("lanQr").src =
+    `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(_lanInfo.evt_url)}`;
+  const certLink = document.getElementById("certDownloadLink");
+  if (certLink) certLink.href = `${_lanInfo.base_url}/cert`;
+  document.getElementById("lanModal").style.display = "flex";
+}
+
+// ---------------- Übungs-Timer ----------------
+let _timerStart   = null;   // Date when timer was started
+let _timerElapsed = 0;      // ms accumulated before last pause
+let _timerHandle  = null;
+
+function _timerFmt(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${String(h).padStart(2,"0")}:${String(m%60).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+
+function _timerTick() {
+  const el = $("timerDisplay");
+  if (!el) return;
+  const ms = _timerElapsed + (Date.now() - _timerStart);
+  el.textContent = _timerFmt(ms);
+}
+
+function timerToggle() {
+  if (_timerHandle) {
+    // Pause
+    _timerElapsed += Date.now() - _timerStart;
+    _timerStart = null;
+    clearInterval(_timerHandle);
+    _timerHandle = null;
+    $("timerDisplay").style.color = "#f5c842";
+  } else {
+    // Start / Resume
+    _timerStart = Date.now();
+    _timerHandle = setInterval(_timerTick, 500);
+    $("timerDisplay").style.color = "#3ddc84";
+  }
+}
+
+function timerReset() {
+  clearInterval(_timerHandle);
+  _timerHandle  = null;
+  _timerStart   = null;
+  _timerElapsed = 0;
+  const el = $("timerDisplay");
+  if (el) { el.textContent = "00:00"; el.style.color = "#3ddc84"; }
+}
+
+// ---------------- Übungs-Reset ----------------
+function showResetModal() {
+  $("resetModal").style.display = "flex";
+}
+
+async function doReset() {
+  const include_log  = $("rsLog").checked;
+  const delete_teams = $("rsDeleteTeams").checked;
+  const reset_teams  = $("rsTeams").checked && !delete_teams;
+
+  const warn = delete_teams
+    ? "ACHTUNG: Alle Trupps und Einsätze werden gelöscht!\n\nTrotzdem zurücksetzen?"
+    : "Übung zurücksetzen? Alle Falldokumentationen und Zuweisungen werden geleert.";
+  if (!confirm(warn)) return;
+
+  await api("/api/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ include_log, reset_teams, delete_teams }),
+  });
+  $("resetModal").style.display = "none";
+  await refreshAll(true);
+  if (exerciseGeodata) refreshExerciseLayer();
+}
+
+// ---------------- Testalarm ----------------
+function showTestAlarmModal() {
+  const list = $("taTeamList");
+  list.innerHTML = "";
+  teams.forEach(t => {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem;padding:.2rem .3rem;border-radius:4px;";
+    row.innerHTML = `<input type="checkbox" value="${esc(t.id)}" checked style="accent-color:#f5c842;" />`
+      + `${colorDot(t.color)}${esc(t.name)}`
+      + (t.callsign ? ` <span style="color:#aaa;font-size:.8rem;">(${esc(t.callsign)})</span>` : "");
+    list.appendChild(row);
+  });
+  $("testAlarmModal").style.display = "flex";
+}
+
+function taSelectAll()  { $("taTeamList").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = true); }
+function taSelectNone() { $("taTeamList").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = false); }
+
+async function sendTestAlarm() {
+  const text = $("taText").value.trim() || "Testalarm";
+  const checked = [...$("taTeamList").querySelectorAll("input[type=checkbox]:checked")];
+  const team_ids = checked.map(c => parseInt(c.value, 10));
+  if (!team_ids.length) { alert("Bitte mindestens ein Team auswählen."); return; }
+  const btn = $("taSendBtn");
+  btn.disabled = true;
+  btn.textContent = "Sende…";
+  try {
+    await api("/api/testalarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team_ids, text }),
+    });
+    $("testAlarmModal").style.display = "none";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔔 Senden";
+  }
+}
+
 // ---------------- Boot ----------------
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();
   wireUI();
+  // Exercise-Geodaten VOR dem ersten Marker-Aufbau laden,
+  // damit upsertMissionMarker() doppelte Pins sofort erkennt.
+  try {
+    [exerciseGeodata, casedocData] = await Promise.all([
+      api("/api/exercise/geodata"),
+      api("/api/casedocs"),
+    ]);
+  } catch (_) { /* kein Übungsbetrieb aktiv */ }
   await refreshAll(true);
+  if (exerciseGeodata) refreshExerciseLayer();
+  // Auto-fit map bounds to exercise locations
+  if (exerciseGeodata) {
+    const pts = [];
+    for (const data of Object.values(exerciseGeodata.cases || {})) {
+      if (data.lat != null) pts.push([data.lat, data.lng]);
+    }
+    const sp = exerciseGeodata.startpunkt;
+    if (sp?.lat != null) pts.push([sp.lat, sp.lng]);
+    if (pts.length > 0) map.fitBounds(L.latLngBounds(pts).pad(0.15));
+  }
+  loadLanInfo();
 });

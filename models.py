@@ -3,6 +3,48 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
+class CaseDoc(db.Model):
+    """Dokumentation eines Übungsfalls (P1–P6)."""
+    __tablename__ = "case_docs"
+
+    id = db.Column(db.String(5), primary_key=True)   # 'P1' … 'P6'
+
+    assigned_evt   = db.Column(db.String(20),  nullable=True)   # z.B. "EVT 3"
+    alarm_time     = db.Column(db.DateTime,    nullable=True)
+    status3_time   = db.Column(db.DateTime,    nullable=True)
+    status4_time   = db.Column(db.DateTime,    nullable=True)
+    status7_time   = db.Column(db.DateTime,    nullable=True)
+    status8_time   = db.Column(db.DateTime,    nullable=True)
+
+    rmi_reported   = db.Column(db.String(20),  nullable=True)
+    sk_reported    = db.Column(db.String(5),   nullable=True)
+    pzc_reported   = db.Column(db.String(20),  nullable=True)
+    abcde_schema   = db.Column(db.Text,        nullable=True)   # ABCDE-Schema bei SK1
+    zielklinik     = db.Column(db.String(120), nullable=True)
+
+    notes          = db.Column(db.Text,        nullable=True)
+    completed      = db.Column(db.Boolean,     nullable=False, default=False)
+    # JSON-Liste der EVT-Namen die diesen Fall bereits abgeschlossen haben, z.B. '["EVT 1","EVT 3"]'
+    completed_evts = db.Column(db.Text,        nullable=False, default="[]")
+
+    updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
+
+class RadioLogEntry(db.Model):
+    """Einzelner Eintrag im Funkprotokoll."""
+    __tablename__ = "radio_log"
+
+    id         = db.Column(db.Integer,  primary_key=True)
+    timestamp  = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    sender     = db.Column(db.String(50), nullable=False)
+    receiver   = db.Column(db.String(50), nullable=True)
+    fms_status = db.Column(db.Integer,  nullable=True)
+    case_ref   = db.Column(db.String(5), nullable=True)   # 'P1' … 'P6'
+    message    = db.Column(db.Text,     nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Team(db.Model):
     __tablename__ = "teams"
     id = db.Column(db.Integer, primary_key=True)
@@ -17,10 +59,17 @@ class Team(db.Model):
     # Funkstatus-Code (auch 0, 41, 51, 61, 62, 68, 69, 71, 77)
     radio_status = db.Column(db.Integer, nullable=False, default=1)
 
+    # Funkgruppe: "regelfunk" | "bettenkanal"
+    radio_group = db.Column(db.String(30), nullable=False, default="regelfunk")
+
     color = db.Column(db.String(12), nullable=False, default="#4ea1ff")
 
     lat = db.Column(db.Float, nullable=True)
     lng = db.Column(db.Float, nullable=True)
+    gps_updated_at  = db.Column(db.DateTime, nullable=True)   # gesetzt wenn GPS vom EVT-Gerät kommt
+
+    test_alarm_at   = db.Column(db.DateTime,   nullable=True)   # Testalarm-Zeitpunkt
+    test_alarm_text = db.Column(db.String(200), nullable=True)   # Testalarm-Nachricht
 
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -50,3 +99,10 @@ class Assignment(db.Model):
 
     team = db.relationship("Team", backref=db.backref("assignments", cascade="all, delete-orphan"))
     mission = db.relationship("Mission", backref=db.backref("assignments", cascade="all, delete-orphan"))
+
+
+class ExerciseConfig(db.Model):
+    """Globale Übungskonfiguration (Singleton, id=1)."""
+    __tablename__ = "exercise_config"
+    id = db.Column(db.Integer, primary_key=True)
+    evt_count = db.Column(db.Integer, nullable=False, default=6)

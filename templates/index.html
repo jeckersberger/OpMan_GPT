@@ -9,6 +9,27 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
   <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    /* Puls-Animation für Live-GPS-Marker */
+    @keyframes gps-pulse {
+      0%   { stroke-width: 3; stroke-opacity: 1; r: 7; }
+      60%  { stroke-width: 6; stroke-opacity: 0.3; r: 11; }
+      100% { stroke-width: 3; stroke-opacity: 1; r: 7; }
+    }
+    .leaflet-interactive.gps-live {
+      animation: gps-pulse 2s ease-in-out infinite;
+    }
+    /* Team-Tooltip: Standard-Leaflet-Hintergrund entfernen, Farbe kommt vom Label-Span */
+    .team-tt {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+    .team-tt::before {
+      display: none !important;
+    }
+  </style>
 </head>
 <body>
   <!-- Top Navigation -->
@@ -18,9 +39,98 @@
       <button id="btnRefresh" class="navbtn">Aktualisieren</button>
       <button id="btnLocate" class="navbtn">Zu mir</button>
       <div class="divider"></div>
+      <span id="timerDisplay" style="font-family:monospace;font-size:1rem;color:#3ddc84;min-width:5ch;text-align:center;cursor:pointer;" title="Timer starten/pausieren" onclick="timerToggle()">00:00</span>
+      <button class="navbtn" style="font-size:.75rem;padding:.25rem .5rem;" onclick="timerReset()" title="Timer zurücksetzen">⏹</button>
+      <div class="divider"></div>
+      <a href="/protokoll" class="navbtn" style="text-decoration:none;">📋 Funkprotokoll</a>
+      <div class="divider"></div>
+      <a href="/evt" class="navbtn" style="text-decoration:none;">📱 EVT Mobile</a>
+      <div class="divider"></div>
+      <button id="btnTestAlarm" class="navbtn" style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;" onclick="showTestAlarmModal()">🔔 Testalarm</button>
+      <div class="divider"></div>
+      <button class="navbtn" style="background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b;" onclick="showResetModal()">🔄 Reset</button>
+      <div class="divider"></div>
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
+      <div class="divider"></div>
+      <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
     </nav>
   </header>
+
+  <!-- Reset Modal -->
+  <div id="resetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1a0808;border:2px solid #ff6b6b;border-radius:12px;padding:1.5rem;max-width:400px;width:90%;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#ff6b6b;">🔄 Übungs-Reset</h3>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Setzt die Übung zurück für einen Neudurchlauf.</p>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.2rem;">
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsLog" style="accent-color:#ff6b6b;" />
+          Funkprotokoll leeren
+        </label>
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsTeams" checked style="accent-color:#ff6b6b;" />
+          Trupps auf S1 / verfügbar zurücksetzen (Position bleibt)
+        </label>
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" id="rsDeleteTeams" style="accent-color:#ff6b6b;" onchange="if(this.checked)document.getElementById('rsTeams').checked=false;" />
+          <span style="color:#ff6b6b;">⚠ Trupps + Einsätze komplett löschen</span>
+        </label>
+      </div>
+      <p style="font-size:.75rem;color:#f5c842;margin-bottom:1rem;">Immer zurückgesetzt: Falldokumentationen (P1–P6), Zuweisungen, Missionsstatus.</p>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('resetModal').style.display='none'" style="padding:.5rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Abbrechen</button>
+        <button onclick="doReset()" style="padding:.5rem 1.2rem;background:#ff6b6b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Zurücksetzen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Testalarm Modal -->
+  <div id="testAlarmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#1a1200;border:2px solid #f5c842;border-radius:12px;padding:1.5rem;max-width:420px;width:90%;">
+      <h3 style="margin-bottom:.75rem;font-size:1rem;color:#f5c842;">🔔 Testalarm senden</h3>
+      <div style="margin-bottom:.75rem;">
+        <label style="font-size:.8rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Nachricht:</label>
+        <input id="taText" value="Testalarm – bitte quittieren" style="width:100%;box-sizing:border-box;padding:.5rem;background:#0b1220;border:1px solid #f5c842;color:#fff;border-radius:6px;font-family:inherit;font-size:.9rem;" />
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:.8rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Empfänger:</label>
+        <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
+          <button id="taBtnAll" onclick="taSelectAll()" style="padding:.35rem .8rem;background:#3a2800;color:#f5c842;border:1px solid #f5c842;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">Alle wählen</button>
+          <button id="taBtnNone" onclick="taSelectNone()" style="padding:.35rem .8rem;background:#111;color:#888;border:1px solid #444;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">Keine</button>
+        </div>
+        <div id="taTeamList" style="display:flex;flex-direction:column;gap:.3rem;max-height:200px;overflow-y:auto;"></div>
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('testAlarmModal').style.display='none'" style="padding:.5rem 1rem;background:#222;color:#aaa;border:1px solid #444;border-radius:8px;cursor:pointer;font-family:inherit;">Abbrechen</button>
+        <button id="taSendBtn" onclick="sendTestAlarm()" style="padding:.5rem 1.2rem;background:#f5c842;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">🔔 Senden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAN-Info Modal -->
+  <div id="lanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:380px;width:90%;text-align:center;">
+      <h3 style="margin-bottom:.75rem;font-size:1rem;">📱 EVT Mobile – Handy-Zugang</h3>
+      <p style="font-size:.82rem;color:#a6b3d1;margin-bottom:.75rem;">Handy ins gleiche WLAN → Browser öffnen → URL eingeben:</p>
+      <div id="lanUrl" style="font-family:monospace;font-size:1rem;background:#0b1220;border:1px solid #4ea1ff;border-radius:8px;padding:.6rem 1rem;color:#4ea1ff;word-break:break-all;margin-bottom:1rem;"></div>
+      <p style="font-size:.75rem;color:#a6b3d1;margin-bottom:.75rem;">Oder QR-Code scannen:</p>
+      <img id="lanQr" src="" alt="QR" style="width:180px;height:180px;border-radius:8px;border:2px solid #223152;background:#fff;"/>
+      <hr style="border:none;border-top:1px solid #223152;margin:1rem 0;">
+      <h4 style="font-size:.85rem;margin-bottom:.5rem;color:#f5c842;">🔒 iOS Safari – Zertifikat installieren</h4>
+      <p style="font-size:.75rem;color:#a6b3d1;margin-bottom:.6rem;text-align:left;">Damit Safari die HTTPS-Verbindung akzeptiert:</p>
+      <ol style="font-size:.75rem;color:#a6b3d1;text-align:left;padding-left:1.2rem;margin-bottom:.6rem;line-height:1.6;">
+        <li>Zertifikat herunterladen: <a id="certDownloadLink" href="/cert" style="color:#4ea1ff;" target="_blank">OpManGPT.pem</a></li>
+        <li>iPhone öffnet „Profil laden" → <b>Installieren</b> tippen</li>
+        <li><b>Einstellungen → Allgemein → Info → Zertifikat-Vertrauenseinst.</b></li>
+        <li>„OpMan-GPT Local" aktivieren</li>
+      </ol>
+      <p style="font-size:.7rem;color:#777;margin-bottom:.75rem;">Das Zertifikat ist nur lokal im WLAN gültig.</p>
+      <button onclick="document.getElementById('lanModal').style.display='none'" style="padding:.5rem 1.2rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+    </div>
+  </div>
+
+
+<!-- Sprechwunsch-Panel (fliegt rechts unten ein bei S0/S5) -->
+  <div id="swPanel" class="sw-panel"></div>
 
   <main class="layout">
     <!-- Left: Teams -->
@@ -28,37 +138,15 @@
       <h2>Einsatztrupps</h2>
 
       <section class="panel">
-        <h3>Trupp erstellen</h3>
+        <h3>Neues EVT</h3>
         <div class="formrow">
-          <input id="teamName" placeholder="Name (z.B. Trupp 1)" />
-          <input id="teamCallsign" placeholder="Rufname (optional)" />
+          <input id="teamCallsign" placeholder="Funkrufname (z.B. Florian 40/1, optional)" style="flex:1" />
         </div>
-
         <div class="formrow">
-          <select id="teamRadioStatus" title="Funkstatus">
-            <option value="1" selected>1 – Frei auf Funk</option>
-            <option value="2">2 – Frei auf Wache</option>
-            <option value="3">3 – Auf Anfahrt</option>
-            <option value="4">4 – Am Einsatzort</option>
-            <option value="5">5 – Sprechwunsch</option>
-            <option value="6">6 – nicht Einsatzbereit</option>
-            <option value="7">7 – gebunden</option>
-            <option value="8">8 – Bedingt Einsatzbereit</option>
-            <option value="9">9 – Fremdanmeldung</option>
-            <option value="0">0 – prio. Sprechwunsch</option>
-          </select>
+          <button id="btnCreateTeam" style="width:100%">+ Neues EVT anlegen</button>
         </div>
-
-        <div class="formrow">
-          <input id="teamColor" type="color" value="#4ea1ff" title="Trupp-Farbe" />
-          <button id="btnCreateTeam">Anlegen</button>
-        </div>
-
-        <div class="formrow small">
-          <input id="teamLat" placeholder="lat" />
-          <input id="teamLng" placeholder="lng" />
-        </div>
-        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
+        <input id="teamColor" type="hidden" value="#4ea1ff" />
+        <div class="tiny" style="margin-top:2px">Name wird automatisch vergeben (EVT 1, EVT 2, …). Funkrufname nur bei Fahrzeugen o.ä.</div>
       </section>
 
       <section class="panel">
@@ -112,6 +200,11 @@
         </div>
         <button id="btnCreateMission" class="full">Einsatz anlegen</button>
         <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
+        <hr style="border:none;border-top:1px solid #334;margin:.6rem 0;">
+        <button id="btnImportExercise" class="full" style="background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;">
+          📥 Übungsfälle als Einsätze importieren (P1–P6)
+        </button>
+        <div class="tiny">Legt P1–P6 als Einsätze mit eingebetteten Koordinaten an.</div>
       </section>
 
       <section class="panel">
@@ -132,6 +225,9 @@
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  {% if initial_data %}
+  <script>window.__INITIAL_DATA__ = {{ initial_data | safe }};</script>
+  {% endif %}
   <script src="/static/app.js"></script>
 </body>
 </html>

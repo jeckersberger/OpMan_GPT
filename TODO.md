@@ -55,18 +55,80 @@ Hier geht es um die trupp-basierte Ansicht.
 
 ---
 
-### [ENHANCEMENT] Web Push Notifications für EVT-App
+### [ENHANCEMENT] Meldezettel-Generator (PDF)
 **Label:** `enhancement`
 
-Aktuell erhält die EVT-App neue Einsätze nur über den 10-Sekunden-Poll und
-das Alarm-Overlay. Web Push würde Benachrichtigungen auch bei minimiertem Browser
-ermöglichen.
+Automatisch ausgefüllter Meldezettel pro Fall als PDF zum Ausdrucken/Verteilen.
 
-**Technisch:**
-- Service Worker + Push API (Browser-seitig)
-- Push-Subscription in der Datenbank speichern
-- Server sendet Push bei neuem Alarm (`/api/missions` POST + Assignment)
-- Nur für HTTPS-Betrieb (bereits unterstützt)
+**Datenquelle:** Patient, Schlagwort, w3w, PZC, ABCD, Zielklinik – alles bereits im System vorhanden.
+
+**Ausgabe:** PDF-Download pro Fall oder Sammel-PDF für alle Fälle.
+
+---
+
+### [ENHANCEMENT] Patientensimulation / Verlaufskarten
+**Label:** `enhancement`
+
+Zeitgesteuerte Anweisungen für Mimen, z.B. „Nach 5 Min: SpO2 sinkt auf 88%, Patient wird unruhig".
+
+**Funktionen:**
+- Verlaufskarten pro Fall konfigurierbar (Zeitpunkt + Anweisung)
+- EL sieht live welche Verlaufsstufe gerade aktiv ist
+- Macht die Übung dynamischer und standardisierter
+
+---
+
+### [ENHANCEMENT] Echtzeit-Übersicht für Beobachter/Ausbilder
+**Label:** `enhancement`
+
+Eigene Read-only Seite `/beobachter` mit Live-Karte und Statusübersicht.
+
+**Zweck:** Ausbilder an den Stationen können mitverfolgen ohne EL-Rechte zu brauchen.
+
+**Inhalt:** Live-Karte, Trupp-Status, Zeitstempel, Fall-Zuordnung – alles nur lesend.
+
+---
+
+### [ENHANCEMENT] Übungsvorlagen speichern & laden
+**Label:** `enhancement`
+
+Komplette Übungskonfiguration als JSON exportieren und bei der nächsten Übung wieder importieren.
+
+**Inhalt:** Fälle, Teams, Positionen, Konfiguration.
+Nächste Übung: Datei laden → fertig. Spart das komplette Neuanlegen.
+
+---
+
+### [ENHANCEMENT] QR-Code Setup für EVT-Geräte
+**Label:** `enhancement`
+
+Pro EVT einen QR-Code generieren. Handy scannt → EVT-Seite öffnet sich mit richtigem EVT vorausgewählt.
+
+**Vorteil:** Spart Fummelei bei der Einrichtung vor der Übung. QR-Codes können ausgedruckt und an die Geräte/Westen geheftet werden.
+
+---
+
+## Zu testen (Heutige Änderungen 28.02.2026)
+
+### Aktivierungs-Overlay (Audio-Freischaltung)
+- [ ] EVT-Seite laden mit gespeichertem EVT → „Tippe zum Starten" Overlay erscheint
+- [ ] Auf „Starten" tippen → Overlay verschwindet, Polling beginnt
+- [ ] Alarm auslösen → Alarmton spielt SOFORT (nicht erst nach Quittieren)
+- [ ] Seitenreload → Overlay erscheint erneut (nicht direkt lospolling)
+
+### Fertig-Checkbox verhindert Neualarmierung
+- [ ] In `/protokoll`: Fall als „Fertig" markieren (Checkbox)
+- [ ] Versuchen, denselben Fall erneut zu alarmieren → Fehlermeldung
+- [ ] Alarm-Button ist ausgegraut / disabled bei abgeschlossenen Fällen
+- [ ] EVT geht S1 → Fall wird NICHT recycelt (bleibt completed)
+
+### Web Push Notifications
+- [ ] EVT-Seite in Chrome/Edge öffnen → Notification-Permission wird angefragt
+- [ ] Erlauben → Push-Subscription wird an Server gesendet
+- [ ] **WICHTIG**: HTTPS erforderlich! Push funktioniert nur über HTTPS
+- [ ] Browser komplett schließen → Alarm vom EL auslösen → Push-Notification erscheint
+- [ ] Auf Notification tippen → EVT-App öffnet sich
+- [ ] Tipp: App auf Homescreen installieren (PWA) für beste Ergebnisse
 
 ---
 
@@ -90,3 +152,11 @@ ermöglichen.
 - [x] Verbindungsstatus-Banner im Dashboard
 - [x] GPS-Accuracy Farbfeedback im EVT (grün/gelb/orange)
 - [x] /health Monitoring-Endpoint
+- [x] Web Push Notifications für EVT-App (Service Worker + VAPID + pywebpush)
+- [x] Alarm-Sound: WAV-basierter Ansatz statt Web Audio API (iOS/Android-kompatibel)
+- [x] Aktivierungs-Overlay bei Seitenreload (Audio-Freischaltung vor erstem Alarm)
+- [x] Alarm-Persistenz in localStorage (kein erneutes Overlay nach Quittierung)
+- [x] Nachbesprechung: RMI/SK entfernt, PZC mit Komma-Soll, ABCD-Bewertung
+- [x] ABCD-Schema: Button-Selektion bleibt erhalten, korrekte Anzeige bei SK1 (6. Stelle)
+- [x] PZC-Eingabe löst sofortige Auswertung aus (kein Warten auf Debounce)
+- [x] Abgeschlossene Fälle sind nicht mehr alarmierbar (Server + Client)

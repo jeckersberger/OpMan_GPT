@@ -65,9 +65,14 @@ Optimiert für Smartphones im Hochformat.
   - Grün: S1/S2 (frei), Gelb: S3 (auf Anfahrt), Blau: S4 (vor Ort)
   - Orange: S7/S8 (Transport/Ziel), Rot: S0/S5 (Sprechwunsch)
 - **Alarm-Overlay**: Bei neuem Einsatz erscheint Overlay mit Falldetails, Ton und Vibration
+- **Alarmton (WAV)**: Pre-rendered WAV-Blobs (kein Web Audio API) – funktioniert zuverlässig auf iOS/Android
+- **Aktivierungs-Overlay**: Beim Seitenreload mit gespeichertem EVT erscheint „Tippe zum Starten" – sichert Audio-Freischaltung vor dem ersten Alarm
+- **Alarm-Persistenz**: Quittierte Alarme werden in localStorage gespeichert, kein erneutes Overlay nach Seitenreload
+- **Web Push Notifications**: Alarm-Benachrichtigungen auch bei geschlossenem Browser (PWA + Service Worker)
 - **GPS-Tracking**: Position wird automatisch an den Server gesendet (alle ~10 Sek. oder ab 5m Bewegung)
 - **Funkgruppen-Wechsel**: Umschalten zwischen Regelfunk und Bettenkanal
 - **Fallkarte**: Zeigt den zugewiesenen Fall mit Schlagwort, Patient, w3w-Adresse, Zeitstempel
+- **PWA-installierbar**: Kann auf dem Homescreen installiert werden (manifest.json)
 
 ---
 
@@ -98,9 +103,16 @@ Alle Fälle haben eingebettete GPS-Koordinaten (Raum Feucht, Bayern) – keine I
 
 #### Falldokumentation
 - Zeitstempel: Alarmzeit, S3, S4, S7, S8
-- Gemeldete Werte: RMI, SK, PZC
+- Gemeldete Werte: PZC (6-stellig, kommagetrennte Soll-Werte)
+- ABCD-Schema: Bewertung A/B/C/D mit 1–4 Skala (nur bei SK1, d.h. PZC 6. Stelle = 1)
 - Zielklinik, Freitextnotizen
 - Abschluss-Tracking pro EVT
+- Abgeschlossene Fälle sind nicht mehr alarmierbar
+
+#### Nachbesprechung & Auswertung
+- PZC-Vergleich (Soll vs. Ist, kommagetrennt)
+- ABCD-Schema-Bewertung (grün = genau richtig, gelb = knapp daneben, rot = falsch)
+- Bewertung pro EVT-Team
 
 #### Mehrfach-EVT-Betrieb
 - Konfigurierbar: 1–6 EVT-Teams
@@ -120,9 +132,10 @@ Alle Fälle haben eingebettete GPS-Koordinaten (Raum Feucht, Bayern) – keine I
 | Datenbank | SQLite via SQLAlchemy |
 | Frontend | Vanilla JS (ES6+), CSS3 |
 | Karte | Leaflet.js 1.9.4 + OpenStreetMap |
-| Audio | Web Audio API (keine Audiodateien) |
+| Audio | Pre-rendered WAV-Blobs via `<audio>` Element |
+| Push | Web Push API + Service Worker (pywebpush/VAPID) |
 | GPS | Geolocation API (Browser) |
-| HTTPS | Selbstsigniertes Zertifikat (optional) |
+| HTTPS | Selbstsigniertes Zertifikat (optional, für Push/GPS Pflicht) |
 
 Alle Daten bleiben lokal. Keine externen Dienste außer OpenStreetMap-Kartenkacheln.
 
@@ -133,9 +146,10 @@ Alle Daten bleiben lokal. Keine externen Dienste außer OpenStreetMap-Kartenkach
 - **Team** – Name, Rufname, Farbe, Funkstatus, Verfügbarkeit, Funkgruppe, Position
 - **Mission** – Titel, Beschreibung, Priorität, Status, Position
 - **Assignment** – Trupp ↔ Einsatz Zuweisung
-- **CaseDoc** – Falldokumentation (Zeitstempel, Werte, Notizen, Abschluss)
+- **CaseDoc** – Falldokumentation (Zeitstempel, PZC, ABCD, Notizen, Abschluss)
 - **RadioLogEntry** – Funkprotokolleinträge
 - **ExerciseConfig** – EVT-Anzahl Konfiguration
+- **PushSubscription** – Web-Push-Abonnements pro EVT-Gerät
 
 ---
 

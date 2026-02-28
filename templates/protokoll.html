@@ -905,13 +905,14 @@ function setAbcd(pid, letter, val) {
   obj[letter] = val;
   doc.abcde_schema = JSON.stringify(obj);
   caseDocs[pid] = doc;
-  // Buttons aktualisieren
+  // Buttons aktualisieren – nur die Zeile des geklickten Buchstabens
   const wrap = document.getElementById('abcde_wrap_' + pid);
   if (wrap) {
     wrap.querySelectorAll('.abcd-btn').forEach(btn => {
       const row = btn.parentElement.previousElementSibling?.textContent?.trim();
+      if (row !== letter) return;  // andere Zeilen nicht anfassen
       const n = parseInt(btn.textContent);
-      btn.classList.toggle('active', row === letter && n === val);
+      btn.classList.toggle('active', n === val);
     });
   }
   debounceSave(pid);
@@ -1394,6 +1395,17 @@ async function softRefreshCaseDocs() {
       chk.checked=!!d.completed;
       document.getElementById(`card_${pid}`)?.classList.toggle('done',!!d.completed);
       document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
+    }
+
+    // ABCD-Buttons synchronisieren
+    const wrap=document.getElementById('abcde_wrap_'+pid);
+    if(wrap){
+      const obj=_parseAbcd(d.abcde_schema);
+      wrap.querySelectorAll('.abcd-btn').forEach(btn=>{
+        const row=btn.parentElement.previousElementSibling?.textContent?.trim();
+        const n=parseInt(btn.textContent);
+        btn.classList.toggle('active',obj[row]===n);
+      });
     }
 
     // Eval-Badges (PZC/ABCD)

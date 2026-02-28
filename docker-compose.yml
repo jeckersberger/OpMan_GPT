@@ -1,0 +1,35 @@
+services:
+  opman:
+    build: .
+    image: opman-gpt:latest
+    restart: unless-stopped
+
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+
+    environment:
+      # Pflicht: starkes zufälliges Secret setzen (z.B. openssl rand -hex 32)
+      SECRET_KEY: "${SECRET_KEY}"
+
+      # Anzahl gunicorn-Worker (Faustregel: 2 × CPU-Kerne + 1)
+      GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
+
+    volumes:
+      # SQLite-Datenbank, SSL-Zertifikate und VAPID-Keys persistieren.
+      # :Z → SELinux-Label für private (nicht geteilte) Volumes (rootless-kompatibel).
+      # VAPID-Keys werden bei erstem Start automatisch in instance/ erzeugt.
+      - ./instance:/app/instance:Z
+
+    security_opt:
+      # Verhindert Privilege-Escalation im Container
+      - no-new-privileges:true
+
+    # Kein root, kein privileged – rootless-Docker-kompatibel
+    # user: "1000:1000"  # bereits im Dockerfile gesetzt, hier optional
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -26,7 +26,10 @@ from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, Exerci
 # ---------------------------
 # Web-Push (VAPID)
 # ---------------------------
-_VAPID_KEYS_PATH = os.path.join(os.path.dirname(__file__), "vapid_keys.json")
+_VAPID_KEYS_PATH = os.path.join(os.path.dirname(__file__), "instance", "vapid_keys.json")
+# Fallback: vapid_keys.json im App-Verzeichnis (Legacy / Entwicklung)
+if not os.path.exists(_VAPID_KEYS_PATH):
+    _VAPID_KEYS_PATH = os.path.join(os.path.dirname(__file__), "vapid_keys.json")
 _VAPID_PRIVATE_PEM = None
 _VAPID_PUBLIC_KEY  = None
 if os.path.exists(_VAPID_KEYS_PATH):
@@ -147,6 +150,7 @@ def resolve_w3w(words: str):
 
 def create_app():
     app = Flask(__name__)
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-in-production")
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///einsatzleiter.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     # WAL-Modus für SQLite: mehrere gunicorn-Worker können gleichzeitig lesen

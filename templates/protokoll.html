@@ -360,7 +360,25 @@
   <span class="clock" id="clock"></span>
   <button class="btn btn-ghost no-print" onclick="refreshAll()">⟳</button>
   <button class="btn btn-ghost no-print" onclick="window.print()">🖨 Drucken</button>
+  <button class="btn btn-ghost no-print" onclick="showJsonTemplate()" style="color:#c084fc;border-color:#7c3aed;">🤖 JSON für KI</button>
   <button class="btn btn-danger no-print" onclick="showResetModal()">↺ Reset</button>
+</div>
+
+<!-- ═══ JSON-KI-MODAL ═══ -->
+<div id="jsonKiModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:flex-start;justify-content:center;overflow-y:auto;padding:2rem 0;">
+  <div style="background:#111b2e;border:1px solid #7c3aed;border-radius:12px;padding:1.5rem;max-width:760px;width:95%;margin:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+      <h3 style="color:#c084fc;font-size:.95rem;margin:0;">🤖 JSON-Vorlage für KI – Patientendaten generieren</h3>
+      <button onclick="document.getElementById('jsonKiModal').style.display='none'" style="background:transparent;border:none;color:#aaa;font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <p style="font-size:.78rem;color:#a6b3d1;margin-bottom:.75rem;">Kopiere diese Vorlage und gib sie einer KI (z.B. Claude) mit der Anweisung, neue Übungsfälle in genau diesem Format zu erstellen. Die Fälle können danach über <strong>Fallverwaltung → Import</strong> eingespielt werden.</p>
+    <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
+      <button onclick="copyJsonTemplate()" style="padding:.35rem .8rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">📋 Kopieren</button>
+      <button onclick="copyJsonPrompt()" style="padding:.35rem .8rem;background:#1a2a40;color:#4ea1ff;border:1px solid #4ea1ff;border-radius:6px;cursor:pointer;font-family:inherit;font-size:.8rem;">📋 Mit KI-Prompt kopieren</button>
+      <span id="jsonCopyStatus" style="font-size:.75rem;color:#3ddc84;align-self:center;"></span>
+    </div>
+    <textarea id="jsonKiText" readonly style="width:100%;min-height:420px;background:#0b1220;border:1px solid #223152;border-radius:6px;color:#e7eefc;font-family:monospace;font-size:.72rem;padding:.75rem;resize:vertical;"></textarea>
+  </div>
 </div>
 
 <!-- Sprechwunsch-Panel -->
@@ -413,7 +431,7 @@
 
 <!-- ═══ FALLDOKUMENTATION ═══ -->
 <div class="section">
-  <div class="section-title">Falldokumentation P1 – P6</div>
+  <div class="section-title">Falldokumentation</div>
   <div class="case-grid" id="caseGrid"><div class="text-muted">Lade…</div></div>
 </div>
 
@@ -511,9 +529,9 @@
       <label class="form-label">Fall</label>
       <select id="logCase">
         <option value="">–</option>
-        <option value="P1">P1</option><option value="P2">P2</option>
-        <option value="P3">P3</option><option value="P4">P4</option>
-        <option value="P5">P5</option><option value="P6">P6</option>
+        {% for cid in cases %}
+        <option value="{{ cid }}">{{ cid }}</option>
+        {% endfor %}
       </select>
     </div>
     <div>
@@ -660,7 +678,7 @@ function renderEvtBoard() {
 /* ── Schnell-Alarm Grid ──────────────────────────────────── */
 function renderAlarmGrid() {
   const grid = document.getElementById('alarmGrid');
-  grid.innerHTML = ['P1','P2','P3','P4','P5','P6'].map(pid=>{
+  grid.innerHTML = Object.keys(CASES_META).sort().map(pid=>{
     const doc       = caseDocs[pid]||{};
     const alarmed   = !!doc.alarm_time;
     const completed = !!doc.completed;
@@ -711,7 +729,9 @@ async function alarmCase(pid) {
   }
 
   // Log-Eintrag
-  const alarmTxt = (ALARM_TEXTS[pid]||`Alarmierung ${pid}`)
+  const _m = CASES_META[pid]||{};
+  const _fallback = `Äskulap Feucht an EVT __: Einsatz ${pid}. Schlagwort ${_m.schlagwort||'–'}. Adresse ${_m.w3w_alarm||_m.w3w||'–'}. Patient: ${_m.patient||'–'}, ${_m.alter||'–'} Jahre. Ende.`;
+  const alarmTxt = (ALARM_TEXTS[pid]||_fallback)
     .replace('EVT __', evt||'EVT __');
   await fetch('/api/radiolog',{
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -738,7 +758,7 @@ async function alarmCase(pid) {
 /* ── Case Grid ───────────────────────────────────────────── */
 function renderCaseGrid() {
   const grid=document.getElementById('caseGrid');
-  grid.innerHTML=['P1','P2','P3','P4','P5','P6'].map(pid=>buildCaseCard(pid)).join('');
+  grid.innerHTML=Object.keys(CASES_META).sort().map(pid=>buildCaseCard(pid)).join('');
 }
 
 function buildCaseCard(pid) {
@@ -985,7 +1005,7 @@ function refreshEvalRow(pid) {
 function renderTeamProgress() {
   const panel = document.getElementById('teamProgressPanel');
   if (!panel) return;
-  const allCases = ['P1','P2','P3','P4','P5','P6'];
+  const allCases = Object.keys(CASES_META).sort();
 
   if (!teams.length) {
     panel.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Keine Trupps angelegt.</div>';
@@ -1057,7 +1077,7 @@ function renderTeamProgress() {
 
 /* ── Nachbesprechung ─────────────────────────────────────── */
 function renderNachbesprechung() {
-  const ids=['P1','P2','P3','P4','P5','P6'];
+  const ids=Object.keys(CASES_META).sort();
   const tbl=document.getElementById('nbrTable');
   tbl.innerHTML=`<thead><tr>
     <th>Fall</th><th>Schlagwort</th><th>EVT</th>
@@ -1103,7 +1123,7 @@ function renderNachbesprechung() {
 }
 
 function renderEvtBewertung() {
-  const ids=['P1','P2','P3','P4','P5','P6'];
+  const ids=Object.keys(CASES_META).sort();
   // Sammle Daten pro EVT
   const evtData={};
   ids.forEach(pid=>{
@@ -1156,7 +1176,7 @@ function renderEvtBewertung() {
 /* ── Zeitleiste ──────────────────────────────────────────── */
 function renderTimeline() {
   const container=document.getElementById('timeline');
-  const ids=['P1','P2','P3','P4','P5','P6'];
+  const ids=Object.keys(CASES_META).sort();
   const allTs=[];
   ids.forEach(pid=>{
     const d=caseDocs[pid]||{};
@@ -1381,7 +1401,7 @@ async function softRefreshCaseDocs() {
   if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); renderSprechwunschPanel(); }
 
   const focused=document.activeElement;
-  ['P1','P2','P3','P4','P5','P6'].forEach(pid=>{
+  Object.keys(CASES_META).sort().forEach(pid=>{
     const d=caseDocs[pid]||{};
 
     // Zeitstempel-Chips in-place
@@ -1426,6 +1446,101 @@ setInterval(softRefreshCaseDocs, 10000);
 
 /* ── Init ────────────────────────────────────────────────── */
 refreshAll();
+
+/* ── JSON-KI-Vorlage ─────────────────────────────────────── */
+const JSON_SCHEMA_TEMPLATE = {
+  "version": 1,
+  "cases": [
+    {
+      "id": "P1",
+      "_hinweis_id": "Eindeutige ID, z.B. P1–P9 oder beliebig",
+      "schlagwort": "VU (schwer) – Radfahrer vs. PKW",
+      "_hinweis_schlagwort": "Kurztitel für Alarmierung (max. ~60 Zeichen)",
+      "szenario": "Detaillierter Szenario-Untertitel (optional)",
+      "patient": "Vorname Nachname",
+      "alter": 27,
+      "geschlecht": "m",
+      "_hinweis_geschlecht": "m = männlich, w = weiblich, d = divers",
+      "w3w": "///erstes.arbeitswelt.spülmittel",
+      "_hinweis_w3w": "Echter Fundort als what3words-Adresse",
+      "w3w_alarm": "",
+      "_hinweis_w3w_alarm": "Nur befüllen wenn Adressfalle: falsche Alarmadresse hier eintragen",
+      "lat": 49.377493,
+      "lng": 11.206863,
+      "rmi_soll": "211",
+      "_hinweis_rmi": "3-stelliger RMI-Code (Rettungsmittelindikation)",
+      "sk_soll": "1",
+      "_hinweis_sk": "SK-Kategorie: 1, 2, 3, oder Bereich wie 1-3 oder 2/3",
+      "pzc_soll": "211271",
+      "_hinweis_pzc": "Wird automatisch aus RMI+SK berechnet; Format: RMI(3)+LS(2)+SK(1)",
+      "kein_transport": false,
+      "vitals": {
+        "RR": "82/54",
+        "HF": "132",
+        "AF": "30",
+        "SpO2": "88% (RA)",
+        "Temp": "36,0",
+        "GCS": "12 (E3 V4 M5)",
+        "BZ": "118"
+      },
+      "befund": [
+        "Erste Beschwerde / Befundzeile",
+        "Zweite Beschwerde / Befundzeile"
+      ],
+      "abcde": {
+        "A": "Atemwege – z.B. frei, Zunge zurückgefallen",
+        "B": "Atmung – Frequenz, Atemgeräusche, SpO2",
+        "C": "Kreislauf – RR, HF, Kapillarfüllzeit, Blutungen",
+        "D": "Neurologie – GCS, Pupillen, Motorik",
+        "E": "Exposition – sichtbare Verletzungen, Körperstatus"
+      },
+      "sampler": {
+        "S": "Symptome (Schmerzen, Beschwerden)",
+        "A": "Allergien (Medikamente, Nahrung)",
+        "M": "Medikamente (aktuelle Dauermedikation)",
+        "P": "Vorerkrankungen (Diagnosen, OPs)",
+        "L": "Letzte Mahlzeit / letztes Trinken",
+        "E": "Ereignis (Was ist passiert? Hergang)",
+        "R": "Risikofaktoren (Rauchen, Alkohol, Sport)"
+      },
+      "besonderheit": "Hinweis für Übungsleitung / Mime (nicht auf Karte sichtbar)",
+      "hinweis": "Interner Hinweis (optional)"
+    }
+  ]
+};
+
+const KI_PROMPT = `Du bist ein Experte für Sanitätsübungen beim Roten Kreuz.
+Erstelle neue Übungsfälle für eine Funkübung im Rettungsdienst.
+Verwende EXAKT das folgende JSON-Format und fülle alle Felder sinnvoll aus.
+Erstelle [ANZAHL] Fälle mit medizinisch realistischen Szenarien (z.B. Trauma, Internistisch, Neurologisch).
+
+Das Format (Felder mit "_hinweis_" sind nur Erklärungen und dürfen im Output weggelassen werden):
+
+`;
+
+function showJsonTemplate() {
+  const textarea = document.getElementById('jsonKiText');
+  textarea.value = JSON.stringify(JSON_SCHEMA_TEMPLATE, null, 2);
+  document.getElementById('jsonKiModal').style.display = 'flex';
+}
+
+function copyJsonTemplate() {
+  const txt = document.getElementById('jsonKiText').value;
+  navigator.clipboard.writeText(txt).then(() => {
+    const s = document.getElementById('jsonCopyStatus');
+    s.textContent = '✓ Kopiert!';
+    setTimeout(() => s.textContent = '', 2000);
+  });
+}
+
+function copyJsonPrompt() {
+  const json = JSON.stringify(JSON_SCHEMA_TEMPLATE, null, 2);
+  navigator.clipboard.writeText(KI_PROMPT + json).then(() => {
+    const s = document.getElementById('jsonCopyStatus');
+    s.textContent = '✓ Prompt + Schema kopiert!';
+    setTimeout(() => s.textContent = '', 2500);
+  });
+}
 </script>
 </body>
 </html>

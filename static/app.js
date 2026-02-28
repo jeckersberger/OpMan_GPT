@@ -1073,7 +1073,7 @@ function wireUI(){
         // error already shown by api()
       } finally {
         btnImport.disabled = false;
-        btnImport.textContent = "📥 Übungsfälle als Einsätze importieren (P1–P6)";
+        btnImport.textContent = "📥 Übungsfälle als Einsätze importieren";
       }
     });
   }

@@ -41,16 +41,19 @@
 
     /* Header */
     .card-header {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      margin-bottom: 4mm;
+      display: flex; align-items: center; justify-content: space-between;
+      border: 1.5px solid #1a3a6b; border-radius: 4px;
+      padding: 2mm 3mm; margin-bottom: 3mm;
     }
-    .card-org { font-size: 11pt; font-weight: 700; color: #1a3a6b; }
+    .card-header-left { font-size: 8pt; font-weight: 700; color: #1a3a6b; white-space: nowrap; }
+    .card-header-center { flex: 1; text-align: center; padding: 0 4mm; }
+    .card-org { font-size: 8pt; font-weight: 700; color: #1a3a6b; }
     .uebung-badge {
       background: #cc0000; color: #fff; font-weight: 900; font-size: 14pt;
-      padding: 2mm 5mm; border-radius: 3px; letter-spacing: .05em;
+      padding: 2mm 5mm; border-radius: 3px; letter-spacing: .05em; white-space: nowrap;
     }
-    .card-title { font-size: 13pt; font-weight: 700; margin-bottom: 1mm; }
-    .card-subtitle { font-size: 9pt; color: #444; margin-bottom: 4mm; }
+    .card-title { font-size: 13pt; font-weight: 700; line-height: 1.2; }
+    .card-subtitle { font-size: 8.5pt; color: #444; margin-top: .5mm; }
 
     /* Zwei-Spalten: Patient + Vitals */
     .top-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
@@ -161,18 +164,17 @@
 <div class="page">
 
   <div class="card-header">
-    <div>
-      <div class="card-org">BRK Funkübung Feucht</div>
+    <div class="card-header-left">BRK Funkübung Feucht</div>
+    <div class="card-header-center">
+      <div class="card-title">Patientenkarte {{ cd.id }}</div>
+      {% if cd.szenario %}
+      <div class="card-subtitle">Szenario: {{ cd.szenario }}</div>
+      {% elif cd.schlagwort %}
+      <div class="card-subtitle">Szenario: {{ cd.schlagwort }}</div>
+      {% endif %}
     </div>
     <div class="uebung-badge">ÜBUNG</div>
   </div>
-
-  <div class="card-title">Patientenkarte {{ cd.id }}</div>
-  {% if cd.szenario %}
-  <div class="card-subtitle">Szenario: {{ cd.szenario }}</div>
-  {% elif cd.schlagwort %}
-  <div class="card-subtitle">Szenario: {{ cd.schlagwort }}</div>
-  {% endif %}
 
   {# Besonderheit / Adressfalle / falscher Name #}
   {% if cd.patient_alarm %}
@@ -288,9 +290,8 @@
   </div>
   {% endif %}
 
-  <div class="card-footer">
-    <span>Interne Übungsunterlage – Patientenkarte {{ cd.id }}</span>
-    <span>BRK Funkübung Feucht – Patientensteckkarten</span>
+  <div class="card-footer" style="justify-content:center;">
+    <span>Interne Übungsunterlage – Patientenkarte {{ cd.id }} – Stand: {{ today }}</span>
   </div>
 </div>
 

@@ -981,13 +981,15 @@ function show(id){
 
     @app.get("/patientenkarten")
     def patientenkarten():
+        from datetime import date
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
-        return render_template("patientenkarten.html", cases=cases)
+        return render_template("patientenkarten.html", cases=cases, today=date.today().isoformat())
 
     @app.get("/patientenkarten/<string:case_id>")
     def patientenkarte_single(case_id):
+        from datetime import date
         cd = db.get_or_404(CaseDefinition, case_id)
-        return render_template("patientenkarten.html", cases=[cd])
+        return render_template("patientenkarten.html", cases=[cd], today=date.today().isoformat())
 
     # ---------------------------
     # Teams

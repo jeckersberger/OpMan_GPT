@@ -218,13 +218,14 @@
         <div class="section-title">Auswertungsfelder</div>
         <div class="field-grid cols3">
           <label>RMI-Soll
-            <input type="text" name="rmi_soll" value="{{ cd.rmi_soll or '' }}" placeholder="z.B. 211">
+            <input type="text" name="rmi_soll" value="{{ cd.rmi_soll or '' }}" placeholder="z.B. 211" oninput="derivePzc()">
           </label>
           <label>SK-Soll
-            <input type="text" name="sk_soll" value="{{ cd.sk_soll or '' }}" placeholder="z.B. 1">
+            <input type="text" name="sk_soll" value="{{ cd.sk_soll or '' }}" placeholder="z.B. 1 oder 1-3 oder 2/3" oninput="derivePzc()">
           </label>
           <label>PZC-Soll
-            <input type="text" name="pzc_soll" value="{{ cd.pzc_soll or '' }}" placeholder="z.B. 211271">
+            <input type="text" name="pzc_soll" value="{{ cd.pzc_soll or '' }}" placeholder="z.B. 211271" id="pzc_soll_input">
+            <span id="pzc_hint" style="font-size:.65rem;color:var(--muted);margin-top:.1rem;"></span>
           </label>
         </div>
         <div style="margin-top:.6rem;">
@@ -341,6 +342,54 @@
 </div>
 
 <script>
+/* ── PZC-Ableitung aus RMI + SK ─────────────────────────────────────────────
+   PZC = RMI (3 Stellen) + Leitsymptom (2 Stellen, fest je RMI) + SK (1 Stelle)
+   Bekannte Leitsymptom-Codes (erweiterbar):                                  */
+const RMI_LEITSYMPTOM = {
+  '211':'27', '212':'27', '221':'27', '222':'27',
+  '272':'19', '271':'19',
+  '312':'62', '311':'62',
+  '421':'72', '422':'72',
+  '331':'56', '332':'56',
+};
+
+function derivePzc() {
+  const rmiEl = document.querySelector('[name="rmi_soll"]');
+  const skEl  = document.querySelector('[name="sk_soll"]');
+  const pzcEl = document.getElementById('pzc_soll_input');
+  const hint  = document.getElementById('pzc_hint');
+  if (!rmiEl || !skEl || !pzcEl) return;
+
+  const rmi = (rmiEl.value || '').trim();
+  const sk  = (skEl.value  || '').trim();
+  const ls  = RMI_LEITSYMPTOM[rmi];
+
+  if (!rmi) { hint.textContent = ''; return; }
+  if (!ls) {
+    hint.style.color = 'var(--yellow)';
+    hint.textContent = '⚠ RMI nicht in Lookup – PZC manuell eintragen';
+    return;
+  }
+  if (!sk || sk === '—' || sk === '-') {
+    pzcEl.value = '—';
+    hint.style.color = 'var(--green)'; hint.textContent = '✓ Abgeleitet';
+    return;
+  }
+
+  let nums = [];
+  const rangeM = sk.match(/^(\d+)-(\d+)$/);
+  if (rangeM) {
+    for (let i = +rangeM[1]; i <= +rangeM[2]; i++) nums.push(i);
+  } else {
+    nums = sk.split(/[/,]/).map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  }
+  if (!nums.length) { hint.textContent = ''; return; }
+
+  pzcEl.value = nums.map(n => rmi + ls + n).join(',');
+  hint.style.color = 'var(--green)';
+  hint.textContent = `✓ RMI ${rmi} + LS ${ls} + SK [${nums.join(',')}]`;
+}
+
 function showImport() { document.getElementById('importModal').classList.add('active'); }
 function closeImport() { document.getElementById('importModal').classList.remove('active'); }
 

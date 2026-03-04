@@ -189,47 +189,14 @@
     <aside class="sidebar right">
       <h2>Einsätze</h2>
 
-      <section class="panel">
-        <h3>Einsatz erstellen</h3>
-        <div class="formrow">
-          <input id="missionTitle" placeholder="Titel (z.B. Brandmelder)" />
-        </div>
-        <div class="formrow">
-          <textarea id="missionDesc" placeholder="Beschreibung (optional)"></textarea>
-        </div>
-        <div class="formrow">
-          <select id="missionStatus">
-            <option value="offen">offen</option>
-            <option value="zugewiesen">zugewiesen</option>
-            <option value="in_arbeit">in_arbeit</option>
-            <option value="abgeschlossen">abgeschlossen</option>
-            <option value="abgebrochen">abgebrochen</option>
-          </select>
-          <select id="missionPriority">
-            <option value="1">Priorität 1</option>
-            <option value="2">Priorität 2</option>
-            <option value="3" selected>Priorität 3</option>
-            <option value="4">Priorität 4</option>
-            <option value="5">Priorität 5</option>
-          </select>
-        </div>
-
-        <div class="formrow small">
-          <input id="missionLat" placeholder="lat" />
-          <input id="missionLng" placeholder="lng" />
-        </div>
-        <button id="btnCreateMission" class="full">Einsatz anlegen</button>
-        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
-      </section>
-
-      <section class="panel" id="activeCasesPanel" style="display:none;">
-        <h3>Aktive Einsätze</h3>
-        <div id="activeCasesList" class="list"></div>
-      </section>
+      <!-- Hidden inputs for map click coordinates (used by mission creation API) -->
+      <input id="missionLat" type="hidden" />
+      <input id="missionLng" type="hidden" />
 
       <section class="panel">
         <h3>Schnellkoordination</h3>
-        <div id="missionsList" class="list"></div>
+        <div id="exerciseCasesList" class="list"></div>
+        <div id="missionsList" class="list" style="margin-top:8px;"></div>
       </section>
 
       <section class="panel">

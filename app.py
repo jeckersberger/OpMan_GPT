@@ -693,10 +693,10 @@ def create_app():
         result: dict = {"cases": {}, "startpunkt": None}
         dirty = False
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
-            # Lazy-resolve: if w3w is set but coordinates are missing, resolve now and persist
-            if cd.w3w and cd.lat is None and cd.lng is None:
+            # Always resolve w3w → coordinates (w3w is authoritative source)
+            if cd.w3w:
                 lat, lng = resolve_w3w(cd.w3w)
-                if lat is not None:
+                if lat is not None and (cd.lat != lat or cd.lng != lng):
                     cd.lat, cd.lng = lat, lng
                     dirty = True
             result["cases"][cd.id] = {
@@ -914,8 +914,8 @@ function show(id){
         cd.w3w_alarm      = data.get("w3w_alarm", "").strip() or None
         cd.lat            = float(data["lat"]) if data.get("lat") else None
         cd.lng            = float(data["lng"]) if data.get("lng") else None
-        # Auto-resolve w3w → coordinates if w3w is set but lat/lng are missing
-        if cd.w3w and cd.lat is None and cd.lng is None:
+        # Always resolve w3w → coordinates (w3w is authoritative source)
+        if cd.w3w:
             lat, lng = resolve_w3w(cd.w3w)
             if lat is not None:
                 cd.lat = lat
@@ -1017,8 +1017,8 @@ function show(id){
                     cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
                 if "sampler" in item:
                     cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
-                # Auto-resolve w3w → coordinates if w3w set but lat/lng missing
-                if cd.w3w and cd.lat is None and cd.lng is None:
+                # Always resolve w3w → coordinates (w3w is authoritative source)
+                if cd.w3w:
                     lat, lng = resolve_w3w(cd.w3w)
                     if lat is not None:
                         cd.lat, cd.lng = lat, lng

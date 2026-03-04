@@ -6,3 +6,5 @@ instance/
 *.sqlite3
 .env
 vapid_keys.json
+.coverage
+htmlcov/

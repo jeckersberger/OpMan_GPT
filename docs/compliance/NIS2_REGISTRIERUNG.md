@@ -1,206 +1,173 @@
 # NIS2-Registrierung beim BSI
 
 **Dokument:** NIS2-Registrierungsleitfaden
-**System:** OpMan-GPT -- Einsatzleitsoftware
+**System:** OpMan_GPT -- Einsatzleitsoftware
 **Version:** 1.0
-**Stand:** 04.03.2026
-**Klassifikation:** VERTRAULICH
-**Frist:** 06.03.2026
+**Datum:** 04.03.2026
+**Klassifikation:** Intern -- Vertraulich
+**Frist:** 06.03.2026 (Registrierungspflicht)
 
 ---
 
 ## 1. Einleitung
 
-Die NIS2-Richtlinie (EU 2022/2555) wurde in deutsches Recht durch das NIS2-Umsetzungsgesetz (NIS2UmsuCG) uebergefuehrt. Betreiber von Einsatzleitsystemen im Rettungsdienst fallen als Einrichtungen des Gesundheitssektors bzw. der oeffentlichen Verwaltung unter die Kategorie "wesentliche Einrichtungen" (essential entities) gemaess Anhang I der Richtlinie.
+Gemaess dem NIS-2-Umsetzungs- und Cybersicherheitsstaerkungsgesetz (NIS2UmsuCG) sind Betreiber wesentlicher und wichtiger Einrichtungen verpflichtet, sich beim Bundesamt fuer Sicherheit in der Informationstechnik (BSI) zu registrieren. Rettungsdienste und Leitstellen fallen als Teil des Sektors "Gesundheitswesen" unter die Kategorie der wesentlichen Einrichtungen.
 
-Die Registrierung beim Bundesamt fuer Sicherheit in der Informationstechnik (BSI) ist **bis zum 06.03.2026** verpflichtend durchzufuehren.
+**Rechtsgrundlage:** ss 33 BSIG (neu), Art. 3 NIS-2-Richtlinie (EU) 2022/2555
+
+**ACHTUNG: Die Registrierungsfrist endet am 06.03.2026. Die Registrierung muss unverzueglich erfolgen.**
 
 ---
 
 ## 2. Schritt-fuer-Schritt Registrierungsprozess
 
-### Schritt 1: Betroffenheitspruefung
+### Schritt 1: Einrichtungstyp bestimmen
 
-- [ ] Pruefen, ob die Einrichtung unter NIS2 faellt (Sektorzugehoerigkeit: Gesundheitswesen)
-- [ ] Feststellen der Kategorie: **Wesentliche Einrichtung** (essential) oder **Wichtige Einrichtung** (important)
-- [ ] Rettungsdienst / Notfalldienste: In der Regel "wesentliche Einrichtung"
-- [ ] Schwellenwerte pruefen: > 50 Mitarbeiter ODER > 10 Mio. EUR Jahresumsatz
-- [ ] Sonderfall: Unabhaengig von Groesse, wenn Einsatzleitsoftware als kritische Infrastruktur eingestuft
+- [ ] Pruefen, ob die Organisation als "wesentliche Einrichtung" (essential entity) oder "wichtige Einrichtung" (important entity) gilt
+- [ ] Sektor: **Gesundheitswesen** (Anhang I Nr. 5 NIS-2-RL)
+- [ ] Teilsektor: Rettungsdienst / Notfalldienste
+- [ ] Schwellenwerte pruefen:
+  - Mitarbeiterzahl >= 50 ODER
+  - Jahresumsatz > 10 Mio. EUR ODER
+  - Jahresbilanzsumme > 10 Mio. EUR
+  - ODER: Sonderregelung fuer kritische Infrastrukturen unabhaengig von Groesse
 
-### Schritt 2: BSI-Portal-Zugang
+### Schritt 2: BSI-Portal aufrufen
 
-1. Aufruf des BSI-Registrierungsportals: `https://nis2-registrierung.bsi.bund.de`
-2. Organisationskonto anlegen (Verantwortlicher der Geschaeftsfuehrung)
-3. ELSTER-Zertifikat oder eID zur Authentifizierung verwenden
-4. Zugangsbestaetigung per Post abwarten (ca. 3-5 Werktage)
+- [ ] Registrierungsportal: **https://nis2-registrierung.bsi.bund.de**
+- [ ] Organisationskonto anlegen (ELSTER-Zertifikat oder eID erforderlich)
+- [ ] Verantwortliche Person mit Vertretungsbefugnis benennen
 
 ### Schritt 3: Stammdaten erfassen
 
-Folgende Informationen im Portal eintragen:
+Folgende Informationen werden bei der Registrierung benoetigt:
 
 | Feld | Beschreibung | Beispiel |
 |------|-------------|----------|
-| Name der Einrichtung | Offizieller Name | [Organisation] |
+| Name der Einrichtung | Vollstaendiger rechtlicher Name | [Organisation] |
 | Rechtsform | z.B. e.V., gGmbH, KdoeR | [Rechtsform] |
-| Handelsregisternummer | HR-Nummer oder aehnlich | [HR-Nummer] |
-| Anschrift | Hauptsitz | [Adresse] |
-| Sektor | NIS2-Sektor | Gesundheitswesen |
-| Teilsektor | NIS2-Teilsektor | Rettungsdienste / Notfalldienste |
-| Kategorie | Wesentlich/Wichtig | Wesentliche Einrichtung |
-| Mitarbeiterzahl | Gesamtanzahl | [Anzahl] |
-| Jahresumsatz | Letztes Geschaeftsjahr | [Betrag] EUR |
+| Anschrift | Sitz der Einrichtung | [Strasse, PLZ, Ort] |
+| Sektor | Zugeordneter NIS2-Sektor | Gesundheitswesen |
+| Teilsektor | Spezifischer Teilsektor | Rettungsdienst / Leitstelle |
+| Registernummer | Handelsregister / Vereinsregister | [HRB/VR-Nummer] |
+| Umsatzsteuer-ID | Falls vorhanden | [USt-IdNr.] |
+| Mitarbeiterzahl | Anzahl Beschaeftigte | [Anzahl] |
+| Jahresumsatz | Letztes Geschaeftsjahr | [Betrag EUR] |
+| EU-Mitgliedstaaten | Staaten, in denen Dienste erbracht werden | Deutschland [, Oesterreich] |
+| IP-Adressbereiche | Oeffentliche IP-Bereiche der Einrichtung | [CIDR-Notation] |
 
 ### Schritt 4: Kontaktstelle benennen
 
-- [ ] Hauptansprechpartner (Kontaktstelle) festlegen
+- [ ] Primaere Kontaktstelle (24/7 erreichbar) benennen
 - [ ] Stellvertretende Kontaktstelle benennen
-- [ ] 24/7-Erreichbarkeit sicherstellen (fuer Vorfallsmeldungen)
-- [ ] Kontaktstelle dem BSI melden
+- [ ] Kontaktdaten in BSI-Portal eintragen
 
-### Schritt 5: IT-Systeme registrieren
+### Schritt 5: IT-Systeme und Dienste melden
 
-- [ ] OpMan-GPT als Einsatzleitsystem registrieren
-- [ ] Abhaengige Systeme erfassen (Datenbank, Netzwerk, Kommunikation)
-- [ ] Standorte der IT-Systeme angeben
-- [ ] Betriebsverantwortliche benennen
+- [ ] Kritische IT-Systeme auflisten (inkl. OpMan_GPT)
+- [ ] Netzwerk-Infrastruktur beschreiben
+- [ ] Abhaengigkeiten zu Drittanbietern dokumentieren
+- [ ] Einsatzgebiet und Versorgungsbereich angeben
 
 ### Schritt 6: Registrierung abschliessen
 
-- [ ] Alle Pflichtfelder pruefen
-- [ ] Registrierung durch Geschaeftsfuehrung freigeben lassen
-- [ ] Registrierung absenden
-- [ ] Bestaetigungsnummer archivieren
+- [ ] Angaben auf Vollstaendigkeit pruefen
+- [ ] Registrierung durch vertretungsberechtigte Person bestaetigen
+- [ ] Bestaetigungsmail archivieren
+- [ ] BSI-Registrierungsnummer notieren: ________________
 
 ---
 
-## 3. Erforderliche Informationen -- Checkliste
+## 3. Kontaktstellen-Template
 
-### 3.1 Organisationsdaten
+### Primaere Kontaktstelle (gemeldete Kontaktstelle gem. ss 33 Abs. 2 BSIG)
 
-- [ ] Vollstaendiger Name der Einrichtung
-- [ ] Anschrift (Strasse, PLZ, Ort)
-- [ ] Rechtsform
-- [ ] Handelsregisternummer / Vereinsregisternummer
-- [ ] Umsatzsteuer-ID
-- [ ] Branche / Sektor nach NIS2-Klassifikation
-- [ ] Anzahl der Mitarbeiter
-- [ ] Jahresumsatz / Jahresbilanzsumme
+| Feld | Angabe |
+|------|--------|
+| **Name** | [Vorname Nachname] |
+| **Funktion** | [z.B. IT-Sicherheitsbeauftragter, CISO] |
+| **Telefon (24/7)** | [+49 xxx xxxxxxx] |
+| **Mobiltelefon** | [+49 xxx xxxxxxx] |
+| **E-Mail** | [name@organisation.de] |
+| **PGP-Fingerprint** | [Falls vorhanden] |
+| **Erreichbarkeit** | 24/7 (Bereitschaftsregelung) |
 
-### 3.2 Kontaktdaten
+### Stellvertretende Kontaktstelle
 
-- [ ] Name des Geschaeftsfuehrers / Vorstands
-- [ ] E-Mail-Adresse (dedizierte NIS2-Mailbox empfohlen)
-- [ ] Telefonnummer (24/7 erreichbar)
-- [ ] Mobilnummer fuer Notfaelle
-- [ ] Stellvertreter mit allen Kontaktdaten
+| Feld | Angabe |
+|------|--------|
+| **Name** | [Vorname Nachname] |
+| **Funktion** | [z.B. Stellv. IT-Leiter] |
+| **Telefon (24/7)** | [+49 xxx xxxxxxx] |
+| **Mobiltelefon** | [+49 xxx xxxxxxx] |
+| **E-Mail** | [name@organisation.de] |
+| **Erreichbarkeit** | 24/7 (Bereitschaftsregelung) |
 
-### 3.3 Technische Angaben
+### Eskalationskontakt Geschaeftsfuehrung
 
-- [ ] Beschreibung der kritischen Dienste
-- [ ] Anzahl und Art der IT-Systeme
-- [ ] Eingesetzte Einsatzleitsoftware (OpMan-GPT)
-- [ ] Netzwerkarchitektur (ueberblick)
-- [ ] Vorhandene Sicherheitsmassnahmen
-- [ ] Vorhandene Zertifizierungen (ISO 27001, BSI-Grundschutz)
-
-### 3.4 Vorfallsmeldeverfahren
-
-- [ ] Interner Prozess fuer Vorfallserkennung
-- [ ] Meldekette (intern -> BSI)
-- [ ] Kontaktdaten des CERT/CSIRT
+| Feld | Angabe |
+|------|--------|
+| **Name** | [Vorname Nachname] |
+| **Funktion** | [Geschaeftsfuehrer / Vorstand] |
+| **Telefon** | [+49 xxx xxxxxxx] |
+| **E-Mail** | [name@organisation.de] |
 
 ---
 
-## 4. Kontaktstelle -- Benennungsvorlage
+## 4. Checkliste erforderliche Unterlagen
 
-```
-BENENNUNG DER KONTAKTSTELLE GEMAESS NIS2UMSUCG
-
-Einrichtung:      [Name der Organisation]
-Registrierungs-Nr: [wird vom BSI vergeben]
-Datum:             [Datum]
-
-HAUPTKONTAKTSTELLE:
-Name:              [Vor- und Nachname]
-Funktion:          [z.B. IT-Sicherheitsbeauftragter / CISO]
-E-Mail:            [nis2@organisation.de]
-Telefon:           [+49 ...]
-Mobil:             [+49 ...]
-Erreichbarkeit:    24/7
-
-STELLVERTRETENDE KONTAKTSTELLE:
-Name:              [Vor- und Nachname]
-Funktion:          [z.B. Stellv. IT-Sicherheitsbeauftragter]
-E-Mail:            [nis2-stellv@organisation.de]
-Telefon:           [+49 ...]
-Mobil:             [+49 ...]
-Erreichbarkeit:    24/7
-
-ESKALATIONSKONTAKT (GESCHAEFTSFUEHRUNG):
-Name:              [Vor- und Nachname]
-Funktion:          [Geschaeftsfuehrer / Vorstand]
-E-Mail:            [gf@organisation.de]
-Telefon:           [+49 ...]
-
-Die benannten Kontaktstellen sind berechtigt, im Namen der Einrichtung
-Vorfallsmeldungen an das BSI zu uebermitteln und Kommunikation
-mit dem BSI durchzufuehren.
-
-Unterschrift Geschaeftsfuehrung:    ________________________
-
-Datum:                               ________________________
-```
+- [ ] Handelsregisterauszug / Vereinsregisterauszug (nicht aelter als 6 Monate)
+- [ ] Organisationsstruktur / Organigramm
+- [ ] Uebersicht der erbrachten Dienste im Bereich Rettungsdienst
+- [ ] Netzplan / IT-Infrastruktur-Uebersicht
+- [ ] ISMS-Dokumentation (falls vorhanden)
+- [ ] Benennung des IT-Sicherheitsbeauftragten
+- [ ] Nachweis ueber Cyberversicherung (falls vorhanden)
+- [ ] Letzte Sicherheitsaudit-Berichte (falls vorhanden)
+- [ ] Uebersicht ueber eingesetzte IT-Systeme (inkl. OpMan_GPT)
+- [ ] Notfallkontaktliste (24/7)
+- [ ] Datenschutzbeauftragter (Kontaktdaten)
 
 ---
 
 ## 5. Fristen und Pflichten nach Registrierung
 
-| Pflicht | Frist | Beschreibung |
-|---------|-------|-------------|
-| Registrierung | **06.03.2026** | Erstregistrierung beim BSI |
-| Aenderungsmeldung | 14 Tage | Bei Aenderung der Stammdaten oder Kontaktstellen |
-| Vorfallsmeldung (Fruehwarnung) | 24 Stunden | Nach Erkennung eines erheblichen Sicherheitsvorfalls |
-| Vorfallsmeldung (Bericht) | 72 Stunden | Detaillierter Bericht mit Bewertung |
-| Abschlussbericht | 1 Monat | Nach Abschluss der Vorfallsbehandlung |
-| Sicherheitsmassnahmen | Laufend | Implementierung und Aufrechterhaltung |
-| Nachweispruefung | Alle 2 Jahre | Nachweis der Sicherheitsmassnahmen |
+| Pflicht | Frist | Rechtsgrundlage |
+|---------|-------|-----------------|
+| Registrierung | **06.03.2026** | ss 33 BSIG |
+| Erstmeldung Sicherheitsvorfall | 24 Stunden (Fruehwarnung) | ss 32 Abs. 1 BSIG |
+| Detaillierte Vorfallmeldung | 72 Stunden | ss 32 Abs. 2 BSIG |
+| Abschlussbericht Vorfall | 1 Monat | ss 32 Abs. 4 BSIG |
+| Risikomanagement-Massnahmen | Laufend | ss 30 BSIG |
+| Geschaeftsfuehrer-Schulung | Regelmaessig | ss 38 BSIG |
+| Sicherheitsaudit | Alle 2 Jahre | ss 39 BSIG |
 
 ---
 
-## 6. Wichtige Hinweise
+## 6. Aenderungsmeldungen
 
-### 6.1 Sanktionen bei Nichtregistrierung
+Aenderungen an den registrierten Angaben muessen dem BSI **unverzueglich, spaetestens innerhalb von 2 Wochen** gemeldet werden. Dies betrifft insbesondere:
 
-- Bussgelder bis zu **10 Mio. EUR** oder **2% des weltweiten Jahresumsatzes** (wesentliche Einrichtungen)
-- Persoenliche Haftung der Geschaeftsfuehrung
-- Anordnungsbefugnisse des BSI
-
-### 6.2 Dokumentationsanforderungen
-
-Alle Registrierungsunterlagen und die Kommunikation mit dem BSI sind mindestens **5 Jahre** aufzubewahren. Die folgenden Dokumente muessen vorgehalten werden:
-
-- Registrierungsbestaetigung
-- Korrespondenz mit dem BSI
-- Nachweis der benannten Kontaktstellen
-- Dokumentation der Sicherheitsmassnahmen
-- Vorfallsberichte und Meldungen
-
-### 6.3 Zusammenwirken mit Landesbehoerden
-
-In foederalen Strukturen (z.B. Bayern) ist zusaetzlich die Abstimmung mit dem Landesamt fuer Sicherheit in der Informationstechnik (LSI Bayern) erforderlich. Rettungsdiensttraeger, die unter das BayRDG fallen, muessen ggf. zusaetzliche landesrechtliche Meldepflichten beachten.
+- Aenderung der Kontaktstelle
+- Aenderung der Anschrift / Rechtsform
+- Aenderung des Leistungsspektrums
+- Wesentliche Aenderungen an IT-Systemen
+- Aenderung der IP-Adressbereiche
 
 ---
 
-## 7. Ansprechpartner BSI
+## 7. Sanktionen bei Nicht-Registrierung
 
-| Kontakt | Details |
-|---------|---------|
-| BSI-Registrierungsportal | https://nis2-registrierung.bsi.bund.de |
-| BSI-Hotline NIS2 | +49 228 99 9582-5500 |
-| E-Mail | nis2@bsi.bund.de |
-| Lagezentrum (24/7) | +49 228 99 9582-0 |
-| Postanschrift | BSI, Godesberger Allee 185-189, 53175 Bonn |
+| Verstoss | Bussgeld |
+|----------|----------|
+| Unterlassene Registrierung | Bis zu 500.000 EUR |
+| Falsche / unvollstaendige Angaben | Bis zu 500.000 EUR |
+| Unterlassene Aenderungsmeldung | Bis zu 100.000 EUR |
 
 ---
 
-*Dieses Dokument ist Teil der Compliance-Dokumentation fuer OpMan-GPT und unterliegt der regelmaessigen Ueberpruefung.*
+## Dokumenthistorie
+
+| Version | Datum | Autor | Aenderung |
+|---------|-------|-------|-----------|
+| 1.0 | 04.03.2026 | [Name] | Erstfassung |

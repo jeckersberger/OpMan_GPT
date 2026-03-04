@@ -18,10 +18,20 @@ def _ensure_package(import_name: str, pip_spec: str) -> None:
         print(f"[startup] '{pip_spec}' erfolgreich installiert.", flush=True)
 
 _ensure_package("qrcode", "qrcode[svg]")
+_ensure_package("bcrypt", "bcrypt>=4.0")
+_ensure_package("flask_login", "Flask-Login>=0.6")
+_ensure_package("flask_wtf", "Flask-WTF>=1.2")
+_ensure_package("flask_limiter", "Flask-Limiter>=3.5")
+
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, redirect
+from flask_login import login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
+from models import db, User, AuditLog, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
+from auth import init_auth, create_default_admin, auth_bp, role_required, evt_or_login_required, audit_log
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -161,6 +171,73 @@ def create_app():
 
     db.init_app(app)
 
+    # ── CSRF-Schutz ──────────────────────────────────────────────
+    csrf = CSRFProtect(app)
+    # API-Endpoints (JSON) von CSRF ausnehmen (verwenden token-basierte Auth)
+    app.config["WTF_CSRF_CHECK_DEFAULT"] = False
+
+    @app.before_request
+    def _csrf_protect_forms():
+        """CSRF nur für Form-POST-Requests (nicht für JSON-API-Calls)."""
+        if not app.config.get("WTF_CSRF_ENABLED", True):
+            return
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            # JSON-APIs: kein CSRF nötig (SameSite-Cookie + Auth schützt)
+            ct = request.content_type or ""
+            if "application/json" in ct:
+                return
+            # Form-Requests: CSRF validieren (außer EVT-Token-Auth)
+            evt_token = request.args.get("token") or request.headers.get("X-EVT-Token") or ""
+            if evt_token and evt_token == app.config.get("EVT_ACCESS_TOKEN", ""):
+                return
+            # Standard-CSRF-Prüfung für Forms
+            csrf.protect()
+
+    # ── Rate Limiting ────────────────────────────────────────────
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["200 per minute"],
+        storage_uri="memory://",
+    )
+    # Strikte Limits für Login-Endpoint
+    limiter.limit("10 per minute")(auth_bp)
+
+    # ── Security Headers (Phase 4.1) ────────────────────────────
+    @app.after_request
+    def _security_headers(response):
+        # Content-Security-Policy: schützt gegen XSS
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://unpkg.com; "
+            "img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; "
+            "connect-src 'self' https://api.what3words.com; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        # HTTPS erzwingen
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Clickjacking-Schutz
+        response.headers["X-Frame-Options"] = "DENY"
+        # MIME-Type-Sniffing verhindern
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Referrer-Policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Permissions-Policy: Browser-Features einschränken
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(self), camera=(), microphone=(), "
+            "payment=(), usb=(), magnetometer=()"
+        )
+        # CSP ersetzt X-XSS-Protection
+        response.headers["X-XSS-Protection"] = "0"
+        return response
+
+    # ── Auth-System initialisieren (Login-Manager + Blueprint) ──
+    init_auth(app)
+
     # SQLite WAL-Modus aktivieren (wichtig für Multi-Worker gunicorn)
     with app.app_context():
         from sqlalchemy import event
@@ -244,6 +321,10 @@ def create_app():
             "ALTER TABLE teams ADD COLUMN test_alarm_text VARCHAR(200)",
             "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
+            # Auth-Tabellen (Phase 1.1 + 1.3)
+            "ALTER TABLE users ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN locked_until DATETIME",
+            "ALTER TABLE users ADD COLUMN failed_logins INTEGER NOT NULL DEFAULT 0",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -277,6 +358,9 @@ def create_app():
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
 
+        # Standard-Admin erstellen (nach db.create_all)
+        create_default_admin()
+
     def _cases_dict(active_only: bool = False):
         """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
         q = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id)
@@ -298,7 +382,7 @@ def create_app():
 
     @app.get("/health")
     def health_check():
-        """Health-Check Endpoint für Monitoring."""
+        """Health-Check Endpoint für Monitoring (öffentlich)."""
         return jsonify({"status": "ok", "timestamp": _fmt_dt(_utcnow())})
 
     def _build_dashboard_dict():
@@ -331,21 +415,25 @@ def create_app():
         }
 
     @app.get("/api/dashboard")
+    @login_required
     def dashboard_data():
         """Alle Dashboard-Daten in einem einzigen Request."""
         return jsonify(_build_dashboard_dict())
 
     @app.get("/")
+    @login_required
     def index():
         import json as _json
         initial_data = _json.dumps(_build_dashboard_dict(), ensure_ascii=False)
         return render_template("index.html", initial_data=initial_data)
 
     @app.get("/protokoll")
+    @login_required
     def protokoll():
         return render_template("protokoll.html", cases=_cases_dict(active_only=True))
 
     @app.get("/api/server-info")
+    @login_required
     def server_info():
         """Gibt die LAN-IP-Adresse des Servers zurück (für Handy-QR-Code)."""
         import socket as _socket
@@ -374,6 +462,7 @@ def create_app():
         })
 
     @app.get("/api/test-internet")
+    @login_required
     def test_internet():
         """Quick connectivity check: tries to reach api.what3words.com directly."""
         import time
@@ -405,15 +494,18 @@ def create_app():
         return jsonify({"internet": ok, "results": results})
 
     @app.get("/evt")
+    @evt_or_login_required
     def evt_mobile():
         return render_template("evt.html", cases=_cases_dict(),
                                startpunkt_w3w=STARTPUNKT_W3W)
 
     @app.get("/beobachter")
+    @evt_or_login_required
     def beobachter():
         return render_template("beobachter.html")
 
     @app.get("/api/beobachter")
+    @evt_or_login_required
     def beobachter_data():
         """Daten für die Beobachter-Ansicht: Teams + nur alarmierte Fälle."""
         teams_list = Team.query.order_by(Team.name).all()
@@ -436,6 +528,7 @@ def create_app():
         return jsonify({"teams": teams_out, "cases": cases_out})
 
     @app.get("/api/qrcodes")
+    @login_required
     def qr_codes():
         """Generiert QR-Code-Seite für alle konfigurierten EVTs."""
         import io
@@ -476,15 +569,19 @@ def create_app():
                 img.save(buf)
                 return base64.b64encode(buf.getvalue()).decode()
 
+            # EVT-Token für QR-Codes (Authentifizierung ohne Login)
+            _evt_token = app.config.get("EVT_ACCESS_TOKEN", "")
+            _token_param = f"&token={urllib.parse.quote(_evt_token)}" if _evt_token else ""
+
             # Einzelner QR für die Beamer-Ansicht (allgemeine EVT-URL, kein Team vorgewählt)
-            evt_url = f"{base}/evt"
+            evt_url = f"{base}/evt?token={urllib.parse.quote(_evt_token)}" if _evt_token else f"{base}/evt"
             evt_qr = {"name": "EVT-App", "url": evt_url, "img_b64": _make_qr(evt_url, box_size=12)}
 
             # Pro-EVT QR-Codes für den Drucken-Dialog im EL
             codes = []
             for i in range(1, evt_count + 1):
                 evt_name = f"EVT {i}"
-                url = f"{base}/evt?team={urllib.parse.quote(evt_name)}"
+                url = f"{base}/evt?team={urllib.parse.quote(evt_name)}{_token_param}"
                 codes.append({"name": evt_name, "url": url, "img_b64": _make_qr(url)})
 
             return jsonify({"codes": codes, "evt_qr": evt_qr, "base_url": base})
@@ -495,6 +592,7 @@ def create_app():
     # EVT Mobile Status API
     # ---------------------------
     @app.get("/api/evt-status/<string:evt_name>")
+    @evt_or_login_required
     def get_evt_status(evt_name: str):
         """Liefert Team-Status + aktiver Fall für ein EVT-Team (Mobile-App)."""
         team = Team.query.filter(
@@ -523,11 +621,13 @@ def create_app():
     # CaseDoc API
     # ---------------------------
     @app.get("/api/casedocs")
+    @login_required
     def list_casedocs():
         docs = CaseDoc.query.order_by(CaseDoc.id).all()
         return jsonify([serialize_casedoc(d) for d in docs])
 
     @app.patch("/api/casedocs/<string:case_id>")
+    @login_required
     def update_casedoc(case_id: str):
         doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
@@ -561,6 +661,7 @@ def create_app():
         return jsonify(serialize_casedoc(doc))
 
     @app.post("/api/casedocs/<string:case_id>/stamp")
+    @login_required
     def stamp_casedoc(case_id: str):
         """Setzt einen Zeitstempel auf 'jetzt'."""
         doc = db.get_or_404(CaseDoc, case_id)
@@ -580,11 +681,13 @@ def create_app():
     # RadioLog API
     # ---------------------------
     @app.get("/api/radiolog")
+    @login_required
     def list_radiolog():
         entries = RadioLogEntry.query.order_by(RadioLogEntry.timestamp.desc()).all()
         return jsonify([serialize_logentry(e) for e in entries])
 
     @app.post("/api/radiolog")
+    @login_required
     def create_logentry():
         data = request.get_json(force=True)
         sender = (data.get("sender") or "").strip()
@@ -616,6 +719,7 @@ def create_app():
         return jsonify(serialize_logentry(entry)), 201
 
     @app.delete("/api/radiolog/<int:entry_id>")
+    @login_required
     def delete_logentry(entry_id: int):
         entry = db.get_or_404(RadioLogEntry, entry_id)
         db.session.delete(entry)
@@ -626,6 +730,7 @@ def create_app():
     # Reset
     # ---------------------------
     @app.post("/api/reset")
+    @role_required("admin", "schichtleiter", "disponent")
     def reset_exercise():
         """Vollständiger Übungs-Reset.
 
@@ -639,6 +744,8 @@ def create_app():
         reset_teams  = bool(data.get("reset_teams",  True))
         delete_teams = bool(data.get("delete_teams", False))
         now = _utcnow()
+        audit_log("EXERCISE_RESET", resource="exercise",
+                  details=f"log={include_log}, reset_teams={reset_teams}, delete_teams={delete_teams}")
 
         # 1. CaseDocs zurücksetzen
         for doc in CaseDoc.query.all():
@@ -688,6 +795,7 @@ def create_app():
     # Exercise Geodata (what3words)
     # ---------------------------
     @app.get("/api/exercise/geodata")
+    @evt_or_login_required
     def exercise_geodata():
         """Return exercise case coordinates from CaseDefinition DB."""
         result: dict = {"cases": {}, "startpunkt": None}
@@ -795,11 +903,13 @@ function show(id){
     # Exercise Config
     # ---------------------------
     @app.get("/api/exercise/config")
+    @login_required
     def get_exercise_config():
         cfg = db.session.get(ExerciseConfig, 1)
         return jsonify({"evt_count": cfg.evt_count if cfg else 6})
 
     @app.post("/api/exercise/config")
+    @role_required("admin", "schichtleiter")
     def update_exercise_config():
         cfg = db.get_or_404(ExerciseConfig, 1)
         data = request.get_json(force=True)
@@ -812,6 +922,7 @@ function show(id){
         return jsonify({"evt_count": cfg.evt_count})
 
     @app.post("/api/exercise/import-missions")
+    @role_required("admin", "schichtleiter", "disponent")
     def import_exercise_missions():
         """Erstellt Missions aus den Übungsfällen (statische Koordinaten)."""
         created = []
@@ -848,15 +959,18 @@ function show(id){
     # Case Editor + Patientenkarten
     # ---------------------------
     @app.get("/cases")
+    @login_required
     def cases_list():
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases)
 
     @app.get("/cases/new")
+    @role_required("admin", "schichtleiter", "disponent")
     def case_new():
         return render_template("cases.html", cases=[], editing=CaseDefinition(), is_new=True)
 
     @app.post("/cases/new")
+    @role_required("admin", "schichtleiter", "disponent")
     def case_new_save():
         data = request.form
         cid = (data.get("id") or "").strip().upper()
@@ -871,12 +985,14 @@ function show(id){
         return redirect("/cases")
 
     @app.get("/cases/<string:case_id>/edit")
+    @role_required("admin", "schichtleiter", "disponent")
     def case_edit(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases, editing=cd, is_new=False)
 
     @app.post("/cases/<string:case_id>/edit")
+    @role_required("admin", "schichtleiter", "disponent")
     def case_edit_save(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         _save_case_from_form(cd, request.form)
@@ -884,6 +1000,7 @@ function show(id){
         return redirect("/cases")
 
     @app.post("/cases/<string:case_id>/delete")
+    @role_required("admin", "schichtleiter")
     def case_delete(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         # CaseDoc mitlöschen, damit kein verwaister Datensatz im Protokoll bleibt
@@ -940,16 +1057,19 @@ function show(id){
         db.session.add(cd)
 
     @app.get("/api/cases/meta")
+    @evt_or_login_required
     def cases_meta():
         """Liefert nur AKTIVE Cases – für Protokoll und Karten-Anzeige."""
         return jsonify(_cases_dict(active_only=True))
 
     @app.get("/api/cases/all")
+    @login_required
     def cases_all():
         """Liefert alle Cases inkl. inaktiver – für die EL-Sidebar."""
         return jsonify(_cases_dict(active_only=False))
 
     @app.patch("/api/cases/<string:case_id>/active")
+    @role_required("admin", "schichtleiter", "disponent")
     def case_toggle_active(case_id: str):
         """Setzt das active-Flag eines Falls (body: {active: true/false})."""
         cd = db.get_or_404(CaseDefinition, case_id)
@@ -959,6 +1079,7 @@ function show(id){
         return jsonify({"id": cd.id, "active": cd.active})
 
     @app.get("/api/cases/export")
+    @login_required
     def cases_export():
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         payload = {"version": 1, "cases": [c.to_dict() for c in cases]}
@@ -970,6 +1091,7 @@ function show(id){
         )
 
     @app.post("/api/cases/import")
+    @role_required("admin", "schichtleiter", "disponent")
     def cases_import():
         try:
             raw = request.get_json(force=True) or {}
@@ -1012,12 +1134,14 @@ function show(id){
             return jsonify({"error": str(e)}), 500
 
     @app.get("/patientenkarten")
+    @login_required
     def patientenkarten():
         from datetime import date
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("patientenkarten.html", cases=cases, today=date.today().isoformat())
 
     @app.get("/patientenkarten/<string:case_id>")
+    @login_required
     def patientenkarte_single(case_id):
         from datetime import date
         cd = db.get_or_404(CaseDefinition, case_id)
@@ -1027,6 +1151,7 @@ function show(id){
     # Teams
     # ---------------------------
     @app.get("/api/teams")
+    @login_required
     def list_teams():
         teams = Team.query.order_by(Team.updated_at.desc()).all()
         # Alarmierte aber noch nicht quittierte Teams (alarm_time gesetzt, status3_time noch nicht)
@@ -1047,6 +1172,7 @@ function show(id){
         return jsonify(result)
 
     @app.get("/api/teams/available")
+    @login_required
     def list_available_teams():
         q = Team.query.filter(Team.availability == "verfügbar")
         if DISPATCHABLE_RADIO_STATUSES is not None:
@@ -1055,6 +1181,7 @@ function show(id){
         return jsonify([serialize_team(t, include_missions=True) for t in teams])
 
     @app.post("/api/teams")
+    @role_required("admin", "schichtleiter", "disponent")
     def create_team():
         data = request.get_json(force=True)
 
@@ -1099,6 +1226,7 @@ function show(id){
         return jsonify(serialize_team(team, include_missions=True)), 201
 
     @app.patch("/api/teams/<int:team_id>")
+    @evt_or_login_required
     def update_team(team_id: int):
         team = db.get_or_404(Team, team_id)
         data = request.get_json(force=True)
@@ -1215,6 +1343,7 @@ function show(id){
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.post("/api/teams/<int:team_id>/quittieren")
+    @login_required
     def quittieren_team(team_id: int):
         """Quittiert einen Sprechwunsch (S0/S5) und setzt das Team auf den Vorgänger-Status zurück."""
         team = db.get_or_404(Team, team_id)
@@ -1264,6 +1393,7 @@ function show(id){
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.delete("/api/teams/<int:team_id>")
+    @role_required("admin", "schichtleiter", "disponent")
     def delete_team(team_id: int):
         team = db.get_or_404(Team, team_id)
         db.session.delete(team)
@@ -1274,6 +1404,7 @@ function show(id){
     # Testalarm
     # ---------------------------
     @app.post("/api/testalarm")
+    @role_required("admin", "schichtleiter", "disponent")
     def send_testalarm():
         """Sendet einen Testalarm an ausgewählte Teams oder alle.
 
@@ -1302,6 +1433,7 @@ function show(id){
         return jsonify({"ok": True, "sent_to": [t.id for t in targets]})
 
     @app.delete("/api/testalarm/<int:team_id>")
+    @evt_or_login_required
     def clear_testalarm(team_id: int):
         """EVT quittiert den Testalarm."""
         team = db.get_or_404(Team, team_id)
@@ -1315,10 +1447,12 @@ function show(id){
     # Web-Push Subscriptions
     # ---------------------------
     @app.get("/api/push/vapid-key")
+    @evt_or_login_required
     def get_vapid_key():
         return jsonify({"publicKey": _VAPID_PUBLIC_KEY or ""})
 
     @app.post("/api/push/subscribe")
+    @evt_or_login_required
     def push_subscribe():
         data = request.get_json(force=True)
         evt_name = (data.get("evt_name") or "").strip()
@@ -1345,11 +1479,13 @@ function show(id){
     # Missions
     # ---------------------------
     @app.get("/api/missions")
+    @login_required
     def list_missions():
         missions = Mission.query.order_by(Mission.updated_at.desc()).all()
         return jsonify([serialize_mission(m, include_teams=True) for m in missions])
 
     @app.post("/api/missions")
+    @role_required("admin", "schichtleiter", "disponent")
     def create_mission():
         data = request.get_json(force=True)
         title = (data.get("title") or "").strip()
@@ -1370,6 +1506,7 @@ function show(id){
         return jsonify(serialize_mission(mission, include_teams=True)), 201
 
     @app.patch("/api/missions/<int:mission_id>")
+    @role_required("admin", "schichtleiter", "disponent")
     def update_mission(mission_id: int):
         mission = db.get_or_404(Mission, mission_id)
         data = request.get_json(force=True)
@@ -1392,6 +1529,7 @@ function show(id){
         return jsonify(serialize_mission(mission, include_teams=True))
 
     @app.delete("/api/missions/<int:mission_id>")
+    @role_required("admin", "schichtleiter", "disponent")
     def delete_mission(mission_id: int):
         mission = db.get_or_404(Mission, mission_id)
         # Wenn Mission einem Übungsfall zugeordnet war (Titel "P1: …"),
@@ -1409,11 +1547,13 @@ function show(id){
     # Assignments (Team <-> Mission)
     # ---------------------------
     @app.get("/api/assignments")
+    @login_required
     def list_assignments():
         assigns = Assignment.query.order_by(Assignment.created_at.desc()).all()
         return jsonify([serialize_assignment(a) for a in assigns])
 
     @app.post("/api/assignments")
+    @role_required("admin", "schichtleiter", "disponent")
     def create_assignment():
         data = request.get_json(force=True)
         team_id = data.get("team_id")
@@ -1473,6 +1613,7 @@ function show(id){
         return jsonify(serialize_assignment(a)), 201
 
     @app.delete("/api/assignments/<int:assignment_id>")
+    @role_required("admin", "schichtleiter", "disponent")
     def delete_assignment(assignment_id: int):
         a = db.get_or_404(Assignment, assignment_id)
 

@@ -1,7 +1,96 @@
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
 from datetime import datetime
 
 db = SQLAlchemy()
+
+
+# ---------------------------
+# Rollen-Definitionen (RBAC)
+# ---------------------------
+ROLES = {
+    "admin":              "Administrator – Systemkonfiguration, Benutzerverwaltung",
+    "disponent":          "Disponent – Einsatzverwaltung, Alarmierung, Disposition",
+    "schichtleiter":      "Schichtleiter – Erweiterte Rechte + Aufsicht",
+    "evt_operator":       "EVT-Operator – Eigener Status, eigene Einsätze, GPS",
+    "beobachter":         "Beobachter – Nur Lesezugriff auf Lagekarte",
+    "aerztlicher_leiter": "Ärztlicher Leiter – Medizinische Qualitätsdaten",
+    "datenschutz":        "Datenschutzbeauftragter – Audit-Logs, Verarbeitungsverzeichnisse",
+}
+
+# Hierarchie: höhere Stufe enthält niedrigere Rechte
+ROLE_HIERARCHY = {
+    "admin": 100,
+    "schichtleiter": 80,
+    "disponent": 60,
+    "aerztlicher_leiter": 50,
+    "datenschutz": 50,
+    "evt_operator": 30,
+    "beobachter": 10,
+}
+
+
+class User(UserMixin, db.Model):
+    """Benutzer mit Authentifizierung und Rollenzuweisung."""
+    __tablename__ = "users"
+
+    id             = db.Column(db.Integer,     primary_key=True)
+    username       = db.Column(db.String(80),  nullable=False, unique=True, index=True)
+    password_hash  = db.Column(db.String(255), nullable=False)
+    role           = db.Column(db.String(30),  nullable=False, default="beobachter")
+    display_name   = db.Column(db.String(120), nullable=True)
+
+    is_active_user = db.Column(db.Boolean,     nullable=False, default=True)
+    is_locked      = db.Column(db.Boolean,     nullable=False, default=False)
+    failed_logins  = db.Column(db.Integer,     nullable=False, default=0)
+    locked_until   = db.Column(db.DateTime,    nullable=True)
+
+    last_login     = db.Column(db.DateTime,    nullable=True)
+    created_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
+    @property
+    def is_active(self):
+        return self.is_active_user and not self.is_locked
+
+    def set_password(self, password: str):
+        import bcrypt
+        self.password_hash = bcrypt.hashpw(
+            password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+
+    def check_password(self, password: str) -> bool:
+        import bcrypt
+        if not self.password_hash:
+            return False
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            self.password_hash.encode("utf-8"),
+        )
+
+    def has_role(self, required_role: str) -> bool:
+        user_level = ROLE_HIERARCHY.get(self.role, 0)
+        required_level = ROLE_HIERARCHY.get(required_role, 0)
+        return user_level >= required_level
+
+    def has_any_role(self, *roles: str) -> bool:
+        return self.role in roles or any(self.has_role(r) for r in roles)
+
+
+class AuditLog(db.Model):
+    """Revisionssicheres Audit-Log für alle sicherheitsrelevanten Aktionen."""
+    __tablename__ = "audit_log"
+
+    id           = db.Column(db.Integer,     primary_key=True)
+    timestamp    = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow, index=True)
+    user_id      = db.Column(db.Integer,     db.ForeignKey("users.id"), nullable=True)
+    username     = db.Column(db.String(80),  nullable=True)
+    action       = db.Column(db.String(50),  nullable=False, index=True)
+    resource     = db.Column(db.String(80),  nullable=True)
+    resource_id  = db.Column(db.String(50),  nullable=True)
+    details      = db.Column(db.Text,        nullable=True)
+    ip_address   = db.Column(db.String(45),  nullable=True)
+    user_agent   = db.Column(db.String(300), nullable=True)
 
 
 class CaseDoc(db.Model):

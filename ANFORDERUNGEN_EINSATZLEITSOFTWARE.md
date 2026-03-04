@@ -27,20 +27,20 @@
 ## Phase 1: Kritische Sicherheitslücken schließen
 
 ### 1.1 Authentifizierung & Benutzerverwaltung
-- [ ] **User-Model erstellen** (Benutzername, Passwort-Hash, Rolle, MFA-Secret, letzter Login, gesperrt, erstellt_am)
-- [ ] **Login-System implementieren** (Flask-Login oder Flask-OIDC)
-- [ ] **Passwort-Hashing** mit bcrypt/argon2 (BSI-konform)
+- [x] **User-Model erstellen** (Benutzername, Passwort-Hash, Rolle, MFA-Secret, letzter Login, gesperrt, erstellt_am)
+- [x] **Login-System implementieren** (Flask-Login oder Flask-OIDC)
+- [x] **Passwort-Hashing** mit bcrypt/argon2 (BSI-konform)
 - [ ] **Multi-Faktor-Authentifizierung (MFA)** für alle Benutzer (TOTP oder WebAuthn/FIDO2)
-- [ ] **Passwort-Richtlinien** gemäß BSI-Empfehlungen (Mindestlänge, Komplexität)
-- [ ] **Session-Management** mit sicheren Cookies (HttpOnly, Secure, SameSite=Strict)
-- [ ] **Session-Timeout** (15-30 Min für Disponenten, konfigurierbar)
+- [x] **Passwort-Richtlinien** gemäß BSI-Empfehlungen (Mindestlänge, Komplexität)
+- [x] **Session-Management** mit sicheren Cookies (HttpOnly, Secure, SameSite=Strict)
+- [x] **Session-Timeout** (15-30 Min für Disponenten, konfigurierbar)
 - [ ] **Gleichzeitige Sessions begrenzen** (max. 1 aktive Session pro Benutzer)
-- [ ] **Brute-Force-Schutz** (Account-Sperrung nach X Fehlversuchen)
-- [ ] **Passwort-Reset-Mechanismus** (sicherer Token-basierter Flow)
+- [x] **Brute-Force-Schutz** (Account-Sperrung nach X Fehlversuchen)
+- [x] **Passwort-Reset-Mechanismus** (sicherer Token-basierter Flow)
 - [ ] **LDAP/Active Directory Anbindung** (Integration in bestehende Organisationsstruktur)
 
 ### 1.2 Rollenbasierte Zugriffskontrolle (RBAC)
-- [ ] **Rollen definieren und implementieren:**
+- [x] **Rollen definieren und implementieren:**
   - **Disponent (Dispatcher):** Zugriff auf aktive Einsätze, Ressourcenverwaltung, Alarmierung
   - **Schichtleiter (Supervisor):** Erweiterte Rechte + Aufsichtsfunktionen
   - **EVT-Operator:** Nur eigenen Status, eigene Einsätze, GPS
@@ -48,25 +48,25 @@
   - **Administrator:** Systemkonfiguration, Benutzerverwaltung (KEIN Zugriff auf Einsatzdaten)
   - **Ärztlicher Leiter (ÄLRD):** Zugriff auf medizinische Qualitätsdaten
   - **Datenschutzbeauftragter:** Audit-Logs, Verarbeitungsverzeichnisse
-- [ ] **`@login_required` Decorator** auf ALLE API-Endpoints
-- [ ] **`@role_required` Decorator** für rollenspezifische Endpoints
-- [ ] **Need-to-Know-Prinzip:** Benutzer sehen nur die Daten, die sie für ihre Rolle brauchen
+- [x] **`@login_required` Decorator** auf ALLE API-Endpoints
+- [x] **`@role_required` Decorator** für rollenspezifische Endpoints
+- [x] **Need-to-Know-Prinzip:** Benutzer sehen nur die Daten, die sie für ihre Rolle brauchen
 - [ ] **Funktionstrennung:** Kritische Operationen erfordern mehrere autorisierte Personen
 - [ ] **Notfallzugang (Break-Glass):** Dokumentierte Ausnahmeprozeduren mit nachträglicher Prüfung
 - [ ] **Regelmäßige Überprüfung** der Zugriffsrechte (automatische Reviews)
-- [ ] **Sofortige Rechtsentzug** bei Rollenwechsel oder Austritt
+- [x] **Sofortige Rechtsentzug** bei Rollenwechsel oder Austritt
 
 ### 1.3 Revisionssichere Audit-Protokollierung
-- [ ] **AuditLog-Model erstellen** (user_id, aktion, ressource, ressource_id, vorher, nachher, zeitstempel, ip_adresse, user_agent)
-- [ ] **Alle Datenänderungen protokollieren** (CREATE, UPDATE, DELETE auf allen Modellen)
-- [ ] **Alle Login-Versuche protokollieren** (erfolgreich UND fehlgeschlagen)
+- [x] **AuditLog-Model erstellen** (user_id, aktion, ressource, ressource_id, vorher, nachher, zeitstempel, ip_adresse, user_agent)
+- [x] **Alle Datenänderungen protokollieren** (CREATE, UPDATE, DELETE auf allen Modellen)
+- [x] **Alle Login-Versuche protokollieren** (erfolgreich UND fehlgeschlagen)
 - [ ] **Alle API-Zugriffe protokollieren** (Wer hat wann welche Daten abgerufen?)
 - [ ] **Manipulationssichere Speicherung** (Write-Once, kryptographisch signiert oder Append-Only)
-- [ ] **Trennung von Pflichten:** Systemadministratoren ≠ Log-Prüfer
+- [x] **Trennung von Pflichten:** Systemadministratoren ≠ Log-Prüfer
 - [ ] **Definierte Aufbewahrungsfristen** (min. gemäß gesetzlichen Vorgaben)
-- [ ] **Audit-Log UI** für Datenschutzbeauftragten und Schichtleiter
+- [x] **Audit-Log UI** für Datenschutzbeauftragten und Schichtleiter
 - [ ] **Automatisierte Anomalie-Erkennung** in Logs (BSI-Pflicht seit Mai 2023)
-- [ ] **Log-Export** für externe Auswertung (SIEM-Integration)
+- [x] **Log-Export** für externe Auswertung (SIEM-Integration)
 
 ### 1.4 Datenverschlüsselung
 - [ ] **Verschlüsselung ruhender Daten (at rest):**
@@ -153,32 +153,32 @@
 ## Phase 4: Anwendungssicherheit (OWASP)
 
 ### 4.1 Security Headers
-- [ ] **Content-Security-Policy (CSP)** – Schutz gegen XSS
-- [ ] **HTTP Strict-Transport-Security (HSTS)** – HTTPS erzwingen
-- [ ] **X-Frame-Options: DENY** – Clickjacking-Schutz
-- [ ] **X-Content-Type-Options: nosniff** – MIME-Type-Sniffing verhindern
-- [ ] **Referrer-Policy: strict-origin-when-cross-origin**
-- [ ] **Permissions-Policy** – Browser-Features einschränken
-- [ ] **X-XSS-Protection: 0** (CSP ersetzt diesen Header)
+- [x] **Content-Security-Policy (CSP)** – Schutz gegen XSS
+- [x] **HTTP Strict-Transport-Security (HSTS)** – HTTPS erzwingen
+- [x] **X-Frame-Options: DENY** – Clickjacking-Schutz
+- [x] **X-Content-Type-Options: nosniff** – MIME-Type-Sniffing verhindern
+- [x] **Referrer-Policy: strict-origin-when-cross-origin**
+- [x] **Permissions-Policy** – Browser-Features einschränken
+- [x] **X-XSS-Protection: 0** (CSP ersetzt diesen Header)
 
 ### 4.2 Input-Validierung & Sanitization
 - [ ] **Request-Validierung** mit Pydantic oder Marshmallow (alle API-Endpoints)
 - [ ] **XSS-Schutz universell anwenden** (die existierende `esc()`-Funktion auf ALLE Ausgaben)
-- [ ] **CSRF-Schutz** implementieren (Flask-WTF oder Custom-Token)
-- [ ] **SQL-Injection-Schutz** sicherstellen (bereits durch SQLAlchemy gegeben, aber Code-Review)
+- [x] **CSRF-Schutz** implementieren (Flask-WTF oder Custom-Token)
+- [x] **SQL-Injection-Schutz** sicherstellen (bereits durch SQLAlchemy gegeben, aber Code-Review)
 - [ ] **File-Upload-Restriktionen** (falls anwendbar)
 - [ ] **Input-Längenbegrenzungen** auf allen Feldern
 
 ### 4.3 API-Sicherheit
-- [ ] **API-Authentifizierung** (JWT-Tokens oder OAuth2 für mobile EVT-App)
-- [ ] **Rate Limiting** (Flask-Limiter) – Brute-Force und API-Missbrauch verhindern
+- [x] **API-Authentifizierung** (JWT-Tokens oder OAuth2 für mobile EVT-App)
+- [x] **Rate Limiting** (Flask-Limiter) – Brute-Force und API-Missbrauch verhindern
 - [ ] **Request Signing** für mobile Clients
 - [ ] **CORS konfigurieren** (falls Cross-Origin-Zugriffe nötig)
 - [ ] **API-Versionierung** einführen
 - [ ] **OpenAPI/Swagger-Dokumentation** erstellen
 
 ### 4.4 Fehlerbehandlung
-- [ ] **Stack-Traces in Produktion unterdrücken** (Flask DEBUG=False sicherstellen)
+- [x] **Stack-Traces in Produktion unterdrücken** (Flask DEBUG=False sicherstellen)
 - [ ] **Fehlermeldungen sanitisieren** (keine internen Details an Client senden)
 - [ ] **Strukturiertes Logging** (JSON-Format für maschinelle Auswertung)
 - [ ] **Zentrales Log-Management** (ELK-Stack, Splunk oder Graylog)

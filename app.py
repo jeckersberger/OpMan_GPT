@@ -461,6 +461,13 @@ def create_app():
             "ALTER TABLE users ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE users ADD COLUMN locked_until DATETIME",
             "ALTER TABLE users ADD COLUMN failed_logins INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN mfa_secret VARCHAR(32)",
+            "ALTER TABLE users ADD COLUMN mfa_enabled BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN last_review_at DATETIME",
+            "ALTER TABLE users ADD COLUMN display_name VARCHAR(120)",
+            "ALTER TABLE users ADD COLUMN is_active_user BOOLEAN NOT NULL DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN last_login DATETIME",
+            "ALTER TABLE users ADD COLUMN updated_at DATETIME",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:

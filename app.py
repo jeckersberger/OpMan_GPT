@@ -26,7 +26,7 @@ _ensure_package("pyotp", "pyotp>=2.9")
 
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, redirect
-from flask_login import login_required, current_user
+from flask_login import login_required, login_user, current_user
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -247,6 +247,20 @@ def create_app():
                 return
             # Standard-CSRF-Prüfung für Forms
             csrf.protect()
+
+    # ── Übungsmodus: Auto-Login (kein manueller Login nötig) ────
+    if app_mode == "uebung":
+        @app.before_request
+        def _auto_login_uebung():
+            """Im Übungsmodus wird automatisch ein Übungsbenutzer eingeloggt."""
+            if current_user.is_authenticated:
+                return
+            # Login-/Logout-/Static-Routen nicht stören
+            if request.path.startswith(("/login", "/logout", "/static/", "/health", "/metrics")):
+                return
+            uebung_user = User.query.filter_by(username="uebungsbenutzer").first()
+            if uebung_user:
+                login_user(uebung_user)
 
     # ── Rate Limiting ────────────────────────────────────────────
     limiter = Limiter(
@@ -482,6 +496,20 @@ def create_app():
 
         # Standard-Admin erstellen (nach db.create_all)
         create_default_admin()
+
+        # ── Übungsmodus: Auto-Login Benutzer erstellen ────────────
+        if app_mode == "uebung":
+            uebung_user = User.query.filter_by(username="uebungsbenutzer").first()
+            if not uebung_user:
+                uebung_user = User(
+                    username="uebungsbenutzer",
+                    role="disponent",
+                    display_name="Übungsbenutzer (Auto-Login)",
+                )
+                uebung_user.set_password("uebung-auto-login-no-manual-use")
+                db.session.add(uebung_user)
+                db.session.commit()
+                print("[auth] Übungsbenutzer erstellt (Auto-Login im Übungsmodus)")
 
     # ── DSGVO-Modul registrieren ────────────────────────────────
     try:

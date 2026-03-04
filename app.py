@@ -691,13 +691,22 @@ def create_app():
     def exercise_geodata():
         """Return exercise case coordinates from CaseDefinition DB."""
         result: dict = {"cases": {}, "startpunkt": None}
+        dirty = False
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
+            # Lazy-resolve: if w3w is set but coordinates are missing, resolve now and persist
+            if cd.w3w and cd.lat is None and cd.lng is None:
+                lat, lng = resolve_w3w(cd.w3w)
+                if lat is not None:
+                    cd.lat, cd.lng = lat, lng
+                    dirty = True
             result["cases"][cd.id] = {
                 "lat": cd.lat, "lng": cd.lng,
                 "schlagwort": cd.schlagwort or "",
                 "patient": cd.patient or "",
                 "w3w": cd.w3w or "",
             }
+        if dirty:
+            db.session.commit()
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
         return jsonify(result)
 
@@ -905,6 +914,12 @@ function show(id){
         cd.w3w_alarm      = data.get("w3w_alarm", "").strip() or None
         cd.lat            = float(data["lat"]) if data.get("lat") else None
         cd.lng            = float(data["lng"]) if data.get("lng") else None
+        # Auto-resolve w3w → coordinates if w3w is set but lat/lng are missing
+        if cd.w3w and cd.lat is None and cd.lng is None:
+            lat, lng = resolve_w3w(cd.w3w)
+            if lat is not None:
+                cd.lat = lat
+                cd.lng = lng
         cd.rmi_soll       = data.get("rmi_soll", "").strip() or None
         cd.sk_soll        = data.get("sk_soll", "").strip() or None
         cd.pzc_soll       = data.get("pzc_soll", "").strip() or None
@@ -1002,6 +1017,11 @@ function show(id){
                     cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
                 if "sampler" in item:
                     cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
+                # Auto-resolve w3w → coordinates if w3w set but lat/lng missing
+                if cd.w3w and cd.lat is None and cd.lng is None:
+                    lat, lng = resolve_w3w(cd.w3w)
+                    if lat is not None:
+                        cd.lat, cd.lng = lat, lng
                 cd.updated_at = _utcnow()
                 # CaseDoc sicherstellen
                 if db.session.get(CaseDoc, cid) is None:

@@ -1,35 +1,37 @@
 # ═══════════════════════════════════════════════════════════════
 # Docker Compose – EINSATZMODUS (Produktiver Betrieb)
 # ═══════════════════════════════════════════════════════════════
-# Startet die Einsatzleitsoftware im Einsatzmodus:
+# Eigenständige Anwendung für den Einsatzbetrieb:
+# - Login + MFA erforderlich
 # - Keine Patientenkarten, keine Übungspatienten
 # - Eigene Datenbank (einsatzleiter_live.db)
-# - Getrennt vom Übungsmodus
+# - Komplett getrennt vom Übungsmodus
 #
 # Starten:  docker compose -f docker-compose.einsatz.yml up -d
 # Stoppen:  docker compose -f docker-compose.einsatz.yml down
 # ═══════════════════════════════════════════════════════════════
-
-version: "3.8"
 
 services:
   opman-einsatz:
     build: .
     container_name: opman-einsatz
     ports:
-      - "5001:5000"
+      - "${EINSATZ_PORT:-5001}:8000"
     environment:
       - APP_MODE=einsatz
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - DATABASE_URL=sqlite:///einsatzleiter_live.db
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}
     volumes:
-      - einsatz-data:/app/instance
+      - einsatz-data:/app/instance:Z
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
 volumes:
   einsatz-data:

@@ -1,64 +1,46 @@
-# =============================================================================
-# OpMan-GPT Docker Compose - Development / Single-Instance Deployment
-# =============================================================================
-# This file is for local development and simple single-instance deployments
-# using SQLite. For production HA deployment with PostgreSQL, Redis, and
-# nginx load balancing, see: deploy/docker-compose.prod.yml
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose – ÜBUNGSMODUS
+# ═══════════════════════════════════════════════════════════════
+# Eigenständige Anwendung für den Übungsbetrieb:
+# - Kein Login erforderlich (Auto-Login)
+# - Patientenkarten und Übungsfälle verfügbar
+# - Eigene Datenbank (einsatzleiter.db)
+# - Komplett getrennt vom Einsatzmodus
 #
-# Quick start:
-#   export SECRET_KEY=$(openssl rand -hex 32)
-#   docker compose up -d
+# Starten:  docker compose up -d
+# Stoppen:  docker compose down
 #
-# Monitoring endpoints (provided by monitoring.py Blueprint):
-#   GET /health   - Detailed health check (DB, disk, memory status)
-#   GET /metrics  - Prometheus-compatible metrics
-# =============================================================================
+# Für den Einsatzmodus: docker compose -f docker-compose.einsatz.yml up -d
+# ═══════════════════════════════════════════════════════════════
 
 services:
-  opman:
+  opman-uebung:
     build: .
     image: opman-gpt:latest
+    container_name: opman-uebung
     restart: unless-stopped
 
     ports:
-      - "${HOST_PORT:-8000}:8000"
+      - "${HOST_PORT:-5000}:8000"
 
     environment:
-      # Pflicht: starkes zufälliges Secret setzen (z.B. openssl rand -hex 32)
-      SECRET_KEY: "${SECRET_KEY}"
-
-      # Anzahl gunicorn-Worker (Faustregel: 2 x CPU-Kerne + 1)
+      APP_MODE: "uebung"
+      SECRET_KEY: "${SECRET_KEY:-uebung-dev-key}"
       GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
-
-      # Database configuration (default: SQLite, see database.py for options)
-      # For PostgreSQL, set these variables:
-      # DB_TYPE: "postgresql"
-      # DB_HOST: "localhost"
-      # DB_PORT: "5432"
-      # DB_NAME: "opman"
-      # DB_USER: "opman"
-      # DB_PASSWORD: "${DB_PASSWORD}"
-
-      # Enable Prometheus metrics collection
       ENABLE_METRICS: "${ENABLE_METRICS:-true}"
 
     volumes:
-      # SQLite-Datenbank, SSL-Zertifikate und VAPID-Keys persistieren.
-      # :Z -> SELinux-Label fuer private (nicht geteilte) Volumes (rootless-kompatibel).
-      # VAPID-Keys werden bei erstem Start automatisch in instance/ erzeugt.
-      - ./instance:/app/instance:Z
+      - uebung-data:/app/instance:Z
 
     security_opt:
-      # Verhindert Privilege-Escalation im Container
       - no-new-privileges:true
 
-    # Kein root, kein privileged - rootless-Docker-kompatibel
-    # user: "1000:1000"  # bereits im Dockerfile gesetzt, hier optional
-
     healthcheck:
-      # Uses the /health endpoint provided by monitoring.py for detailed checks
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  uebung-data:

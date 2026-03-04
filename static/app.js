@@ -844,6 +844,94 @@ function renderAssignments(){
   });
 }
 
+// ---------------- Render: Active Exercise Cases ----------------
+function _caseStatusText(doc) {
+  if (doc.completed) return "abgeschlossen";
+  if (doc.status8_time) return "S8 – Frei auf Funk";
+  if (doc.status7_time) return "S7 – Patient aufgenommen";
+  if (doc.status4_time) return "S4 – Am Einsatzort";
+  if (doc.status3_time) return "S3 – Einsatz übernommen";
+  if (doc.alarm_time)   return "alarmiert";
+  return "offen";
+}
+
+function renderActiveCases() {
+  const panel = $("activeCasesPanel");
+  const root  = $("activeCasesList");
+  if (!panel || !root) return;
+
+  // Only show when exercise mode is active
+  if (!exerciseGeodata || !exerciseGeodata.cases) {
+    panel.style.display = "none";
+    return;
+  }
+
+  const cases = exerciseGeodata.cases;
+  // Build list of alarmed (active) cases
+  const activeCases = [];
+  for (const [id, data] of Object.entries(cases)) {
+    const doc = casedocData.find(d => d.id === id);
+    if (!doc || !doc.alarm_time) continue;  // only alarmed cases
+    activeCases.push({ id, data, doc });
+  }
+
+  if (activeCases.length === 0) {
+    panel.style.display = "none";
+    return;
+  }
+
+  panel.style.display = "";
+  root.innerHTML = "";
+
+  activeCases.forEach(({ id, data, doc }) => {
+    const color = exerciseCaseColor(doc);
+    const statusText = _caseStatusText(doc);
+    const completed = !!doc.completed;
+
+    const el = document.createElement("div");
+    el.className = "item";
+    el.style.borderLeft = `4px solid ${color}`;
+
+    const evtLine = doc.assigned_evt
+      ? `<div class="tiny"><b>EVT:</b> ${esc(doc.assigned_evt)}</div>`
+      : `<div class="tiny" style="color:var(--danger,#c00);">Kein EVT zugewiesen</div>`;
+
+    const timeLine = doc.alarm_time
+      ? `<span class="badge">${new Date(doc.alarm_time).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"})}</span>`
+      : "";
+
+    el.innerHTML = `
+      <div class="row">
+        <div>
+          <div><b>${esc(id)}: ${esc(data.schlagwort || "")}</b></div>
+          <div style="margin-top:4px;">
+            ${badge(statusText)}
+            ${timeLine}
+            ${completed ? '<span class="badge" style="background:#444;color:#fff;">erledigt</span>' : ""}
+          </div>
+        </div>
+      </div>
+      ${evtLine}
+      ${data.patient ? `<div class="tiny">Patient: ${esc(data.patient)}</div>` : ""}
+      <div class="row actions">
+        <button data-case-pan="${esc(id)}">Karte</button>
+      </div>
+    `;
+    root.appendChild(el);
+  });
+
+  root.querySelectorAll("[data-case-pan]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-case-pan");
+      if (exerciseMarkers.has(id)) {
+        const marker = exerciseMarkers.get(id);
+        map.setView(marker.getLatLng(), map.getZoom());
+        marker.openPopup();
+      }
+    });
+  });
+}
+
 // ---------------- Refresh ----------------
 function computeAssignedTeamIds(){
   assignedTeamIds = new Set(assignments.map(a => a.team_id));
@@ -897,6 +985,7 @@ async function refreshAll(rebuild = true){
   }
 
   if (exerciseGeodata) refreshExerciseLayer();
+  renderActiveCases();
   renderSprechwunschPanel();
 }
 
@@ -1142,6 +1231,7 @@ async function _silentRefreshAll() {
     for (const t of teams) upsertTeamMarker(t);
     for (const m of missions) upsertMissionMarker(m);
     if (exerciseGeodata) refreshExerciseLayer();
+    renderActiveCases();
     renderSprechwunschPanel();
   } catch (e) {
     clearTimeout(timer);

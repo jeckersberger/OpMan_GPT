@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose – EINSATZMODUS (Produktiver Betrieb)
+# ═══════════════════════════════════════════════════════════════
+# Startet die Einsatzleitsoftware im Einsatzmodus:
+# - Keine Patientenkarten, keine Übungspatienten
+# - Eigene Datenbank (einsatzleiter_live.db)
+# - Getrennt vom Übungsmodus
+#
+# Starten:  docker compose -f docker-compose.einsatz.yml up -d
+# Stoppen:  docker compose -f docker-compose.einsatz.yml down
+# ═══════════════════════════════════════════════════════════════
+
+version: "3.8"
+
+services:
+  opman-einsatz:
+    build: .
+    container_name: opman-einsatz
+    ports:
+      - "5001:5000"
+    environment:
+      - APP_MODE=einsatz
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DATABASE_URL=sqlite:///einsatzleiter_live.db
+    volumes:
+      - einsatz-data:/app/instance
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  einsatz-data:

@@ -34,7 +34,7 @@
 <body>
   <!-- Top Navigation -->
   <header class="topbar">
-    <div class="brand">🚨 Einsatzleiter</div>
+    <div class="brand">🚨 Einsatzleiter{% if app_mode == 'uebung' %} <span style="color:#f5c842;font-size:.7rem;">[ÜBUNG]</span>{% endif %}</div>
     <nav class="topnav">
       <button id="btnRefresh" class="navbtn">Aktualisieren</button>
       <button id="btnLocate" class="navbtn">Zu mir</button>
@@ -43,8 +43,10 @@
       <button class="navbtn" style="font-size:.75rem;padding:.25rem .5rem;" onclick="timerReset()" title="Timer zurücksetzen">⏹</button>
       <div class="divider"></div>
       <a href="/protokoll" class="navbtn" style="text-decoration:none;">📋 Funkprotokoll</a>
+      {% if app_mode == 'uebung' %}
       <div class="divider"></div>
       <a href="/cases" class="navbtn" style="text-decoration:none;">📝 Fälle</a>
+      {% endif %}
       <div class="divider"></div>
       <a href="/beobachter" class="navbtn" style="text-decoration:none;" target="_blank">👁 Beobachter</a>
       <div class="divider"></div>

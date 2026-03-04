@@ -11,18 +11,19 @@ Implementiert:
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from flask import (
     Blueprint, render_template_string, request, redirect, url_for,
-    flash, jsonify, current_app,
+    flash, jsonify, current_app, session,
 )
 from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user,
 )
 
-from models import db, User, AuditLog, ROLES, ROLE_HIERARCHY
+from models import db, User, AuditLog, UserSession, BreakGlassLog, ROLES, ROLE_HIERARCHY
 
 auth_bp = Blueprint("auth", __name__)
 login_manager = LoginManager()
@@ -44,7 +45,20 @@ def _utcnow():
 # ---------------------------
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    if user is None:
+        return None
+    # Session limiting: validate that the current session is still active
+    sid = session.get("_opman_sid")
+    if sid:
+        user_session = UserSession.query.filter_by(user_id=user.id, session_id=sid).first()
+        if not user_session:
+            # Session was invalidated (another login occurred)
+            return None
+        # Update last_seen
+        user_session.last_seen = _utcnow()
+        db.session.commit()
+    return user
 
 
 @login_manager.unauthorized_handler
@@ -57,9 +71,25 @@ def unauthorized():
 # ---------------------------
 # Audit-Logging
 # ---------------------------
+def _compute_audit_hash(entry: AuditLog, previous_hash: str = None) -> str:
+    """Compute SHA-256 hash for audit log entry, chained with previous entry's hash."""
+    data = (
+        f"{entry.timestamp.isoformat() if entry.timestamp else ''}"
+        f"|{entry.user_id or ''}"
+        f"|{entry.username or ''}"
+        f"|{entry.action or ''}"
+        f"|{entry.resource or ''}"
+        f"|{entry.resource_id or ''}"
+        f"|{entry.details or ''}"
+        f"|{entry.ip_address or ''}"
+        f"|{previous_hash or '0' * 64}"
+    )
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
 def audit_log(action: str, resource: str = None, resource_id: str = None,
               details: str = None, user: User = None):
-    """Erstellt einen revisionssicheren Audit-Log-Eintrag."""
+    """Erstellt einen revisionssicheren Audit-Log-Eintrag mit Hash-Chain."""
     u = user or (current_user if current_user and current_user.is_authenticated else None)
     entry = AuditLog(
         timestamp=_utcnow(),
@@ -73,6 +103,10 @@ def audit_log(action: str, resource: str = None, resource_id: str = None,
         user_agent=(request.user_agent.string[:300]
                     if request and request.user_agent else None),
     )
+    # Hash-chain: get the hash of the previous entry
+    previous = AuditLog.query.order_by(AuditLog.id.desc()).first()
+    previous_hash = previous.hash if previous and previous.hash else None
+    entry.hash = _compute_audit_hash(entry, previous_hash)
     db.session.add(entry)
     # Nicht committen – wird mit dem nächsten db.session.commit() gespeichert
 
@@ -154,8 +188,28 @@ def login():
             db.session.commit()
 
             login_user(user, remember=False)
+
+            # Session Limiting: invalidate all other sessions for this user
+            UserSession.query.filter_by(user_id=user.id).delete()
+            import secrets as _secrets
+            sid = _secrets.token_urlsafe(32)
+            session["_opman_sid"] = sid
+            new_session = UserSession(
+                user_id=user.id,
+                session_id=sid,
+                created_at=_utcnow(),
+                last_seen=_utcnow(),
+                ip_address=request.remote_addr,
+                user_agent=(request.user_agent.string[:300]
+                            if request.user_agent else None),
+            )
+            db.session.add(new_session)
+
             audit_log("LOGIN_SUCCESS", resource="user", resource_id=username)
             db.session.commit()
+
+            # Anomaly detection after successful login
+            check_anomalies(user, request.remote_addr)
 
             next_url = request.args.get("next") or request.form.get("next") or "/"
             # Sicherheit: nur relative URLs erlauben
@@ -184,6 +238,10 @@ def login():
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    # Remove session record
+    sid = session.get("_opman_sid")
+    if sid:
+        UserSession.query.filter_by(session_id=sid).delete()
     audit_log("LOGOUT", resource="user", resource_id=current_user.username)
     db.session.commit()
     logout_user()
@@ -399,6 +457,9 @@ def init_auth(app):
     # Blueprint registrieren
     app.register_blueprint(auth_bp)
 
+    # Register after_request handler for API audit logging
+    _register_after_request(app)
+
 
 def create_default_admin():
     """Erstellt den Standard-Admin falls noch keiner existiert (nach db.create_all aufrufen)."""
@@ -413,6 +474,261 @@ def create_default_admin():
         db.session.commit()
         print("[auth] Standard-Admin erstellt: admin / admin")
         print("[auth] WICHTIG: Passwort nach dem ersten Login aendern!")
+
+
+# ---------------------------
+# Anomaly Detection (basic)
+# ---------------------------
+# Configurable business hours (24h format)
+BUSINESS_HOURS_START = 6   # 06:00
+BUSINESS_HOURS_END = 22    # 22:00
+ANOMALY_FAILED_LOGIN_THRESHOLD = 5
+ANOMALY_FAILED_LOGIN_WINDOW_MINUTES = 10
+
+
+def check_anomalies(user: User, ip_address: str):
+    """Run basic anomaly detection checks after a successful login.
+
+    Checks:
+    - Multiple failed logins from same IP in short time window
+    - Login from a new IP for this user (compared to last 10 logins)
+    - Access outside configurable business hours
+    Logs anomalies as ANOMALY_DETECTED audit entries.
+    """
+    now = _utcnow()
+
+    # 1. Multiple failed logins from same IP in short time window
+    window_start = now - timedelta(minutes=ANOMALY_FAILED_LOGIN_WINDOW_MINUTES)
+    failed_from_ip = AuditLog.query.filter(
+        AuditLog.action == "LOGIN_FAILED",
+        AuditLog.ip_address == ip_address,
+        AuditLog.timestamp >= window_start,
+    ).count()
+    if failed_from_ip >= ANOMALY_FAILED_LOGIN_THRESHOLD:
+        audit_log(
+            "ANOMALY_DETECTED",
+            resource="login",
+            resource_id=user.username,
+            details=f"Multiple failed logins ({failed_from_ip}) from IP {ip_address} "
+                    f"in last {ANOMALY_FAILED_LOGIN_WINDOW_MINUTES} minutes",
+            user=user,
+        )
+
+    # 2. Login from new IP for this user (compared to last 10 successful logins)
+    recent_logins = (
+        AuditLog.query
+        .filter(
+            AuditLog.action == "LOGIN_SUCCESS",
+            AuditLog.username == user.username,
+            AuditLog.ip_address.isnot(None),
+        )
+        .order_by(AuditLog.timestamp.desc())
+        .limit(10)
+        .all()
+    )
+    known_ips = {log.ip_address for log in recent_logins}
+    if known_ips and ip_address not in known_ips:
+        audit_log(
+            "ANOMALY_DETECTED",
+            resource="login",
+            resource_id=user.username,
+            details=f"Login from new IP {ip_address}. "
+                    f"Known IPs: {', '.join(sorted(known_ips))}",
+            user=user,
+        )
+
+    # 3. Access outside business hours
+    if now.hour < BUSINESS_HOURS_START or now.hour >= BUSINESS_HOURS_END:
+        audit_log(
+            "ANOMALY_DETECTED",
+            resource="login",
+            resource_id=user.username,
+            details=f"Login outside business hours at {now.strftime('%H:%M')} UTC "
+                    f"(business hours: {BUSINESS_HOURS_START:02d}:00-{BUSINESS_HOURS_END:02d}:00)",
+            user=user,
+        )
+
+    db.session.commit()
+
+
+# ---------------------------
+# Break-Glass Emergency Access
+# ---------------------------
+@auth_bp.route("/admin/break-glass", methods=["POST"])
+@login_required
+def admin_break_glass():
+    """Emergency access elevation - requires reason, auto-expires after 1 hour."""
+    reason = (request.form.get("reason") or request.json.get("reason", "") if request.is_json else request.form.get("reason") or "").strip()
+
+    if not reason:
+        if request.is_json or request.path.startswith("/api/"):
+            return jsonify({"error": "Reason is required for break-glass access"}), 400
+        flash("Ein Grund ist erforderlich fuer den Notfallzugriff.", "error")
+        return redirect(url_for("auth.admin_users"))
+
+    now = _utcnow()
+    expires_at = now + timedelta(hours=1)
+
+    bg_entry = BreakGlassLog(
+        user_id=current_user.id,
+        timestamp=now,
+        reason=reason,
+        approved_by=current_user.username,
+        expires_at=expires_at,
+    )
+    db.session.add(bg_entry)
+
+    # Prominent audit logging with warnings
+    audit_log(
+        "BREAK_GLASS_ACTIVATED",
+        resource="emergency_access",
+        resource_id=str(current_user.id),
+        details=f"WARNING: Break-glass emergency access activated by {current_user.username}. "
+                f"Reason: {reason}. Expires at: {expires_at.isoformat()}Z. "
+                f"THIS EVENT REQUIRES REVIEW.",
+        user=current_user,
+    )
+    db.session.commit()
+
+    print(f"[BREAK-GLASS WARNING] User '{current_user.username}' activated emergency access. "
+          f"Reason: {reason}. Expires: {expires_at.isoformat()}Z")
+
+    if request.is_json:
+        return jsonify({
+            "status": "break-glass activated",
+            "user": current_user.username,
+            "reason": reason,
+            "expires_at": expires_at.isoformat() + "Z",
+            "warning": "This event has been audit-logged and requires review.",
+        }), 200
+
+    flash(f"Notfallzugriff aktiviert. Laeuft ab: {expires_at.strftime('%H:%M:%S')} UTC. "
+          f"Dieses Ereignis wurde protokolliert.", "success")
+    return redirect(url_for("auth.admin_users"))
+
+
+# ---------------------------
+# Data Retention
+# ---------------------------
+@auth_bp.route("/api/admin/data-retention", methods=["POST"])
+@login_required
+def api_data_retention():
+    """Delete audit logs older than configurable retention period (default 365 days).
+    Only accessible by admin role.
+    """
+    if not current_user.has_role("admin"):
+        return jsonify({"error": "Keine Berechtigung"}), 403
+
+    retention_days = request.json.get("retention_days", 365) if request.is_json else 365
+    try:
+        retention_days = int(retention_days)
+    except (ValueError, TypeError):
+        return jsonify({"error": "retention_days must be an integer"}), 400
+
+    if retention_days < 1:
+        return jsonify({"error": "retention_days must be at least 1"}), 400
+
+    cutoff = _utcnow() - timedelta(days=retention_days)
+    count = AuditLog.query.filter(AuditLog.timestamp < cutoff).count()
+    AuditLog.query.filter(AuditLog.timestamp < cutoff).delete()
+
+    audit_log(
+        "DATA_RETENTION_EXECUTED",
+        resource="audit_log",
+        details=f"Deleted {count} audit log entries older than {retention_days} days "
+                f"(cutoff: {cutoff.isoformat()}Z)",
+    )
+    db.session.commit()
+
+    return jsonify({
+        "status": "ok",
+        "deleted_count": count,
+        "retention_days": retention_days,
+        "cutoff_date": cutoff.isoformat() + "Z",
+    })
+
+
+# ---------------------------
+# Access Review
+# ---------------------------
+@auth_bp.route("/api/admin/access-review", methods=["GET"])
+@login_required
+def api_access_review():
+    """Returns a report of all users, their roles, last login,
+    and whether review is overdue (>90 days since last review).
+    Only accessible by admin role.
+    """
+    if not current_user.has_role("admin"):
+        return jsonify({"error": "Keine Berechtigung"}), 403
+
+    now = _utcnow()
+    review_threshold = timedelta(days=90)
+    users = User.query.order_by(User.username).all()
+
+    report = []
+    for u in users:
+        overdue = False
+        if u.last_review_at is None:
+            overdue = True
+        elif (now - u.last_review_at) > review_threshold:
+            overdue = True
+
+        report.append({
+            "id": u.id,
+            "username": u.username,
+            "role": u.role,
+            "display_name": u.display_name,
+            "is_active": u.is_active,
+            "is_locked": u.is_locked,
+            "last_login": (u.last_login.isoformat() + "Z") if u.last_login else None,
+            "last_review_at": (u.last_review_at.isoformat() + "Z") if u.last_review_at else None,
+            "review_overdue": overdue,
+        })
+
+    audit_log("ACCESS_REVIEW_GENERATED", resource="users",
+              details=f"Report generated with {len(report)} users")
+    db.session.commit()
+
+    return jsonify({
+        "generated_at": now.isoformat() + "Z",
+        "total_users": len(report),
+        "overdue_count": sum(1 for r in report if r["review_overdue"]),
+        "users": report,
+    })
+
+
+# ---------------------------
+# Enhanced Audit: @after_request for /api/ paths
+# ---------------------------
+def _register_after_request(app):
+    """Register an after_request handler that logs ALL API access for /api/ paths."""
+    @app.after_request
+    def log_api_access(response):
+        if request.path.startswith("/api/"):
+            try:
+                u = current_user if current_user and current_user.is_authenticated else None
+                entry = AuditLog(
+                    timestamp=_utcnow(),
+                    user_id=u.id if u and hasattr(u, "id") else None,
+                    username=u.username if u and hasattr(u, "username") else None,
+                    action="API_ACCESS",
+                    resource=request.path,
+                    resource_id=request.method,
+                    details=f"{request.method} {request.path} -> {response.status_code}",
+                    ip_address=request.remote_addr,
+                    user_agent=(request.user_agent.string[:300]
+                                if request.user_agent else None),
+                )
+                # Hash-chain
+                previous = AuditLog.query.order_by(AuditLog.id.desc()).first()
+                previous_hash = previous.hash if previous and previous.hash else None
+                entry.hash = _compute_audit_hash(entry, previous_hash)
+                db.session.add(entry)
+                db.session.commit()
+            except Exception:
+                # Never let audit logging break the response
+                pass
+        return response
 
 
 # ═══════════════════════════════════════════════════════════════

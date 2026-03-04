@@ -1,0 +1,96 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Test & Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 bandit pip-audit pyotp
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ \
+            --cov=app --cov=models --cov=auth --cov=monitoring \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --cov-report=term-missing \
+            --cov-fail-under=50 \
+            -v
+
+      - name: Run flake8 linting
+        run: |
+          flake8 app.py models.py auth.py \
+            --max-line-length=120 \
+            --ignore=E501,W503,E402,E711,E712 \
+            --count \
+            --show-source \
+            --statistics
+        continue-on-error: true
+
+      - name: Run bandit (SAST security scan)
+        run: |
+          bandit -r app.py models.py auth.py \
+            -f json \
+            -o bandit-report.json \
+            --severity-level medium \
+            -s B101 \
+            || true
+          bandit -r app.py models.py auth.py \
+            --severity-level medium \
+            -s B101 \
+            || true
+        continue-on-error: true
+
+      - name: Run pip-audit (dependency vulnerability scan)
+        run: |
+          pip-audit --requirement requirements.txt --format json --output pip-audit-report.json || true
+          pip-audit --requirement requirements.txt || true
+        continue-on-error: true
+
+      - name: Lint Dockerfile with hadolint
+        if: hashFiles('Dockerfile') != ''
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+        continue-on-error: true
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 30
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+          retention-days: 30

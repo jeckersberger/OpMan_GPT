@@ -22,6 +22,7 @@ _ensure_package("bcrypt", "bcrypt>=4.0")
 _ensure_package("flask_login", "Flask-Login>=0.6")
 _ensure_package("flask_wtf", "Flask-WTF>=1.2")
 _ensure_package("flask_limiter", "Flask-Limiter>=3.5")
+_ensure_package("pyotp", "pyotp>=2.9")
 
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, redirect
@@ -73,6 +74,30 @@ def _broadcast_push(evt_name: str, title: str, body: str, app_ctx=None):
             {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
             title, body,
         )
+
+
+# ---------------------------
+# Input-Validierung (Phase 4.2)
+# ---------------------------
+# Maximale Feldlängen (gegen Überlauf-Angriffe)
+MAX_FIELD_LENGTHS = {
+    "name": 120, "callsign": 50, "title": 160, "description": 500,
+    "message": 2000, "sender": 50, "receiver": 50, "notes": 5000,
+    "patient": 100, "schlagwort": 200, "w3w": 120, "zielklinik": 120,
+    "rmi_reported": 20, "sk_reported": 5, "pzc_reported": 20,
+    "abcde_schema": 500, "besonderheit": 1000,
+}
+
+
+def validate_string_length(data: dict, *fields) -> str | None:
+    """Prüft Feldlängen. Gibt Fehlermeldung zurück oder None."""
+    for field in fields:
+        val = data.get(field)
+        if val and isinstance(val, str):
+            max_len = MAX_FIELD_LENGTHS.get(field, 500)
+            if len(val) > max_len:
+                return f"Feld '{field}' überschreitet Maximum von {max_len} Zeichen"
+    return None
 
 
 # ---------------------------
@@ -161,8 +186,38 @@ def resolve_w3w(words: str):
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-in-production")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///einsatzleiter.db"
+
+    # ── App-Modus: "uebung" oder "einsatz" ──────────────────────
+    # Steuert ob Übungsfunktionen (Patientenkarten, Übungspatienten,
+    # Fallgenerator) verfügbar sind.
+    # Einsatzmodus: eigene DB, keine Übungsdaten, kein Zugriff auf Patientenkarten
+    app_mode = os.environ.get("APP_MODE", "uebung").lower()
+    app.config["APP_MODE"] = app_mode
+    if app_mode == "einsatz":
+        app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+            "DATABASE_URL", "sqlite:///einsatzleiter_live.db")
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+            "DATABASE_URL", "sqlite:///einsatzleiter.db")
+
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    def uebung_only(f):
+        """Decorator: Route nur im Übungsmodus verfügbar."""
+        import functools
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if app.config.get("APP_MODE") == "einsatz":
+                if request.path.startswith("/api/"):
+                    return jsonify({"error": "Im Einsatzmodus nicht verfügbar"}), 404
+                return "Diese Funktion ist nur im Übungsmodus verfügbar.", 404
+            return f(*args, **kwargs)
+        return wrapper
+
+    # App-Modus als Template-Kontext bereitstellen
+    @app.context_processor
+    def _inject_app_mode():
+        return {"app_mode": app.config.get("APP_MODE", "uebung")}
     # WAL-Modus für SQLite: mehrere gunicorn-Worker können gleichzeitig lesen
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "connect_args": {"check_same_thread": False},
@@ -234,6 +289,73 @@ def create_app():
         # CSP ersetzt X-XSS-Protection
         response.headers["X-XSS-Protection"] = "0"
         return response
+
+    # ── CORS (Phase 4.3) ─────────────────────────────────────────
+    @app.after_request
+    def _cors_headers(response):
+        """CORS-Header: Nur Same-Origin erlaubt (kein Cross-Origin)."""
+        origin = request.headers.get("Origin", "")
+        # Nur eigene Origin erlauben (kein Wildcard)
+        if origin:
+            allowed_origins = app.config.get("CORS_ALLOWED_ORIGINS", [])
+            if origin in allowed_origins:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-EVT-Token"
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Max-Age"] = "600"
+        return response
+
+    # ── Fehlerbehandlung (Phase 4.4) ─────────────────────────────
+    @app.errorhandler(400)
+    def _bad_request(e):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Ungültige Anfrage"}), 400
+        return "Ungültige Anfrage", 400
+
+    @app.errorhandler(403)
+    def _forbidden(e):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Keine Berechtigung"}), 403
+        return "Keine Berechtigung", 403
+
+    @app.errorhandler(404)
+    def _not_found(e):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Nicht gefunden"}), 404
+        return "Seite nicht gefunden", 404
+
+    @app.errorhandler(405)
+    def _method_not_allowed(e):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Methode nicht erlaubt"}), 405
+        return "Methode nicht erlaubt", 405
+
+    @app.errorhandler(429)
+    def _rate_limit(e):
+        return jsonify({"error": "Zu viele Anfragen – bitte warten"}), 429
+
+    @app.errorhandler(500)
+    def _internal_error(e):
+        # Keine internen Details an den Client senden
+        import logging
+        logging.getLogger("opman").error(f"Internal error: {e}", exc_info=True)
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Interner Serverfehler"}), 500
+        return "Interner Serverfehler", 500
+
+    # ── Structured Logging (Phase 4.4) ───────────────────────────
+    import logging
+    import logging.handlers
+    _log = logging.getLogger("opman")
+    _log.setLevel(logging.INFO)
+    if not _log.handlers:
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(logging.Formatter(
+            '{"time":"%(asctime)s","level":"%(levelname)s",'
+            '"logger":"%(name)s","message":"%(message)s"}'
+        ))
+        _log.addHandler(_handler)
 
     # ── Auth-System initialisieren (Login-Manager + Blueprint) ──
     init_auth(app)
@@ -360,6 +482,20 @@ def create_app():
 
         # Standard-Admin erstellen (nach db.create_all)
         create_default_admin()
+
+    # ── DSGVO-Modul registrieren ────────────────────────────────
+    try:
+        from dsgvo import init_dsgvo
+        init_dsgvo(app)
+    except ImportError:
+        pass  # dsgvo.py nicht vorhanden
+
+    # ── Monitoring-Modul registrieren ───────────────────────────
+    try:
+        from monitoring import init_monitoring
+        init_monitoring(app)
+    except ImportError:
+        pass  # monitoring.py nicht vorhanden
 
     def _cases_dict(active_only: bool = False):
         """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
@@ -690,6 +826,9 @@ def create_app():
     @login_required
     def create_logentry():
         data = request.get_json(force=True)
+        err = validate_string_length(data, "sender", "receiver", "message")
+        if err:
+            return jsonify({"error": err}), 400
         sender = (data.get("sender") or "").strip()
         if not sender:
             return jsonify({"error": "sender is required"}), 400
@@ -960,6 +1099,7 @@ function show(id){
     # ---------------------------
     @app.get("/cases")
     @login_required
+    @uebung_only
     def cases_list():
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases)
@@ -1135,6 +1275,7 @@ function show(id){
 
     @app.get("/patientenkarten")
     @login_required
+    @uebung_only
     def patientenkarten():
         from datetime import date
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
@@ -1142,6 +1283,7 @@ function show(id){
 
     @app.get("/patientenkarten/<string:case_id>")
     @login_required
+    @uebung_only
     def patientenkarte_single(case_id):
         from datetime import date
         cd = db.get_or_404(CaseDefinition, case_id)
@@ -1184,6 +1326,9 @@ function show(id){
     @role_required("admin", "schichtleiter", "disponent")
     def create_team():
         data = request.get_json(force=True)
+        err = validate_string_length(data, "name", "callsign")
+        if err:
+            return jsonify({"error": err}), 400
 
         # Auto-Name: "EVT 1", "EVT 2", ... wenn kein Name übergeben
         name = (data.get("name") or "").strip()
@@ -1488,6 +1633,9 @@ function show(id){
     @role_required("admin", "schichtleiter", "disponent")
     def create_mission():
         data = request.get_json(force=True)
+        err = validate_string_length(data, "title", "description")
+        if err:
+            return jsonify({"error": err}), 400
         title = (data.get("title") or "").strip()
         if not title:
             return jsonify({"error": "title is required"}), 400

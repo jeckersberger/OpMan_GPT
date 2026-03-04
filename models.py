@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timedelta
 
 db = SQLAlchemy()
 
@@ -49,6 +49,13 @@ class User(UserMixin, db.Model):
     created_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
     updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
 
+    # MFA (TOTP)
+    mfa_secret     = db.Column(db.String(32),  nullable=True)
+    mfa_enabled    = db.Column(db.Boolean,     nullable=False, default=False)
+
+    # Access Review
+    last_review_at = db.Column(db.DateTime,    nullable=True)
+
     @property
     def is_active(self):
         return self.is_active_user and not self.is_locked
@@ -76,6 +83,29 @@ class User(UserMixin, db.Model):
     def has_any_role(self, *roles: str) -> bool:
         return self.role in roles or any(self.has_role(r) for r in roles)
 
+    # ── MFA (TOTP) ───────────────────────────────────────────────
+    def generate_mfa_secret(self):
+        """Generates and stores a new TOTP secret."""
+        import pyotp
+        self.mfa_secret = pyotp.random_base32()
+        return self.mfa_secret
+
+    def verify_mfa(self, token: str) -> bool:
+        """Verifies a TOTP token against the stored secret."""
+        if not self.mfa_secret:
+            return False
+        import pyotp
+        totp = pyotp.TOTP(self.mfa_secret)
+        return totp.verify(token)
+
+    def get_mfa_provisioning_uri(self, issuer: str = "OpMan-GPT") -> str:
+        """Returns an otpauth:// URI for QR code generation."""
+        if not self.mfa_secret:
+            return ""
+        import pyotp
+        totp = pyotp.TOTP(self.mfa_secret)
+        return totp.provisioning_uri(name=self.username, issuer_name=issuer)
+
 
 class AuditLog(db.Model):
     """Revisionssicheres Audit-Log für alle sicherheitsrelevanten Aktionen."""
@@ -91,6 +121,36 @@ class AuditLog(db.Model):
     details      = db.Column(db.Text,        nullable=True)
     ip_address   = db.Column(db.String(45),  nullable=True)
     user_agent   = db.Column(db.String(300), nullable=True)
+    hash         = db.Column(db.String(64),  nullable=True)
+
+
+class UserSession(db.Model):
+    """Active user sessions for session limiting (max 1 per user)."""
+    __tablename__ = "user_sessions"
+
+    id         = db.Column(db.Integer,     primary_key=True)
+    user_id    = db.Column(db.Integer,     db.ForeignKey("users.id"), nullable=False, index=True)
+    session_id = db.Column(db.String(255), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    last_seen  = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    ip_address = db.Column(db.String(45),  nullable=True)
+    user_agent = db.Column(db.String(300), nullable=True)
+
+    user = db.relationship("User", backref=db.backref("sessions", cascade="all, delete-orphan"))
+
+
+class BreakGlassLog(db.Model):
+    """Audit log for break-glass emergency access elevation."""
+    __tablename__ = "break_glass_log"
+
+    id          = db.Column(db.Integer,     primary_key=True)
+    user_id     = db.Column(db.Integer,     db.ForeignKey("users.id"), nullable=False)
+    timestamp   = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    reason      = db.Column(db.Text,        nullable=False)
+    approved_by = db.Column(db.String(80),  nullable=True)
+    expires_at  = db.Column(db.DateTime,    nullable=False)
+
+    user = db.relationship("User", backref=db.backref("break_glass_logs", cascade="all, delete-orphan"))
 
 
 class CaseDoc(db.Model):
@@ -281,3 +341,25 @@ class PushSubscription(db.Model):
     p256dh     = db.Column(db.Text,       nullable=False)
     auth       = db.Column(db.Text,       nullable=False)
     created_at = db.Column(db.DateTime,   nullable=False, default=datetime.utcnow)
+
+
+class PseudonymMapping(db.Model):
+    """Mapping between original data hashes and pseudonyms (Art. 4 Nr. 5 DSGVO)."""
+    __tablename__ = "pseudonym_mappings"
+
+    id            = db.Column(db.Integer,     primary_key=True)
+    original_hash = db.Column(db.String(128), nullable=False, unique=True, index=True)
+    pseudonym     = db.Column(db.String(120), nullable=False)
+    created_at    = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
+
+class ConsentRecord(db.Model):
+    """Einwilligungsverwaltung gemäß Art. 6/7 DSGVO."""
+    __tablename__ = "consent_records"
+
+    id            = db.Column(db.Integer,     primary_key=True)
+    data_subject  = db.Column(db.String(200), nullable=False, index=True)
+    purpose       = db.Column(db.String(300), nullable=False)
+    granted_at    = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    withdrawn_at  = db.Column(db.DateTime,    nullable=True)
+    legal_basis   = db.Column(db.String(100), nullable=False, default="Einwilligung Art. 6(1)(a)")

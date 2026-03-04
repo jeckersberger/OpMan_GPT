@@ -1,3 +1,19 @@
+# =============================================================================
+# OpMan-GPT Docker Compose - Development / Single-Instance Deployment
+# =============================================================================
+# This file is for local development and simple single-instance deployments
+# using SQLite. For production HA deployment with PostgreSQL, Redis, and
+# nginx load balancing, see: deploy/docker-compose.prod.yml
+#
+# Quick start:
+#   export SECRET_KEY=$(openssl rand -hex 32)
+#   docker compose up -d
+#
+# Monitoring endpoints (provided by monitoring.py Blueprint):
+#   GET /health   - Detailed health check (DB, disk, memory status)
+#   GET /metrics  - Prometheus-compatible metrics
+# =============================================================================
+
 services:
   opman:
     build: .
@@ -11,12 +27,24 @@ services:
       # Pflicht: starkes zufälliges Secret setzen (z.B. openssl rand -hex 32)
       SECRET_KEY: "${SECRET_KEY}"
 
-      # Anzahl gunicorn-Worker (Faustregel: 2 × CPU-Kerne + 1)
+      # Anzahl gunicorn-Worker (Faustregel: 2 x CPU-Kerne + 1)
       GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
+
+      # Database configuration (default: SQLite, see database.py for options)
+      # For PostgreSQL, set these variables:
+      # DB_TYPE: "postgresql"
+      # DB_HOST: "localhost"
+      # DB_PORT: "5432"
+      # DB_NAME: "opman"
+      # DB_USER: "opman"
+      # DB_PASSWORD: "${DB_PASSWORD}"
+
+      # Enable Prometheus metrics collection
+      ENABLE_METRICS: "${ENABLE_METRICS:-true}"
 
     volumes:
       # SQLite-Datenbank, SSL-Zertifikate und VAPID-Keys persistieren.
-      # :Z → SELinux-Label für private (nicht geteilte) Volumes (rootless-kompatibel).
+      # :Z -> SELinux-Label fuer private (nicht geteilte) Volumes (rootless-kompatibel).
       # VAPID-Keys werden bei erstem Start automatisch in instance/ erzeugt.
       - ./instance:/app/instance:Z
 
@@ -24,11 +52,12 @@ services:
       # Verhindert Privilege-Escalation im Container
       - no-new-privileges:true
 
-    # Kein root, kein privileged – rootless-Docker-kompatibel
+    # Kein root, kein privileged - rootless-Docker-kompatibel
     # user: "1000:1000"  # bereits im Dockerfile gesetzt, hier optional
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      # Uses the /health endpoint provided by monitoring.py for detailed checks
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

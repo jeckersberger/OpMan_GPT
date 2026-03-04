@@ -95,6 +95,11 @@ function setSelectionLabel(){
 async function api(url, options){
   const res = await fetch(url, options);
   if (!res.ok){
+    // Bei Auth-Fehler: zum Login weiterleiten
+    if (res.status === 401) {
+      window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+      throw new Error("Nicht authentifiziert");
+    }
     let msg = `${res.status} ${res.statusText}`;
     try{
       const data = await res.json();
@@ -896,7 +901,26 @@ async function refreshAll(rebuild = true){
     for (const m of missions) upsertMissionMarker(m);
   }
 
-  if (exerciseGeodata) refreshExerciseLayer();
+  // Exercise-Layer + Geodaten neu laden (damit aktiv/inaktiv-Änderungen sichtbar werden)
+  if (exerciseGeodata) {
+    try {
+      const [newGeo, newDocs] = await Promise.all([
+        api("/api/exercise/geodata"),
+        api("/api/casedocs"),
+      ]);
+      exerciseGeodata = newGeo;
+      casedocData = newDocs;
+      // Marker für inaktiv gewordene Fälle entfernen
+      const activeCaseIds = new Set(Object.keys(newGeo.cases || {}));
+      for (const [id, marker] of exerciseMarkers) {
+        if (!activeCaseIds.has(id)) {
+          marker.remove();
+          exerciseMarkers.delete(id);
+        }
+      }
+    } catch (_) { /* ignore if exercise layer not available */ }
+    refreshExerciseLayer();
+  }
   renderSprechwunschPanel();
 }
 

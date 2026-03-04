@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Einsatzleiter</title>
+  <title>{% if app_mode == 'einsatz' %}Einsatzleiter – EINSATZ{% else %}Einsatzleiter – ÜBUNG{% endif %}</title>
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -29,12 +29,26 @@
     .team-tt::before {
       display: none !important;
     }
+    /* Offset für Modus-Banner (28px) + Topbar (56px) = 84px */
+    .layout { top: 84px !important; }
   </style>
 </head>
 <body>
+  {% if app_mode == 'uebung' %}
+  <!-- Übungsmodus-Banner -->
+  <div style="position:fixed;top:0;left:0;right:0;height:28px;background:linear-gradient(90deg,#f5c842,#e6a800);color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;z-index:1001;letter-spacing:1px;">
+    ⚠ ÜBUNGSMODUS – Keine echten Einsatzdaten ⚠
+  </div>
+  {% else %}
+  <!-- Einsatzmodus-Banner -->
+  <div style="position:fixed;top:0;left:0;right:0;height:28px;background:linear-gradient(90deg,#dc2626,#991b1b);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;z-index:1001;letter-spacing:1px;">
+    🔴 EINSATZMODUS – PRODUKTIVER BETRIEB 🔴
+  </div>
+  {% endif %}
+
   <!-- Top Navigation -->
-  <header class="topbar">
-    <div class="brand">🚨 Einsatzleiter{% if app_mode == 'uebung' %} <span style="color:#f5c842;font-size:.7rem;">[ÜBUNG]</span>{% endif %}</div>
+  <header class="topbar" style="top:28px;">
+    <div class="brand">🚨 Einsatzleiter</div>
     <nav class="topnav">
       <button id="btnRefresh" class="navbtn">Aktualisieren</button>
       <button id="btnLocate" class="navbtn">Zu mir</button>
@@ -51,15 +65,19 @@
       <a href="/beobachter" class="navbtn" style="text-decoration:none;" target="_blank">👁 Beobachter</a>
       <div class="divider"></div>
       <button id="btnTestAlarm" class="navbtn" style="background:#3a2800;color:#f5c842;border:1px solid #f5c842;" onclick="showTestAlarmModal()">🔔 Testalarm</button>
+      {% if app_mode == 'uebung' %}
       <div class="divider"></div>
       <button class="navbtn" style="background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b;" onclick="showResetModal()">🔄 Reset</button>
+      {% endif %}
       <div class="divider"></div>
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
       <div class="divider"></div>
       <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
+      {% if app_mode == 'einsatz' %}
       <div class="divider"></div>
       <a href="/admin/users" class="navbtn" style="text-decoration:none;font-size:.8rem;">👤 Benutzer</a>
       <a href="/logout" class="navbtn" style="text-decoration:none;font-size:.8rem;background:#2a0a0a;color:#ff6b6b;">Abmelden</a>
+      {% endif %}
     </nav>
   </header>
 

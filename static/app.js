@@ -666,6 +666,10 @@ function renderMissions(){
   const root = $("missionsList");
   root.innerHTML = "";
 
+  // Panel nur anzeigen wenn Einsätze existieren
+  const panel = document.getElementById("missionsPanel");
+  if (panel) panel.style.display = missions.length ? "" : "none";
+
   missions.forEach(m => {
     const sel = (m.id === selectedMissionId);
     const assignedTeams = (m.teams || []);
@@ -1316,7 +1320,7 @@ setInterval(async () => {
   } finally {
     _pollBusy = false;
   }
-}, 15000);
+}, 5000);
 
 // ---------------- LAN-Info (Handy-Zugang) ----------------
 let _lanInfo = null;

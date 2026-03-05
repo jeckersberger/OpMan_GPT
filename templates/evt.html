@@ -729,7 +729,7 @@ function _unlockAudio() {
 function _playAlarmTone() {
   if (!_alarmAudio) return;
   try {
-    _alarmAudio.loop = true;
+    _alarmAudio.pause();
     _alarmAudio.currentTime = 0;
     _alarmAudio.volume = 1.0;
     _alarmAudio.play().catch(() => {});
@@ -738,17 +738,13 @@ function _playAlarmTone() {
 
 function _stopAlarmTone() {
   if (!_alarmAudio) return;
-  try {
-    _alarmAudio.loop = false;
-    _alarmAudio.pause();
-    _alarmAudio.currentTime = 0;
-  } catch (_) {}
+  try { _alarmAudio.pause(); _alarmAudio.currentTime = 0; } catch (_) {}
 }
 
 function _playTestAlarmTone() {
   if (!_testAudio) return;
   try {
-    _testAudio.loop = true;
+    _testAudio.pause();
     _testAudio.currentTime = 0;
     _testAudio.volume = 1.0;
     _testAudio.play().catch(() => {});
@@ -757,11 +753,7 @@ function _playTestAlarmTone() {
 
 function _stopTestAlarmTone() {
   if (!_testAudio) return;
-  try {
-    _testAudio.loop = false;
-    _testAudio.pause();
-    _testAudio.currentTime = 0;
-  } catch (_) {}
+  try { _testAudio.pause(); _testAudio.currentTime = 0; } catch (_) {}
 }
 
 // ── Notification Permission ──────────────────────────────────

@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt gunicorn
 # ── Runtime-Stage ─────────────────────────────────────────────────
 FROM python:3.12-slim
 
+# git wird für In-Container-Updates benötigt (/api/update)
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # Non-root user (UID/GID 1000) – rootless-Docker & SELinux-kompatibel
 RUN groupadd -g 1000 opman && \
     useradd  -u 1000 -g opman -m -s /sbin/nologin opman

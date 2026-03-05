@@ -20,9 +20,11 @@ services:
       BASE_URL: "${BASE_URL:-}"
 
     volumes:
-      # SQLite-Datenbank, SSL-Zertifikate und VAPID-Keys persistieren.
+      # Gesamtes Repo mounten → git pull im Container aktualisiert den Code
+      # persistent auf dem Host-Dateisystem (überlebt Container-Neustarts).
       # :Z → SELinux-Label für private (nicht geteilte) Volumes (rootless-kompatibel).
-      # VAPID-Keys werden bei erstem Start automatisch in instance/ erzeugt.
+      - .:/app:Z
+      # instance/ separat sicherstellen (Datenbank, Zertifikate, VAPID-Keys)
       - ./instance:/app/instance:Z
 
     security_opt:

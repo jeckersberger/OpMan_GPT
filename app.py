@@ -915,7 +915,12 @@ function show(id){
         app_dir = os.path.dirname(os.path.abspath(__file__))
 
         # 0. Sicherstellen dass origin auf das richtige Repo zeigt
+        #    + safe.directory setzen (Docker: Volume-Owner ≠ Container-User)
         try:
+            subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", app_dir],
+                cwd=app_dir, capture_output=True, timeout=5
+            )
             subprocess.run(
                 ["git", "remote", "set-url", "origin", _GIT_REPO],
                 cwd=app_dir, capture_output=True, timeout=5
@@ -979,6 +984,8 @@ function show(id){
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
         try:
+            subprocess.run(["git", "config", "--global", "--add", "safe.directory", app_dir],
+                           cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "remote", "set-url", "origin", _GIT_REPO],
                            cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "fetch", "origin", "main"],

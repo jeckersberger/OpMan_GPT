@@ -78,10 +78,13 @@ button.full{ width:100%; }
   padding:10px;
   background:#0b1428;
   display:flex; flex-direction:column; gap:6px;
+  min-width:0; overflow:hidden;
 }
 .row{
   display:flex; align-items:center; justify-content:space-between; gap:8px;
+  min-width:0;
 }
+.row > *{ min-width:0; }
 .badge{
   font-size:12px;
   padding:3px 8px;
@@ -92,6 +95,9 @@ button.full{ width:100%; }
 .badge.sel{ border-color:var(--accent); color:var(--text); }
 .actions{ display:flex; gap:8px; }
 .actions button{ padding:8px; }
+
+/* Buttons in .row sollen nicht die volle Breite einnehmen */
+.row button{ width:auto; white-space:nowrap; flex-shrink:0; }
 
 .mapwrap{
   position:relative;

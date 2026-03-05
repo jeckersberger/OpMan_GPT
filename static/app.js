@@ -664,7 +664,12 @@ function renderTeams(){
 // ---------------- Render: Missions ----------------
 function renderMissions(){
   const root = $("missionsList");
+  if (!root) return;
   root.innerHTML = "";
+
+  // Panel nur anzeigen wenn Einsätze existieren
+  const panel = document.getElementById("missionsPanel");
+  if (panel) panel.style.display = missions.length ? "" : "none";
 
   missions.forEach(m => {
     const sel = (m.id === selectedMissionId);
@@ -819,6 +824,7 @@ function renderMissions(){
 // ---------------- Render: Assignments ----------------
 function renderAssignments(){
   const root = $("assignmentsList");
+  if (!root) return;
   root.innerHTML = "";
 
   assignments.forEach(a => {
@@ -1316,7 +1322,7 @@ setInterval(async () => {
   } finally {
     _pollBusy = false;
   }
-}, 15000);
+}, 5000);
 
 // ---------------- LAN-Info (Handy-Zugang) ----------------
 let _lanInfo = null;

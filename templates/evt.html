@@ -729,19 +729,31 @@ function _unlockAudio() {
 function _playAlarmTone() {
   if (!_alarmAudio) return;
   try {
+    _alarmAudio.pause();
     _alarmAudio.currentTime = 0;
     _alarmAudio.volume = 1.0;
     _alarmAudio.play().catch(() => {});
   } catch (_) {}
 }
 
+function _stopAlarmTone() {
+  if (!_alarmAudio) return;
+  try { _alarmAudio.pause(); _alarmAudio.currentTime = 0; } catch (_) {}
+}
+
 function _playTestAlarmTone() {
   if (!_testAudio) return;
   try {
+    _testAudio.pause();
     _testAudio.currentTime = 0;
     _testAudio.volume = 1.0;
     _testAudio.play().catch(() => {});
   } catch (_) {}
+}
+
+function _stopTestAlarmTone() {
+  if (!_testAudio) return;
+  try { _testAudio.pause(); _testAudio.currentTime = 0; } catch (_) {}
 }
 
 // ── Notification Permission ──────────────────────────────────
@@ -802,6 +814,7 @@ function triggerAlarm(doc, meta) {
 }
 
 document.getElementById('alarmDismiss').addEventListener('click', async () => {
+  _stopAlarmTone();
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('alarmOverlay').classList.remove('show');
   _alarmDoc = null;
@@ -827,6 +840,7 @@ function showTestAlarm(team) {
 }
 
 document.getElementById('testAlarmDismiss').addEventListener('click', async () => {
+  _stopTestAlarmTone();
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('testAlarmOverlay').classList.remove('show');
   if (currentTeamId) {

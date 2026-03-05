@@ -177,6 +177,8 @@
     .nbr-ok   { color:var(--green); font-weight:700; }
     .nbr-fail { color:var(--red);   font-weight:700; }
     .nbr-na   { color:var(--muted); }
+    .evt-print-block { margin-bottom:1rem; }
+    .evt-print-block h4 { border-bottom:1px solid var(--border); padding-bottom:.3rem; }
     .nbr-pid  { font-weight:800; }
     .nbr-dur  { font-size:.7rem; color:var(--muted); }
     .score-bar {
@@ -226,7 +228,7 @@
     .log-list { display:flex; flex-direction:column; gap:.3rem; }
     .log-entry {
       display:grid;
-      grid-template-columns:72px 115px 90px 60px 45px 1fr 24px;
+      grid-template-columns:72px 115px 90px 60px 45px 1fr auto;
       gap:.35rem; align-items:start;
       background:var(--panel); border:1px solid var(--border);
       border-radius:7px; padding:.4rem .65rem; font-size:.76rem;
@@ -243,10 +245,20 @@
       display:inline-block; padding:.08rem .35rem; border-radius:10px;
       background:rgba(61,220,132,.08); color:var(--green); font-size:.7rem; font-weight:700;
     }
-    .log-entry .l-del  {
-      background:none; border:none; color:var(--muted); cursor:pointer; font-size:.85rem; line-height:1; padding:0;
+    .log-entry .l-actions {
+      display:flex; gap:.3rem; align-items:center;
+    }
+    .log-entry .l-del, .log-entry .l-mark, .log-entry .l-note-btn  {
+      background:none; border:none; color:var(--muted); cursor:pointer; font-size:1.15rem; line-height:1; padding:.15rem;
     }
     .log-entry .l-del:hover { color:var(--red); }
+    .log-entry .l-mark:hover { color:var(--accent); }
+    .log-entry .l-note-btn:hover { color:var(--accent); }
+    .log-entry.marked { border-left:3px solid var(--accent); background:rgba(78,161,255,.06); }
+    .log-entry .l-note {
+      grid-column:1/-1; font-size:.82rem; color:var(--accent);
+      padding:.25rem .5rem; margin-top:.15rem; font-style:italic;
+    }
     .log-empty { color:var(--muted); font-size:.82rem; padding:.5rem; }
     .text-muted { color:var(--muted); font-size:.8rem; }
 
@@ -359,6 +371,9 @@
       .tl-seg.seg-alarm    { background:#f0d040 !important; }
       .tl-seg.seg-vor-ort  { background:#6090cc !important; }
       .tl-seg.seg-transport{ background:#cc9030 !important; }
+      .evt-print-block { page-break-inside:avoid; margin-bottom:.5rem; }
+      .evt-print-block h4 { color:#000; }
+      .collapsible-body { max-height:none !important; overflow:visible !important; }
     }
   </style>
 </head>
@@ -460,6 +475,12 @@
       <div class="nbr-wrap"><table class="nbr-table" id="nbrTable"></table></div>
       <div class="section-title" style="margin-top:1rem;margin-bottom:.5rem;">Bewertung je EVT-Team</div>
       <div class="nbr-wrap"><table class="nbr-table" id="evtTable"></table></div>
+
+      <div class="section-title" style="margin-top:1.2rem;margin-bottom:.5rem;">
+        Ergebnisse pro Team (druckbar)
+        <button class="btn btn-ghost btn-sm no-print" style="margin-left:.5rem;font-size:.7rem;" onclick="window.print()">🖨 Drucken</button>
+      </div>
+      <div id="evtPrintView"></div>
     </div>
   </div>
 </div>
@@ -622,6 +643,7 @@ const AUTO_FMS = { alarm_time:null, status3_time:3, status4_time:4, status7_time
 let caseDocs  = {};
 let teams     = [];
 let logEntries = [];
+let evtResults = [];   // gespeicherte Auswertungsergebnisse pro Fall+EVT
 let evtCount  = 6;  // Anzahl der teilnehmenden EVT-Teams (konfigurierbar)
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -1107,101 +1129,221 @@ function renderTeamProgress() {
 }
 
 /* ── Nachbesprechung ─────────────────────────────────────── */
+
+/**
+ * Sammelt alle Ergebnisse pro Fall: gespeicherte evtResults + aktueller caseDocs-Stand.
+ * Gibt Array von {pid, evt, pzc_reported, abcde_schema, zielklinik, alarm_time, ...} zurück.
+ */
+function _collectAllResults() {
+  const rows = [];
+  const seen = new Set(); // "pid|evt" → verhindert Duplikate
+
+  // 1. Gespeicherte Ergebnisse (haben Vorrang – historisch korrekt)
+  evtResults.forEach(r => {
+    const key = r.case_id + '|' + r.evt_name;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      pid: r.case_id, evt: r.evt_name,
+      pzc_reported: r.pzc_reported, abcde_schema: r.abcde_schema,
+      zielklinik: r.zielklinik, notes: r.notes,
+      alarm_time: r.alarm_time, status3_time: r.status3_time,
+      status4_time: r.status4_time, status7_time: r.status7_time,
+      status8_time: r.status8_time,
+    });
+  });
+
+  // 2. Aktueller CaseDoc-Stand (falls noch nicht gespeichert)
+  Object.keys(CASES_META).forEach(pid => {
+    const doc = caseDocs[pid] || {};
+    if (!doc.assigned_evt) return;
+    const key = pid + '|' + doc.assigned_evt;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      pid, evt: doc.assigned_evt,
+      pzc_reported: doc.pzc_reported, abcde_schema: doc.abcde_schema,
+      zielklinik: doc.zielklinik, notes: doc.notes,
+      alarm_time: doc.alarm_time, status3_time: doc.status3_time,
+      status4_time: doc.status4_time, status7_time: doc.status7_time,
+      status8_time: doc.status8_time,
+    });
+  });
+
+  return rows;
+}
+
 function renderNachbesprechung() {
-  const ids=Object.keys(CASES_META).sort();
-  const tbl=document.getElementById('nbrTable');
-  tbl.innerHTML=`<thead><tr>
+  const tbl = document.getElementById('nbrTable');
+  const allRows = _collectAllResults();
+  // Sortieren: erst nach Fall (P1, P2, …), dann nach EVT
+  allRows.sort((a, b) => a.pid.localeCompare(b.pid, 'de') || a.evt.localeCompare(b.evt, 'de'));
+
+  function cell(rep, soll) {
+    if (!soll || soll === '—') return `<td class="nbr-na">n/a</td>`;
+    if (!rep) return `<td class="nbr-na">–</td>`;
+    const opts = soll.split(',').map(v => v.trim());
+    const ok = opts.some(v => rep.trim() === v);
+    return `<td class="${ok ? 'nbr-ok' : 'nbr-fail'}">${esc(rep)} ${ok ? '✓' : '✗'}</td>`;
+  }
+  function abcdCell(row) {
+    const meta = CASES_META[row.pid] || {};
+    const pzc = (row.pzc_reported || '').trim();
+    if (!(pzc.length >= 6 && pzc[5] === '1')) return `<td class="nbr-na">n/a</td>`;
+    const obj = _parseAbcd(row.abcde_schema);
+    const filled = ['A', 'B', 'C', 'D'].every(l => obj[l] >= 1 && obj[l] <= 4);
+    const vals = ['A', 'B', 'C', 'D'].map(l => obj[l] || '–').join('-');
+    if (!filled) return `<td class="nbr-fail">${vals} (unvollst.)</td>`;
+    const soll = meta.abcd_soll || {};
+    if (!soll.A) return `<td class="nbr-ok">${vals} ✓</td>`;
+    const ok = ['A', 'B', 'C', 'D'].every(l => obj[l] === soll[l]);
+    const sollStr = ['A', 'B', 'C', 'D'].map(l => soll[l]).join('-');
+    return `<td class="${ok ? 'nbr-ok' : 'nbr-fail'}">${vals} ${ok ? '✓' : '✗ ≠' + sollStr}</td>`;
+  }
+
+  tbl.innerHTML = `<thead><tr>
     <th>Fall</th><th>Schlagwort</th><th>EVT</th>
     <th>Alarm</th><th>S4</th><th>Dauer A→S4</th><th>S8</th>
     <th>PZC</th><th>ABCD</th><th>Zielklinik</th>
-  </tr></thead><tbody>${ids.map(pid=>{
-    const meta=CASES_META[pid]||{};
-    const doc=caseDocs[pid]||{};
-    function cell(rep,soll){
-      if(!soll||soll==='—') return `<td class="nbr-na">n/a</td>`;
-      if(!rep) return `<td class="nbr-na">–</td>`;
-      const opts=soll.split(',').map(v=>v.trim());
-      const ok=opts.some(v=>rep.trim()===v);
-      return `<td class="${ok?'nbr-ok':'nbr-fail'}">${esc(rep)} ${ok?'✓':'✗'}</td>`;
-    }
-    function abcdCell(){
-      const pzc=(doc.pzc_reported||'').trim();
-      if(!(pzc.length>=6&&pzc[5]==='1')) return `<td class="nbr-na">n/a</td>`;
-      const obj=_parseAbcd(doc.abcde_schema);
-      const filled=['A','B','C','D'].every(l=>obj[l]>=1&&obj[l]<=4);
-      const vals=['A','B','C','D'].map(l=>obj[l]||'–').join('-');
-      if(!filled) return `<td class="nbr-fail">${vals} (unvollst.)</td>`;
-      const soll=meta.abcd_soll||{};
-      if(!soll.A) return `<td class="nbr-ok">${vals} ✓</td>`;
-      const ok=['A','B','C','D'].every(l=>obj[l]===soll[l]);
-      const sollStr=['A','B','C','D'].map(l=>soll[l]).join('-');
-      return `<td class="${ok?'nbr-ok':'nbr-fail'}">${vals} ${ok?'✓':'✗ ≠'+sollStr}</td>`;
-    }
-    const dur=fmtDur(doc.alarm_time,doc.status4_time);
+  </tr></thead><tbody>${allRows.map(row => {
+    const meta = CASES_META[row.pid] || {};
+    const dur = fmtDur(row.alarm_time, row.status4_time);
     return `<tr>
-      <td class="nbr-pid">${pid}</td>
-      <td>${esc(meta.schlagwort||'–')}</td>
-      <td>${esc(doc.assigned_evt||'–')}</td>
-      <td>${fmtTime(doc.alarm_time)||'–'}</td>
-      <td>${fmtTime(doc.status4_time)||'–'}</td>
-      <td class="nbr-dur">${dur||'–'}</td>
-      <td>${fmtTime(doc.status8_time)||'–'}</td>
-      ${cell(doc.pzc_reported,meta.pzc_soll)}
-      ${abcdCell()}
-      <td>${esc(doc.zielklinik||'–')}</td>
+      <td class="nbr-pid">${row.pid}</td>
+      <td>${esc(meta.schlagwort || '–')}</td>
+      <td>${esc(row.evt)}</td>
+      <td>${fmtTime(row.alarm_time) || '–'}</td>
+      <td>${fmtTime(row.status4_time) || '–'}</td>
+      <td class="nbr-dur">${dur || '–'}</td>
+      <td>${fmtTime(row.status8_time) || '–'}</td>
+      ${cell(row.pzc_reported, meta.pzc_soll)}
+      ${abcdCell(row)}
+      <td>${esc(row.zielklinik || '–')}</td>
     </tr>`;
   }).join('')}</tbody>`;
+
+  // Per-EVT druckbare Ansicht rendern
+  renderEvtPrintView(allRows);
 }
 
 function renderEvtBewertung() {
-  const ids=Object.keys(CASES_META).sort();
+  const allRows = _collectAllResults();
   // Sammle Daten pro EVT
-  const evtData={};
-  ids.forEach(pid=>{
-    const doc=caseDocs[pid]||{};
-    const meta=CASES_META[pid]||{};
-    const evt=doc.assigned_evt;
-    if(!evt) return;
-    if(!evtData[evt]) evtData[evt]={cases:[],ok:0,total:0};
-    evtData[evt].cases.push(pid);
-    // PZC bewerten (kommaseparierte Soll-Werte)
-    const pzcSoll=meta.pzc_soll;
-    if(pzcSoll&&pzcSoll!=='—'){
+  const evtData = {};
+  allRows.forEach(row => {
+    const meta = CASES_META[row.pid] || {};
+    const evt = row.evt;
+    if (!evtData[evt]) evtData[evt] = {cases: [], ok: 0, total: 0};
+    evtData[evt].cases.push(row.pid);
+    // PZC bewerten
+    const pzcSoll = meta.pzc_soll;
+    if (pzcSoll && pzcSoll !== '—') {
       evtData[evt].total++;
-      if(doc.pzc_reported){
-        const opts=pzcSoll.split(',').map(v=>v.trim());
-        if(opts.some(v=>doc.pzc_reported.trim()===v)) evtData[evt].ok++;
+      if (row.pzc_reported) {
+        const opts = pzcSoll.split(',').map(v => v.trim());
+        if (opts.some(v => row.pzc_reported.trim() === v)) evtData[evt].ok++;
       }
     }
-    // ABCD bewerten (nur wenn SK1 = PZC endet auf 1)
-    const pzc=(doc.pzc_reported||'').trim();
-    if(pzc.length>=6&&pzc[5]==='1'&&meta.abcd_soll&&meta.abcd_soll.A){
+    // ABCD bewerten (nur wenn SK1)
+    const pzc = (row.pzc_reported || '').trim();
+    if (pzc.length >= 6 && pzc[5] === '1' && meta.abcd_soll && meta.abcd_soll.A) {
       evtData[evt].total++;
-      const obj=_parseAbcd(doc.abcde_schema);
-      const ok=['A','B','C','D'].every(l=>obj[l]===meta.abcd_soll[l]);
-      if(ok) evtData[evt].ok++;
+      const obj = _parseAbcd(row.abcde_schema);
+      const ok = ['A', 'B', 'C', 'D'].every(l => obj[l] === meta.abcd_soll[l]);
+      if (ok) evtData[evt].ok++;
     }
   });
-  const tbl=document.getElementById('evtTable');
-  if(!Object.keys(evtData).length){
-    tbl.innerHTML='<tbody><tr><td colspan="4" style="padding:.5rem;color:var(--muted)">Noch keine EVT-Zuweisungen dokumentiert.</td></tr></tbody>';
+  const tbl = document.getElementById('evtTable');
+  if (!Object.keys(evtData).length) {
+    tbl.innerHTML = '<tbody><tr><td colspan="4" style="padding:.5rem;color:var(--muted)">Noch keine EVT-Zuweisungen dokumentiert.</td></tr></tbody>';
     return;
   }
-  const sorted=Object.entries(evtData).sort((a,b)=>a[0].localeCompare(b[0],'de'));
-  tbl.innerHTML=`<thead><tr><th>EVT</th><th>Fälle</th><th>Richtig / Gesamt</th><th>Score</th></tr></thead>
-  <tbody>${sorted.map(([evt,d])=>{
-    const pct=d.total?Math.round(d.ok/d.total*100):0;
-    const barW=pct+'%';
+  const sorted = Object.entries(evtData).sort((a, b) => a[0].localeCompare(b[0], 'de'));
+  tbl.innerHTML = `<thead><tr><th>EVT</th><th>Fälle</th><th>Richtig / Gesamt</th><th>Score</th></tr></thead>
+  <tbody>${sorted.map(([evt, d]) => {
+    const pct = d.total ? Math.round(d.ok / d.total * 100) : 0;
+    const barW = pct + '%';
     return `<tr>
       <td><b>${esc(evt)}</b></td>
       <td>${esc(d.cases.join(', '))}</td>
       <td>${d.ok} / ${d.total}</td>
       <td>
         <span>${pct}%</span>
-        <span class="score-bar" style="width:${barW};min-width:${pct?'4px':'0'}"></span>
+        <span class="score-bar" style="width:${barW};min-width:${pct ? '4px' : '0'}"></span>
       </td>
     </tr>`;
   }).join('')}</tbody>`;
+}
+
+/* ── Per-EVT druckbare Ansicht ──────────────────────────── */
+function renderEvtPrintView(allRows) {
+  const container = document.getElementById('evtPrintView');
+  if (!container) return;
+
+  // Gruppiere nach EVT
+  const byEvt = {};
+  allRows.forEach(row => {
+    if (!byEvt[row.evt]) byEvt[row.evt] = [];
+    byEvt[row.evt].push(row);
+  });
+
+  const evtNames = Object.keys(byEvt).sort((a, b) => a.localeCompare(b, 'de'));
+  if (!evtNames.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Keine Ergebnisse vorhanden.</div>';
+    return;
+  }
+
+  container.innerHTML = evtNames.map(evt => {
+    const rows = byEvt[evt].sort((a, b) => a.pid.localeCompare(b.pid, 'de'));
+    const pids = rows.map(r => r.pid);
+    const rangeLabel = pids.length > 1 ? pids[0] + '–' + pids[pids.length - 1] : pids[0];
+
+    return `<div class="evt-print-block">
+      <h4 style="margin:.8rem 0 .4rem;font-size:.9rem;">${esc(evt)} <span style="color:var(--muted);font-weight:400;font-size:.8rem;">(${rangeLabel})</span></h4>
+      <table class="nbr-table">
+        <thead><tr>
+          <th>Fall</th><th>Schlagwort</th>
+          <th>Alarm</th><th>S4</th><th>Dauer A→S4</th><th>S8</th>
+          <th>PZC</th><th>ABCD</th><th>Zielklinik</th>
+        </tr></thead>
+        <tbody>${rows.map(row => {
+          const meta = CASES_META[row.pid] || {};
+          const dur = fmtDur(row.alarm_time, row.status4_time);
+          function cell(rep, soll) {
+            if (!soll || soll === '—') return `<td class="nbr-na">n/a</td>`;
+            if (!rep) return `<td class="nbr-na">–</td>`;
+            const opts = soll.split(',').map(v => v.trim());
+            const ok = opts.some(v => rep.trim() === v);
+            return `<td class="${ok ? 'nbr-ok' : 'nbr-fail'}">${esc(rep)} ${ok ? '✓' : '✗'}</td>`;
+          }
+          function abcdCell() {
+            const pzc = (row.pzc_reported || '').trim();
+            if (!(pzc.length >= 6 && pzc[5] === '1')) return `<td class="nbr-na">n/a</td>`;
+            const obj = _parseAbcd(row.abcde_schema);
+            const filled = ['A', 'B', 'C', 'D'].every(l => obj[l] >= 1 && obj[l] <= 4);
+            const vals = ['A', 'B', 'C', 'D'].map(l => obj[l] || '–').join('-');
+            if (!filled) return `<td class="nbr-fail">${vals} (unvollst.)</td>`;
+            const soll = meta.abcd_soll || {};
+            if (!soll.A) return `<td class="nbr-ok">${vals} ✓</td>`;
+            const ok = ['A', 'B', 'C', 'D'].every(l => obj[l] === soll[l]);
+            const sollStr = ['A', 'B', 'C', 'D'].map(l => soll[l]).join('-');
+            return `<td class="${ok ? 'nbr-ok' : 'nbr-fail'}">${vals} ${ok ? '✓' : '✗ ≠' + sollStr}</td>`;
+          }
+          return `<tr>
+            <td class="nbr-pid">${row.pid}</td>
+            <td>${esc(meta.schlagwort || '–')}</td>
+            <td>${fmtTime(row.alarm_time) || '–'}</td>
+            <td>${fmtTime(row.status4_time) || '–'}</td>
+            <td class="nbr-dur">${dur || '–'}</td>
+            <td>${fmtTime(row.status8_time) || '–'}</td>
+            ${cell(row.pzc_reported, meta.pzc_soll)}
+            ${abcdCell()}
+            <td>${esc(row.zielklinik || '–')}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
 }
 
 /* ── Zeitleiste ──────────────────────────────────────────── */
@@ -1280,14 +1422,23 @@ function renderLogList() {
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp))
     .map(e=>{
       const fms=e.fms_status!=null?(FMS_LABELS[e.fms_status]||'S'+e.fms_status):'';
-      return `<div class="log-entry">
+      const markedCls=e.marked?'marked':'';
+      const markIcon=e.marked?'&#9733;':'&#9734;';
+      const noteIcon=e.note?'&#9998;':'&#9998;';
+      const noteStyle=e.note?'color:var(--accent)':'';
+      return `<div class="log-entry ${markedCls}">
         <span class="l-ts">${fmtTime(e.timestamp)||'–'}</span>
         <span class="l-from">${esc(e.sender)}</span>
         <span class="l-to">${e.receiver?'→ '+esc(e.receiver):''}</span>
         <span class="l-fms">${fms}</span>
         <span class="l-ref">${e.case_ref?esc(e.case_ref):''}</span>
         <span class="l-msg">${esc(e.message)}</span>
-        <button class="l-del no-print" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+        <span class="l-actions no-print">
+          <button class="l-mark" title="Markieren" onclick="toggleMark(${e.id})">${markIcon}</button>
+          <button class="l-note-btn" style="${noteStyle}" title="Notiz" onclick="editNote(${e.id})">&#9998;</button>
+          <button class="l-del" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+        </span>
+        ${e.note?`<span class="l-note">&#128221; ${esc(e.note)}</span>`:''}
       </div>`;
     }).join('');
 }
@@ -1317,6 +1468,28 @@ async function addLogEntry() {
   }
 }
 
+async function toggleMark(id) {
+  const entry=logEntries.find(e=>e.id===id);
+  if(!entry) return;
+  const res=await fetch(`/api/radiolog/${id}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({marked:!entry.marked}),
+  });
+  if(res.ok){ Object.assign(entry, await res.json()); renderLogList(); }
+}
+
+async function editNote(id) {
+  const entry=logEntries.find(e=>e.id===id);
+  if(!entry) return;
+  const note=prompt('Notiz für diesen Funkspruch:', entry.note||'');
+  if(note===null) return;
+  const res=await fetch(`/api/radiolog/${id}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({note}),
+  });
+  if(res.ok){ Object.assign(entry, await res.json()); renderLogList(); }
+}
+
 async function deleteLogEntry(id) {
   if(!confirm('Eintrag löschen?')) return;
   const res=await fetch(`/api/radiolog/${id}`,{method:'DELETE'});
@@ -1340,9 +1513,8 @@ async function doReset() {
 
 /* ── Data & Render ───────────────────────────────────────── */
 async function fetchAll() {
-  // Dashboard + Radiolog in 2 Requests (statt 3)
-  const [dashRes,logRes]=await Promise.all([
-    fetch('/api/dashboard'), fetch('/api/radiolog'),
+  const [dashRes,logRes,evtResRes]=await Promise.all([
+    fetch('/api/dashboard'), fetch('/api/radiolog'), fetch('/api/case_evt_results'),
   ]);
   if(dashRes.ok) {
     const d=await dashRes.json();
@@ -1350,6 +1522,7 @@ async function fetchAll() {
     teams=d.teams; evtCount=teams.length||evtCount;
   }
   if(logRes.ok) { logEntries=await logRes.json(); }
+  if(evtResRes.ok) { evtResults=await evtResRes.json(); }
 }
 
 async function refreshAll() {
@@ -1455,9 +1628,12 @@ setInterval(async()=>{ const r=await fetch('/api/radiolog'); if(r.ok){logEntries
 // CaseDoc soft-refresh: alle 10 s, ohne aktive Eingabefelder zu überschreiben
 const TS_FIELDS=['alarm_time','status3_time','status4_time','status7_time','status8_time'];
 async function softRefreshCaseDocs() {
-  const [docsRes,teamsRes]=await Promise.all([fetch('/api/casedocs'),fetch('/api/teams')]);
+  const [docsRes,teamsRes,evtResRes]=await Promise.all([
+    fetch('/api/casedocs'),fetch('/api/teams'),fetch('/api/case_evt_results'),
+  ]);
   if(docsRes.ok)  { const arr=await docsRes.json(); arr.forEach(d=>{caseDocs[d.id]=d;}); }
   if(teamsRes.ok) { teams=await teamsRes.json(); renderEvtBoard(); renderSprechwunschPanel(); }
+  if(evtResRes.ok) { evtResults=await evtResRes.json(); }
 
   const focused=document.activeElement;
   Object.keys(CASES_META).sort().forEach(pid=>{
@@ -1473,6 +1649,14 @@ async function softRefreshCaseDocs() {
     const evtSel=document.getElementById(`evt_${pid}`);
     if(evtSel && evtSel!==focused) evtSel.value=d.assigned_evt||'';
 
+    // PZC, Zielklinik, Notizen – nur wenn nicht fokussiert (Reset nach S1)
+    const pzcEl=document.getElementById(`pzc_${pid}`);
+    if(pzcEl && pzcEl!==focused) pzcEl.value=d.pzc_reported||'';
+    const klinikEl=document.getElementById(`klinik_${pid}`);
+    if(klinikEl && klinikEl!==focused) klinikEl.value=d.zielklinik||'';
+    const notesEl=document.getElementById(`notes_${pid}`);
+    if(notesEl && notesEl!==focused) notesEl.value=d.notes||'';
+
     // Fertig-Checkbox + Karten-Styling
     const chk=document.getElementById(`chk_${pid}`);
     if(chk && chk!==focused){
@@ -1481,9 +1665,11 @@ async function softRefreshCaseDocs() {
       document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
     }
 
-    // ABCD-Buttons synchronisieren
+    // ABCD-Buttons synchronisieren + Sichtbarkeit
     const wrap=document.getElementById('abcde_wrap_'+pid);
     if(wrap){
+      const pzcVal=(d.pzc_reported||'').trim();
+      wrap.style.display=(pzcVal.length>=6&&pzcVal[5]==='1')?'block':'none';
       const obj=_parseAbcd(d.abcde_schema);
       wrap.querySelectorAll('.abcd-btn').forEach(btn=>{
         const row=btn.parentElement.previousElementSibling?.textContent?.trim();

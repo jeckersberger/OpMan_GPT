@@ -21,7 +21,7 @@ _ensure_package("qrcode", "qrcode[svg]")
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, redirect
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
+from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -272,6 +272,8 @@ def create_app():
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
             "ALTER TABLE case_definitions ADD COLUMN abcd_soll_json TEXT",
             "ALTER TABLE exercise_config ADD COLUMN base_url VARCHAR(300) DEFAULT ''",
+            "ALTER TABLE radio_log ADD COLUMN marked BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE radio_log ADD COLUMN note TEXT",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -567,6 +569,34 @@ def create_app():
     # ---------------------------
     # CaseDoc API
     # ---------------------------
+
+    def _snapshot_evt_result(doc: CaseDoc):
+        """Speichert die aktuellen Auswertungsdaten eines CaseDoc als
+        CaseEvtResult, damit sie nicht durch einen EVT-Wechsel verloren gehen.
+        Überschreibt ein vorhandenes Ergebnis für dasselbe (case_id, evt_name)."""
+        if not doc.assigned_evt:
+            return
+        # Nur speichern wenn es echte Daten gibt
+        has_data = any([doc.pzc_reported, doc.abcde_schema, doc.zielklinik,
+                        doc.alarm_time, doc.status4_time, doc.status8_time])
+        if not has_data:
+            return
+        existing = CaseEvtResult.query.filter_by(
+            case_id=doc.id, evt_name=doc.assigned_evt
+        ).first()
+        if not existing:
+            existing = CaseEvtResult(case_id=doc.id, evt_name=doc.assigned_evt)
+            db.session.add(existing)
+        existing.pzc_reported  = doc.pzc_reported
+        existing.abcde_schema  = doc.abcde_schema
+        existing.zielklinik    = doc.zielklinik
+        existing.notes         = doc.notes
+        existing.alarm_time    = doc.alarm_time
+        existing.status3_time  = doc.status3_time
+        existing.status4_time  = doc.status4_time
+        existing.status7_time  = doc.status7_time
+        existing.status8_time  = doc.status8_time
+
     @app.get("/api/casedocs")
     def list_casedocs():
         docs = CaseDoc.query.order_by(CaseDoc.id).all()
@@ -576,6 +606,11 @@ def create_app():
     def update_casedoc(case_id: str):
         doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
+
+        # ── Snapshot bei EVT-Wechsel ──
+        new_evt = (data.get("assigned_evt") or "").strip() or None
+        if "assigned_evt" in data and doc.assigned_evt and new_evt != doc.assigned_evt:
+            _snapshot_evt_result(doc)
 
         for field in ("assigned_evt", "rmi_reported", "sk_reported",
                       "pzc_reported", "abcde_schema", "zielklinik", "notes"):
@@ -602,6 +637,8 @@ def create_app():
 
         doc.updated_at = _utcnow()
         _sync_team_from_doc(doc)
+        # Aktuellen Stand als Ergebnis speichern (upsert)
+        _snapshot_evt_result(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
 
@@ -620,6 +657,14 @@ def create_app():
         _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
+
+    # ---------------------------
+    # CaseEvtResult API
+    # ---------------------------
+    @app.get("/api/case_evt_results")
+    def list_case_evt_results():
+        results = CaseEvtResult.query.order_by(CaseEvtResult.case_id, CaseEvtResult.evt_name).all()
+        return jsonify([serialize_evt_result(r) for r in results])
 
     # ---------------------------
     # RadioLog API
@@ -659,6 +704,17 @@ def create_app():
         db.session.add(entry)
         db.session.commit()
         return jsonify(serialize_logentry(entry)), 201
+
+    @app.patch("/api/radiolog/<int:entry_id>")
+    def patch_logentry(entry_id: int):
+        entry = db.get_or_404(RadioLogEntry, entry_id)
+        data = request.get_json(force=True)
+        if "marked" in data:
+            entry.marked = bool(data["marked"])
+        if "note" in data:
+            entry.note = (data["note"] or "").strip() or None
+        db.session.commit()
+        return jsonify(serialize_logentry(entry))
 
     @app.delete("/api/radiolog/<int:entry_id>")
     def delete_logentry(entry_id: int):
@@ -701,6 +757,9 @@ def create_app():
             doc.completed      = False
             doc.completed_evts = "[]"
             doc.updated_at     = now
+
+        # 1b. Gespeicherte EVT-Ergebnisse löschen
+        CaseEvtResult.query.delete()
 
         # 2. Alle Zuweisungen löschen
         Assignment.query.delete()
@@ -908,14 +967,39 @@ function show(id){
     # ---------------------------
     _GIT_REPO = "https://github.com/jeckersberger/OpMan_GPT.git"
 
+    def _ensure_git():
+        """Prüft ob git verfügbar ist; versucht es ggf. zu installieren."""
+        import shutil, subprocess
+        if shutil.which("git"):
+            return True
+        # Versuche git zu installieren (Debian/Ubuntu)
+        for cmd in [
+            ["apt-get", "update", "-qq"],
+            ["apt-get", "install", "-y", "-qq", "git"],
+        ]:
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=60)
+            except Exception:
+                return False
+        return bool(shutil.which("git"))
+
     @app.post("/api/update")
     def app_update():
         """Zieht die neueste Version aus main und startet die App neu."""
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
 
+        if not _ensure_git():
+            return jsonify({"ok": False, "step": "git check",
+                            "error": "git ist nicht installiert. Bitte manuell installieren: sudo apt-get install git"}), 500
+
         # 0. Sicherstellen dass origin auf das richtige Repo zeigt
+        #    + safe.directory setzen (Docker: Volume-Owner ≠ Container-User)
         try:
+            subprocess.run(
+                ["git", "config", "--global", "--add", "safe.directory", app_dir],
+                cwd=app_dir, capture_output=True, timeout=5
+            )
             subprocess.run(
                 ["git", "remote", "set-url", "origin", _GIT_REPO],
                 cwd=app_dir, capture_output=True, timeout=5
@@ -978,7 +1062,12 @@ function show(id){
         """Prüft ob Updates verfügbar sind (git fetch + log)."""
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
+        if not _ensure_git():
+            return jsonify({"available": False,
+                            "error": "git ist nicht installiert. Bitte manuell installieren: sudo apt-get install git"})
         try:
+            subprocess.run(["git", "config", "--global", "--add", "safe.directory", app_dir],
+                           cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "remote", "set-url", "origin", _GIT_REPO],
                            cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "fetch", "origin", "main"],
@@ -1379,14 +1468,20 @@ function show(id){
                             # Alle EVTs durch ODER manuell als fertig markiert
                             _doc.completed = True
                         else:
+                            # Snapshot sichern bevor Felder geleert werden
+                            _snapshot_evt_result(_doc)
                             # Noch weitere EVTs → Felder zurücksetzen für nächsten Einsatz
-                            _doc.assigned_evt = None
-                            _doc.alarm_time   = None
-                            _doc.status3_time = None
-                            _doc.status4_time = None
-                            _doc.status7_time = None
-                            _doc.status8_time = None
-                            _doc.completed    = False
+                            _doc.assigned_evt  = None
+                            _doc.alarm_time    = None
+                            _doc.status3_time  = None
+                            _doc.status4_time  = None
+                            _doc.status7_time  = None
+                            _doc.status8_time  = None
+                            _doc.pzc_reported  = None
+                            _doc.abcde_schema  = None
+                            _doc.zielklinik    = None
+                            _doc.notes         = None
+                            _doc.completed     = False
                         _doc.updated_at = _utcnow()
                         # Mission abschließen + Assignment dieses Teams aufheben
                         for _dm in Mission.query.filter(
@@ -1455,7 +1550,7 @@ function show(id){
         rs_label  = RADIO_STATUS_LABELS.get(restore_rs, f"S{restore_rs}")
         db.session.add(RadioLogEntry(
             timestamp=_utcnow(),
-            sender="FüSt",
+            sender="Äskulap Feucht",
             receiver=team.callsign or team.name,
             fms_status=restore_rs,
             case_ref=_case_ref,
@@ -1706,7 +1801,7 @@ def _auto_log(team: "Team", rs: int, case_ref: str | None = None) -> None:
     entry = RadioLogEntry(
         timestamp=_utcnow(),
         sender=name,
-        receiver="FüSt",
+        receiver="Äskulap Feucht",
         fms_status=rs,
         case_ref=case_ref,
         message=f"FMS {rs} – {label}",
@@ -1772,6 +1867,24 @@ def serialize_casedoc(d: CaseDoc):
     }
 
 
+def serialize_evt_result(r: CaseEvtResult):
+    return {
+        "id":            r.id,
+        "case_id":       r.case_id,
+        "evt_name":      r.evt_name,
+        "pzc_reported":  r.pzc_reported,
+        "abcde_schema":  r.abcde_schema,
+        "zielklinik":    r.zielklinik,
+        "notes":         r.notes,
+        "alarm_time":    _fmt_dt(r.alarm_time),
+        "status3_time":  _fmt_dt(r.status3_time),
+        "status4_time":  _fmt_dt(r.status4_time),
+        "status7_time":  _fmt_dt(r.status7_time),
+        "status8_time":  _fmt_dt(r.status8_time),
+        "created_at":    _fmt_dt(r.created_at),
+    }
+
+
 def serialize_logentry(e: RadioLogEntry):
     return {
         "id":         e.id,
@@ -1781,6 +1894,8 @@ def serialize_logentry(e: RadioLogEntry):
         "fms_status": e.fms_status,
         "case_ref":   e.case_ref,
         "message":    e.message,
+        "marked":     e.marked,
+        "note":       e.note,
         "created_at": _fmt_dt(e.created_at),
     }
 

@@ -272,6 +272,8 @@ def create_app():
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
             "ALTER TABLE case_definitions ADD COLUMN abcd_soll_json TEXT",
             "ALTER TABLE exercise_config ADD COLUMN base_url VARCHAR(300) DEFAULT ''",
+            "ALTER TABLE radio_log ADD COLUMN marked BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE radio_log ADD COLUMN note TEXT",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:

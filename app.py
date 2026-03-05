@@ -906,11 +906,22 @@ function show(id){
     # ---------------------------
     # App Update (git pull from main)
     # ---------------------------
+    _GIT_REPO = "https://github.com/jeckersberger/OpMan_GPT.git"
+
     @app.post("/api/update")
     def app_update():
         """Zieht die neueste Version aus main und startet die App neu."""
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 0. Sicherstellen dass origin auf das richtige Repo zeigt
+        try:
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", _GIT_REPO],
+                cwd=app_dir, capture_output=True, timeout=5
+            )
+        except Exception:
+            pass
 
         # 1. Git pull
         try:
@@ -968,6 +979,8 @@ function show(id){
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
         try:
+            subprocess.run(["git", "remote", "set-url", "origin", _GIT_REPO],
+                           cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "fetch", "origin", "main"],
                            cwd=app_dir, capture_output=True, timeout=15)
             log = subprocess.run(

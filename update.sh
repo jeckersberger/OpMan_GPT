@@ -22,8 +22,11 @@ echo "  OpMan GPT – Update aus main"
 echo "  Modus: $MODE"
 echo "=============================================="
 
+REPO="https://github.com/jeckersberger/OpMan_GPT.git"
+
 # ── 1. Git Pull ──────────────────────────────────────────────────
-echo "[1] Git pull origin main …"
+echo "[1] Git pull aus $REPO (main) …"
+git remote set-url origin "$REPO" 2>/dev/null || git remote add origin "$REPO"
 git fetch origin main
 git pull origin main
 echo "    ✓ Code aktualisiert"

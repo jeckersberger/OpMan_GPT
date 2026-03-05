@@ -908,11 +908,31 @@ function show(id){
     # ---------------------------
     _GIT_REPO = "https://github.com/jeckersberger/OpMan_GPT.git"
 
+    def _ensure_git():
+        """Prüft ob git verfügbar ist; versucht es ggf. zu installieren."""
+        import shutil, subprocess
+        if shutil.which("git"):
+            return True
+        # Versuche git zu installieren (Debian/Ubuntu)
+        for cmd in [
+            ["apt-get", "update", "-qq"],
+            ["apt-get", "install", "-y", "-qq", "git"],
+        ]:
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=60)
+            except Exception:
+                return False
+        return bool(shutil.which("git"))
+
     @app.post("/api/update")
     def app_update():
         """Zieht die neueste Version aus main und startet die App neu."""
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
+
+        if not _ensure_git():
+            return jsonify({"ok": False, "step": "git check",
+                            "error": "git ist nicht installiert. Bitte manuell installieren: sudo apt-get install git"}), 500
 
         # 0. Sicherstellen dass origin auf das richtige Repo zeigt
         #    + safe.directory setzen (Docker: Volume-Owner ≠ Container-User)
@@ -983,6 +1003,9 @@ function show(id){
         """Prüft ob Updates verfügbar sind (git fetch + log)."""
         import subprocess
         app_dir = os.path.dirname(os.path.abspath(__file__))
+        if not _ensure_git():
+            return jsonify({"available": False,
+                            "error": "git ist nicht installiert. Bitte manuell installieren: sudo apt-get install git"})
         try:
             subprocess.run(["git", "config", "--global", "--add", "safe.directory", app_dir],
                            cwd=app_dir, capture_output=True, timeout=5)

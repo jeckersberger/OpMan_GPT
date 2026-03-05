@@ -21,7 +21,7 @@ _ensure_package("qrcode", "qrcode[svg]")
 from datetime import datetime, timezone
 from flask import Flask, render_template, request, jsonify, redirect
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
+from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -569,6 +569,34 @@ def create_app():
     # ---------------------------
     # CaseDoc API
     # ---------------------------
+
+    def _snapshot_evt_result(doc: CaseDoc):
+        """Speichert die aktuellen Auswertungsdaten eines CaseDoc als
+        CaseEvtResult, damit sie nicht durch einen EVT-Wechsel verloren gehen.
+        Überschreibt ein vorhandenes Ergebnis für dasselbe (case_id, evt_name)."""
+        if not doc.assigned_evt:
+            return
+        # Nur speichern wenn es echte Daten gibt
+        has_data = any([doc.pzc_reported, doc.abcde_schema, doc.zielklinik,
+                        doc.alarm_time, doc.status4_time, doc.status8_time])
+        if not has_data:
+            return
+        existing = CaseEvtResult.query.filter_by(
+            case_id=doc.id, evt_name=doc.assigned_evt
+        ).first()
+        if not existing:
+            existing = CaseEvtResult(case_id=doc.id, evt_name=doc.assigned_evt)
+            db.session.add(existing)
+        existing.pzc_reported  = doc.pzc_reported
+        existing.abcde_schema  = doc.abcde_schema
+        existing.zielklinik    = doc.zielklinik
+        existing.notes         = doc.notes
+        existing.alarm_time    = doc.alarm_time
+        existing.status3_time  = doc.status3_time
+        existing.status4_time  = doc.status4_time
+        existing.status7_time  = doc.status7_time
+        existing.status8_time  = doc.status8_time
+
     @app.get("/api/casedocs")
     def list_casedocs():
         docs = CaseDoc.query.order_by(CaseDoc.id).all()
@@ -578,6 +606,11 @@ def create_app():
     def update_casedoc(case_id: str):
         doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
+
+        # ── Snapshot bei EVT-Wechsel ──
+        new_evt = (data.get("assigned_evt") or "").strip() or None
+        if "assigned_evt" in data and doc.assigned_evt and new_evt != doc.assigned_evt:
+            _snapshot_evt_result(doc)
 
         for field in ("assigned_evt", "rmi_reported", "sk_reported",
                       "pzc_reported", "abcde_schema", "zielklinik", "notes"):
@@ -604,6 +637,8 @@ def create_app():
 
         doc.updated_at = _utcnow()
         _sync_team_from_doc(doc)
+        # Aktuellen Stand als Ergebnis speichern (upsert)
+        _snapshot_evt_result(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
 
@@ -622,6 +657,14 @@ def create_app():
         _sync_team_from_doc(doc)
         db.session.commit()
         return jsonify(serialize_casedoc(doc))
+
+    # ---------------------------
+    # CaseEvtResult API
+    # ---------------------------
+    @app.get("/api/case_evt_results")
+    def list_case_evt_results():
+        results = CaseEvtResult.query.order_by(CaseEvtResult.case_id, CaseEvtResult.evt_name).all()
+        return jsonify([serialize_evt_result(r) for r in results])
 
     # ---------------------------
     # RadioLog API
@@ -714,6 +757,9 @@ def create_app():
             doc.completed      = False
             doc.completed_evts = "[]"
             doc.updated_at     = now
+
+        # 1b. Gespeicherte EVT-Ergebnisse löschen
+        CaseEvtResult.query.delete()
 
         # 2. Alle Zuweisungen löschen
         Assignment.query.delete()
@@ -1812,6 +1858,24 @@ def serialize_casedoc(d: CaseDoc):
         "completed":     d.completed,
         "completed_evts": json.loads(getattr(d, "completed_evts", None) or "[]"),
         "updated_at":    _fmt_dt(d.updated_at),
+    }
+
+
+def serialize_evt_result(r: CaseEvtResult):
+    return {
+        "id":            r.id,
+        "case_id":       r.case_id,
+        "evt_name":      r.evt_name,
+        "pzc_reported":  r.pzc_reported,
+        "abcde_schema":  r.abcde_schema,
+        "zielklinik":    r.zielklinik,
+        "notes":         r.notes,
+        "alarm_time":    _fmt_dt(r.alarm_time),
+        "status3_time":  _fmt_dt(r.status3_time),
+        "status4_time":  _fmt_dt(r.status4_time),
+        "status7_time":  _fmt_dt(r.status7_time),
+        "status8_time":  _fmt_dt(r.status8_time),
+        "created_at":    _fmt_dt(r.created_at),
     }
 
 

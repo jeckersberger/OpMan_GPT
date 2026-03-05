@@ -31,6 +31,33 @@ class CaseDoc(db.Model):
     updated_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
 
 
+class CaseEvtResult(db.Model):
+    """Gespeichertes Auswertungsergebnis pro Fall + EVT-Team.
+    Wird automatisch erstellt, wenn ein EVT gewechselt oder ein Fall
+    abgeschlossen wird, damit frühere Ergebnisse nicht verloren gehen."""
+    __tablename__ = "case_evt_results"
+    __table_args__ = (
+        db.UniqueConstraint("case_id", "evt_name", name="uq_case_evt"),
+    )
+
+    id             = db.Column(db.Integer, primary_key=True)
+    case_id        = db.Column(db.String(5),   nullable=False)   # P1 … P9
+    evt_name       = db.Column(db.String(20),  nullable=False)   # z.B. "EVT 3"
+
+    pzc_reported   = db.Column(db.String(20),  nullable=True)
+    abcde_schema   = db.Column(db.Text,        nullable=True)
+    zielklinik     = db.Column(db.String(120), nullable=True)
+    notes          = db.Column(db.Text,        nullable=True)
+
+    alarm_time     = db.Column(db.DateTime,    nullable=True)
+    status3_time   = db.Column(db.DateTime,    nullable=True)
+    status4_time   = db.Column(db.DateTime,    nullable=True)
+    status7_time   = db.Column(db.DateTime,    nullable=True)
+    status8_time   = db.Column(db.DateTime,    nullable=True)
+
+    created_at     = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
+
 class RadioLogEntry(db.Model):
     """Einzelner Eintrag im Funkprotokoll."""
     __tablename__ = "radio_log"

@@ -193,30 +193,50 @@
         <div class="tiny" style="margin-top:2px">Name wird automatisch vergeben (EVT 1, EVT 2, …). Funkrufname nur bei Fahrzeugen o.ä.</div>
       </section>
 
-      <section class=”panel”>
+      <section class="panel">
         <h3>Schnellkoordination</h3>
-        <div id=”teamsList” class=”list”></div>
+        <div id="teamsList" class="list"></div>
       </section>
-
-      <section class=”panel”>
-        <h3>Fälle / Alarmierung</h3>
-        <div id=”exerciseCasesList” class=”list”></div>
-      </section>
-
-      <!-- Hidden inputs for map click coordinates (used by mission creation API) -->
-      <input id=”missionLat” type=”hidden” />
-      <input id=”missionLng” type=”hidden” />
     </aside>
 
-    <!-- Map -->
-    <section class=”mapwrap”>
-      <div id=”map”></div>
-      <div class=”maphud”>
-        <div>Auswahl: <span id=”selectionLabel”>—</span></div>
-        <div>Letzter Kartenklick: <span id=”lastClick”>—</span></div>
-        <div class=”tiny”>Tipp: Nutze „Kartenklick übernehmen” bei Trupp/Einsatz.</div>
+    <!-- Center: Map -->
+    <section class="mapwrap">
+      <div id="map"></div>
+      <div class="maphud">
+        <div>Auswahl: <span id="selectionLabel">—</span></div>
+        <div>Letzter Kartenklick: <span id="lastClick">—</span></div>
+        <div class="tiny">Tipp: Nutze „Kartenklick übernehmen“ bei Trupp/Einsatz.</div>
       </div>
     </section>
+
+    <!-- Right: Missions -->
+    <aside class="sidebar right">
+      <h2>Einsätze</h2>
+
+      <!-- Hidden inputs for map click coordinates (used by mission creation API) -->
+      <input id="missionLat" type="hidden" />
+      <input id="missionLng" type="hidden" />
+
+      <section class="panel">
+        <h3>Schnellkoordination</h3>
+        <div id="exerciseCasesList" class="list"></div>
+      </section>
+
+      <section class="panel" id="missionsPanel" style="display:none;">
+        <h3>Aktive Einsätze</h3>
+        <div id="missionsList" class="list"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Zuordnung</h3>
+        <div class="tiny">
+          Wähle links einen Trupp und rechts einen Einsatz, dann zuordnen
+          (oder nutze „Zuweisen“ direkt beim Einsatz).
+        </div>
+        <button id="btnAssign" class="full">Trupp ↔ Einsatz zuordnen</button>
+        <div id="assignmentsList" class="list smalllist"></div>
+      </section>
+    </aside>
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

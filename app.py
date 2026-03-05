@@ -143,7 +143,7 @@ def resolve_w3w(words: str):
 
     url = (
         "https://api.what3words.com/v3/convert-to-coordinates"
-        f"?words={urllib.parse.quote(clean)}&key={W3W_API_KEY}"
+        f"?key={W3W_API_KEY}&words={urllib.parse.quote(clean)}&format=json"
     )
     lat, lng = None, None
     # Try 1: direct connection (bypass HTTP_PROXY / HTTPS_PROXY env vars)
@@ -410,7 +410,7 @@ def create_app():
         results = {}
         test_url = (
             f"https://api.what3words.com/v3/convert-to-coordinates"
-            f"?words=filled.count.soap&key={W3W_API_KEY}"
+            f"?key={W3W_API_KEY}&words=filled.count.soap&format=json"
         )
         # Direct (no proxy)
         t0 = time.time()
@@ -760,7 +760,7 @@ def create_app():
         diag = None
         if failed:
             try:
-                test_url = f"https://api.what3words.com/v3/convert-to-coordinates?words=filled.count.soap&key={W3W_API_KEY}"
+                test_url = f"https://api.what3words.com/v3/convert-to-coordinates?key={W3W_API_KEY}&words=filled.count.soap&format=json"
                 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
                 with opener.open(test_url, timeout=5) as resp:
                     test_data = json.loads(resp.read().decode())

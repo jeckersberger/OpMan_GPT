@@ -1649,6 +1649,14 @@ async function softRefreshCaseDocs() {
     const evtSel=document.getElementById(`evt_${pid}`);
     if(evtSel && evtSel!==focused) evtSel.value=d.assigned_evt||'';
 
+    // PZC, Zielklinik, Notizen – nur wenn nicht fokussiert (Reset nach S1)
+    const pzcEl=document.getElementById(`pzc_${pid}`);
+    if(pzcEl && pzcEl!==focused) pzcEl.value=d.pzc_reported||'';
+    const klinikEl=document.getElementById(`klinik_${pid}`);
+    if(klinikEl && klinikEl!==focused) klinikEl.value=d.zielklinik||'';
+    const notesEl=document.getElementById(`notes_${pid}`);
+    if(notesEl && notesEl!==focused) notesEl.value=d.notes||'';
+
     // Fertig-Checkbox + Karten-Styling
     const chk=document.getElementById(`chk_${pid}`);
     if(chk && chk!==focused){
@@ -1657,9 +1665,11 @@ async function softRefreshCaseDocs() {
       document.querySelector(`#card_${pid} .case-id`)?.classList.toggle('done',!!d.completed);
     }
 
-    // ABCD-Buttons synchronisieren
+    // ABCD-Buttons synchronisieren + Sichtbarkeit
     const wrap=document.getElementById('abcde_wrap_'+pid);
     if(wrap){
+      const pzcVal=(d.pzc_reported||'').trim();
+      wrap.style.display=(pzcVal.length>=6&&pzcVal[5]==='1')?'block':'none';
       const obj=_parseAbcd(d.abcde_schema);
       wrap.querySelectorAll('.abcd-btn').forEach(btn=>{
         const row=btn.parentElement.previousElementSibling?.textContent?.trim();

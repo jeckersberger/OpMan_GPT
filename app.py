@@ -1468,14 +1468,20 @@ function show(id){
                             # Alle EVTs durch ODER manuell als fertig markiert
                             _doc.completed = True
                         else:
+                            # Snapshot sichern bevor Felder geleert werden
+                            _snapshot_evt_result(_doc)
                             # Noch weitere EVTs → Felder zurücksetzen für nächsten Einsatz
-                            _doc.assigned_evt = None
-                            _doc.alarm_time   = None
-                            _doc.status3_time = None
-                            _doc.status4_time = None
-                            _doc.status7_time = None
-                            _doc.status8_time = None
-                            _doc.completed    = False
+                            _doc.assigned_evt  = None
+                            _doc.alarm_time    = None
+                            _doc.status3_time  = None
+                            _doc.status4_time  = None
+                            _doc.status7_time  = None
+                            _doc.status8_time  = None
+                            _doc.pzc_reported  = None
+                            _doc.abcde_schema  = None
+                            _doc.zielklinik    = None
+                            _doc.notes         = None
+                            _doc.completed     = False
                         _doc.updated_at = _utcnow()
                         # Mission abschließen + Assignment dieses Teams aufheben
                         for _dm in Mission.query.filter(

@@ -404,7 +404,10 @@ async function resolveW3W() {
     const r = await fetch('/api/exercise/resolve-w3w', {method:'POST'});
     const d = await r.json();
     if (d.ok) {
-      st.textContent = '\u2713 ' + d.resolved + ' aufgelöst' + (d.failed.length ? ', ' + d.failed.length + ' fehlgeschlagen (' + d.failed.join(', ') + ')' : '');
+      let msg = '\u2713 ' + d.resolved + ' aufgelöst';
+      if (d.failed.length) msg += ', ' + d.failed.length + ' fehlgeschlagen (' + d.failed.join(', ') + ')';
+      if (d.diag) msg += ' — ' + d.diag;
+      st.textContent = msg;
       st.style.color = d.failed.length ? '#f39c12' : '#2ecc71';
     } else {
       st.textContent = '\u2717 Fehler'; st.style.color = '#e74c3c';

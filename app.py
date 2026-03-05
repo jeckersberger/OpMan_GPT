@@ -114,25 +114,45 @@ W3W_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "insta
 STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
 
 
+def _load_w3w_cache() -> dict:
+    try:
+        with open(W3W_CACHE_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_w3w_cache(cache: dict):
+    os.makedirs(os.path.dirname(W3W_CACHE_FILE), exist_ok=True)
+    with open(W3W_CACHE_FILE, "w") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+
 def resolve_w3w(words: str):
     """Resolve a what3words address to (lat, lng). Returns (None, None) on error.
 
-    Uses a direct connection (proxy bypassed) so that system proxy env-vars set
-    by development environments (e.g. Claude Code sandbox) don't interfere.
-    Falls back to the system default if the direct attempt fails with a DNS error.
+    Uses a persistent JSON cache so that coordinates survive restarts.
+    On cache miss, calls the w3w API (direct, then via system proxy).
     """
     clean = words.lstrip("/")
+    # Check cache first
+    cache = _load_w3w_cache()
+    if clean in cache:
+        c = cache[clean]
+        return c["lat"], c["lng"]
+
     url = (
         "https://api.what3words.com/v3/convert-to-coordinates"
         f"?words={urllib.parse.quote(clean)}&key={W3W_API_KEY}"
     )
+    lat, lng = None, None
     # Try 1: direct connection (bypass HTTP_PROXY / HTTPS_PROXY env vars)
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(url, timeout=8) as resp:
             data = json.loads(resp.read().decode())
         if "coordinates" in data:
-            return data["coordinates"]["lat"], data["coordinates"]["lng"]
+            lat, lng = data["coordinates"]["lat"], data["coordinates"]["lng"]
     except OSError as e:
         # DNS failure → server has no direct internet, try via system proxy
         if "Name or service not known" in str(e) or "Temporary failure" in str(e) or getattr(e, 'errno', None) == -3:
@@ -140,12 +160,18 @@ def resolve_w3w(words: str):
                 with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
                     data = json.loads(resp.read().decode())
                 if "coordinates" in data:
-                    return data["coordinates"]["lat"], data["coordinates"]["lng"]
+                    lat, lng = data["coordinates"]["lat"], data["coordinates"]["lng"]
             except Exception:
                 pass
     except Exception:
         pass
-    return None, None
+
+    # Persist to cache on success
+    if lat is not None:
+        cache[clean] = {"lat": lat, "lng": lng}
+        _save_w3w_cache(cache)
+
+    return lat, lng
 
 
 def create_app():
@@ -244,6 +270,7 @@ def create_app():
             "ALTER TABLE teams ADD COLUMN test_alarm_text VARCHAR(200)",
             "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
+            "ALTER TABLE case_definitions ADD COLUMN abcd_soll_json TEXT",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -717,9 +744,11 @@ def create_app():
     def exercise_resolve_w3w():
         """Manually trigger w3w → coordinate resolution for all active cases."""
         resolved = 0
+        cached = 0
         failed = []
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).all():  # noqa: E712
             if cd.w3w:
+                had_coords = cd.lat is not None
                 lat, lng = resolve_w3w(cd.w3w)
                 if lat is not None:
                     cd.lat, cd.lng = lat, lng
@@ -727,7 +756,23 @@ def create_app():
                 else:
                     failed.append(cd.id)
         db.session.commit()
-        return jsonify({"ok": True, "resolved": resolved, "failed": failed})
+        # Diagnostic: quick connectivity check
+        diag = None
+        if failed:
+            try:
+                test_url = f"https://api.what3words.com/v3/convert-to-coordinates?words=filled.count.soap&key={W3W_API_KEY}"
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(test_url, timeout=5) as resp:
+                    test_data = json.loads(resp.read().decode())
+                if "error" in test_data:
+                    diag = f"API-Fehler: {test_data['error'].get('message', 'unbekannt')}"
+                else:
+                    diag = "API erreichbar – ggf. ungültige w3w-Adressen"
+            except OSError:
+                diag = "API nicht erreichbar – kein Internetzugang vom Server"
+            except Exception as e:
+                diag = f"Unbekannter Fehler: {str(e)[:100]}"
+        return jsonify({"ok": True, "resolved": resolved, "failed": failed, "diag": diag})
 
     @app.get("/cert")
     def download_cert():

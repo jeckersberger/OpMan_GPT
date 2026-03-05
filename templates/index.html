@@ -55,6 +55,8 @@
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
       <div class="divider"></div>
       <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
+      <div class="divider"></div>
+      <button class="navbtn" style="background:#0a1a0a;color:#3ddc84;border:1px solid #3ddc84;font-size:.75rem;" onclick="showUpdateModal()">⬆ Update</button>
     </nav>
   </header>
 
@@ -139,7 +141,15 @@
   <div id="qrSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center;overflow-y:auto;">
     <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:700px;width:95%;margin:2rem auto;">
       <h3 style="margin-bottom:.5rem;font-size:1rem;color:#c084fc;">🏷 QR-Codes pro EVT</h3>
-      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Jeder QR-Code öffnet die EVT-App mit dem richtigen Team vorausgewählt. Ausdrucken und an Weste / Gerät heften.</p>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:.5rem;">Jeder QR-Code öffnet die EVT-App mit dem richtigen Team vorausgewählt. Ausdrucken und an Weste / Gerät heften.</p>
+      <div style="margin-bottom:1rem;padding:.75rem;background:#0b1220;border:1px solid #223152;border-radius:8px;">
+        <label style="font-size:.75rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Base-URL (leer = automatisch LAN-IP)</label>
+        <div style="display:flex;gap:.5rem;">
+          <input id="qrBaseUrl" type="text" placeholder="z.B. https://meine-uebung.de" style="flex:1;padding:.4rem .6rem;background:#162035;color:#e8ecf4;border:1px solid #334155;border-radius:6px;font-family:inherit;font-size:.8rem;"/>
+          <button onclick="saveQrBaseUrl()" style="padding:.4rem .8rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.8rem;white-space:nowrap;">Speichern & Neu generieren</button>
+        </div>
+        <div style="font-size:.65rem;color:#667;margin-top:.3rem;">Wenn gesetzt, werden alle QR-Codes mit dieser URL generiert statt der lokalen Netzwerk-IP.</div>
+      </div>
       <div id="qrGrid" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:1rem;"></div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;">
         <button onclick="printQrCodes()" style="padding:.5rem 1rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;">🖨 Drucken</button>
@@ -148,6 +158,20 @@
     </div>
   </div>
 
+
+  <!-- Update Modal -->
+  <div id="updateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:450px;width:90%;text-align:center;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#3ddc84;">⬆ App-Update</h3>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Neueste Version aus <code style="background:#0b1220;padding:.1rem .4rem;border-radius:4px;">main</code> ziehen und App neu starten.</p>
+      <div id="updateStatus" style="display:none;text-align:left;background:#0b1220;border:1px solid #223152;border-radius:8px;padding:.75rem;margin-bottom:1rem;font-family:monospace;font-size:.75rem;color:#a6b3d1;max-height:200px;overflow-y:auto;white-space:pre-wrap;"></div>
+      <div id="updateCheckInfo" style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Prüfe auf Updates…</div>
+      <div style="display:flex;gap:.75rem;justify-content:center;">
+        <button id="btnDoUpdate" onclick="doAppUpdate()" style="padding:.5rem 1rem;background:#0a2a0a;color:#3ddc84;border:1px solid #3ddc84;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;">⬆ Jetzt updaten</button>
+        <button onclick="document.getElementById('updateModal').style.display='none'" style="padding:.5rem 1rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+      </div>
+    </div>
+  </div>
 
 <!-- Sprechwunsch-Panel (fliegt rechts unten ein bei S0/S5) -->
   <div id="swPanel" class="sw-panel"></div>
@@ -189,42 +213,14 @@
     <aside class="sidebar right">
       <h2>Einsätze</h2>
 
-      <section class="panel">
-        <h3>Einsatz erstellen</h3>
-        <div class="formrow">
-          <input id="missionTitle" placeholder="Titel (z.B. Brandmelder)" />
-        </div>
-        <div class="formrow">
-          <textarea id="missionDesc" placeholder="Beschreibung (optional)"></textarea>
-        </div>
-        <div class="formrow">
-          <select id="missionStatus">
-            <option value="offen">offen</option>
-            <option value="zugewiesen">zugewiesen</option>
-            <option value="in_arbeit">in_arbeit</option>
-            <option value="abgeschlossen">abgeschlossen</option>
-            <option value="abgebrochen">abgebrochen</option>
-          </select>
-          <select id="missionPriority">
-            <option value="1">Priorität 1</option>
-            <option value="2">Priorität 2</option>
-            <option value="3" selected>Priorität 3</option>
-            <option value="4">Priorität 4</option>
-            <option value="5">Priorität 5</option>
-          </select>
-        </div>
-
-        <div class="formrow small">
-          <input id="missionLat" placeholder="lat" />
-          <input id="missionLng" placeholder="lng" />
-        </div>
-        <button id="btnCreateMission" class="full">Einsatz anlegen</button>
-        <div class="tiny">Tipp: Karte klicken, um lat/lng zu füllen.</div>
-      </section>
+      <!-- Hidden inputs for map click coordinates (used by mission creation API) -->
+      <input id="missionLat" type="hidden" />
+      <input id="missionLng" type="hidden" />
 
       <section class="panel">
         <h3>Schnellkoordination</h3>
-        <div id="missionsList" class="list"></div>
+        <div id="exerciseCasesList" class="list"></div>
+        <div id="missionsList" class="list" style="margin-top:8px;"></div>
       </section>
 
       <section class="panel">

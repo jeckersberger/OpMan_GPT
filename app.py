@@ -109,30 +109,50 @@ def _fmt_dt(dt):
 # ---------------------------
 # what3words API
 # ---------------------------
-W3W_API_KEY = "2ZJ55EYB"
+W3W_API_KEY = os.environ.get("W3W_API_KEY", "2ZJ55EYB")
 W3W_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "w3w_cache.json")
 STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
+
+
+def _load_w3w_cache() -> dict:
+    try:
+        with open(W3W_CACHE_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_w3w_cache(cache: dict):
+    os.makedirs(os.path.dirname(W3W_CACHE_FILE), exist_ok=True)
+    with open(W3W_CACHE_FILE, "w") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 def resolve_w3w(words: str):
     """Resolve a what3words address to (lat, lng). Returns (None, None) on error.
 
-    Uses a direct connection (proxy bypassed) so that system proxy env-vars set
-    by development environments (e.g. Claude Code sandbox) don't interfere.
-    Falls back to the system default if the direct attempt fails with a DNS error.
+    Uses a persistent JSON cache so that coordinates survive restarts.
+    On cache miss, calls the w3w API (direct, then via system proxy).
     """
     clean = words.lstrip("/")
+    # Check cache first
+    cache = _load_w3w_cache()
+    if clean in cache:
+        c = cache[clean]
+        return c["lat"], c["lng"]
+
     url = (
         "https://api.what3words.com/v3/convert-to-coordinates"
-        f"?words={urllib.parse.quote(clean)}&key={W3W_API_KEY}"
+        f"?key={W3W_API_KEY}&words={urllib.parse.quote(clean)}&format=json"
     )
+    lat, lng = None, None
     # Try 1: direct connection (bypass HTTP_PROXY / HTTPS_PROXY env vars)
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(url, timeout=8) as resp:
             data = json.loads(resp.read().decode())
         if "coordinates" in data:
-            return data["coordinates"]["lat"], data["coordinates"]["lng"]
+            lat, lng = data["coordinates"]["lat"], data["coordinates"]["lng"]
     except OSError as e:
         # DNS failure → server has no direct internet, try via system proxy
         if "Name or service not known" in str(e) or "Temporary failure" in str(e) or getattr(e, 'errno', None) == -3:
@@ -140,12 +160,18 @@ def resolve_w3w(words: str):
                 with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
                     data = json.loads(resp.read().decode())
                 if "coordinates" in data:
-                    return data["coordinates"]["lat"], data["coordinates"]["lng"]
+                    lat, lng = data["coordinates"]["lat"], data["coordinates"]["lng"]
             except Exception:
                 pass
     except Exception:
         pass
-    return None, None
+
+    # Persist to cache on success
+    if lat is not None:
+        cache[clean] = {"lat": lat, "lng": lng}
+        _save_w3w_cache(cache)
+
+    return lat, lng
 
 
 def create_app():
@@ -244,6 +270,8 @@ def create_app():
             "ALTER TABLE teams ADD COLUMN test_alarm_text VARCHAR(200)",
             "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
+            "ALTER TABLE case_definitions ADD COLUMN abcd_soll_json TEXT",
+            "ALTER TABLE exercise_config ADD COLUMN base_url VARCHAR(300) DEFAULT ''",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -264,6 +292,7 @@ def create_app():
                     lat=cd.get("lat"), lng=cd.get("lng"),
                     rmi_soll=cd.get("rmi_soll"), sk_soll=cd.get("sk_soll"),
                     pzc_soll=cd.get("pzc_soll"), besonderheit=cd.get("besonderheit"),
+                    abcd_soll_json=json.dumps(cd["abcd_soll"], ensure_ascii=False) if cd.get("abcd_soll") else None,
                     sort_order=i,
                 ))
             db.session.flush()
@@ -276,6 +305,18 @@ def create_app():
         if db.session.get(ExerciseConfig, 1) is None:
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
+
+        # Seed w3w cache from DB (so resolve works even without internet)
+        cache = _load_w3w_cache()
+        dirty_cache = False
+        for cd_row in CaseDefinition.query.all():
+            if cd_row.w3w and cd_row.lat is not None:
+                clean = cd_row.w3w.lstrip("/")
+                if clean not in cache:
+                    cache[clean] = {"lat": cd_row.lat, "lng": cd_row.lng}
+                    dirty_cache = True
+        if dirty_cache:
+            _save_w3w_cache(cache)
 
     def _cases_dict(active_only: bool = False):
         """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
@@ -291,7 +332,9 @@ def create_app():
                 "w3w": cd.w3w, "w3w_alarm": cd.w3w_alarm,
                 "lat": cd.lat, "lng": cd.lng,
                 "rmi_soll": cd.rmi_soll, "sk_soll": cd.sk_soll, "pzc_soll": cd.pzc_soll,
-                "besonderheit": cd.besonderheit, "kein_transport": cd.kein_transport,
+                "abcd_soll": cd.abcd_soll,
+                "besonderheit": cd.besonderheit, "hinweis": cd.hinweis,
+                "kein_transport": cd.kein_transport,
                 "active": bool(cd.active),
             }
         return result
@@ -345,9 +388,17 @@ def create_app():
     def protokoll():
         return render_template("protokoll.html", cases=_cases_dict(active_only=True))
 
-    @app.get("/api/server-info")
-    def server_info():
-        """Gibt die LAN-IP-Adresse des Servers zurück (für Handy-QR-Code)."""
+    def _resolve_base_url() -> str:
+        """Zentrale URL-Auflösung: DB-Override > ENV BASE_URL > Auto-Detect LAN-IP."""
+        # 1. DB-Override (über QR-Setup Modal gesetzt)
+        cfg = db.session.get(ExerciseConfig, 1)
+        if cfg and cfg.base_url:
+            return cfg.base_url.rstrip("/")
+        # 2. Environment-Variable (docker-compose / .env)
+        env_url = os.environ.get("BASE_URL", "").strip().rstrip("/")
+        if env_url:
+            return env_url
+        # 3. Auto-Detect LAN-IP (Fallback)
         import socket as _socket
         try:
             s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
@@ -356,21 +407,30 @@ def create_app():
             s.close()
         except Exception:
             lan_ip = "127.0.0.1"
-        port = 5000
-        # HTTPS wenn Zertifikat vorhanden (run.py wurde verwendet)
         _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "instance", "cert.pem")
         proto = "https" if os.path.exists(_cert) else "http"
-        # EVT-URL: bei HTTPS ueber HTTP-Port 5080 (automatischer Zertifikat-Setup)
         if proto == "https":
-            evt_url = f"http://{lan_ip}:5080/evt"
-        else:
-            evt_url = f"{proto}://{lan_ip}:{port}/evt"
+            return f"http://{lan_ip}:5080"
+        return f"{proto}://{lan_ip}:5000"
+
+    @app.get("/api/server-info")
+    def server_info():
+        """Gibt die Base-URL und EVT-URL zurück (für Handy-QR-Code)."""
+        import socket as _socket
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            lan_ip = "127.0.0.1"
+        base = _resolve_base_url()
         return jsonify({
             "ip": lan_ip,
-            "port": port,
-            "base_url": f"{proto}://{lan_ip}:{port}",
-            "evt_url":  evt_url,
+            "port": 5000,
+            "base_url": base,
+            "evt_url":  f"{base}/evt",
         })
 
     @app.get("/api/test-internet")
@@ -380,7 +440,7 @@ def create_app():
         results = {}
         test_url = (
             f"https://api.what3words.com/v3/convert-to-coordinates"
-            f"?words=filled.count.soap&key={W3W_API_KEY}"
+            f"?key={W3W_API_KEY}&words=filled.count.soap&format=json"
         )
         # Direct (no proxy)
         t0 = time.time()
@@ -447,22 +507,7 @@ def create_app():
             return jsonify({"error": f"qrcode-Paket fehlt: {e} – pip install 'qrcode[svg]'"}), 500
 
         try:
-            import socket as _socket
-            try:
-                s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                lan_ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                lan_ip = "127.0.0.1"
-            _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "instance", "cert.pem")
-            proto = "https" if os.path.exists(_cert) else "http"
-            if proto == "https":
-                base = f"http://{lan_ip}:5080"
-            else:
-                base = f"{proto}://{lan_ip}:5000"
-
+            base = _resolve_base_url()
             cfg = db.session.get(ExerciseConfig, 1)
             evt_count = cfg.evt_count if cfg else 6
 
@@ -691,15 +736,58 @@ def create_app():
     def exercise_geodata():
         """Return exercise case coordinates from CaseDefinition DB."""
         result: dict = {"cases": {}, "startpunkt": None}
+        dirty = False
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
+            # Always resolve w3w → coordinates (w3w is authoritative source)
+            if cd.w3w:
+                lat, lng = resolve_w3w(cd.w3w)
+                if lat is not None and (cd.lat != lat or cd.lng != lng):
+                    cd.lat, cd.lng = lat, lng
+                    dirty = True
             result["cases"][cd.id] = {
                 "lat": cd.lat, "lng": cd.lng,
                 "schlagwort": cd.schlagwort or "",
                 "patient": cd.patient or "",
                 "w3w": cd.w3w or "",
             }
+        if dirty:
+            db.session.commit()
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
         return jsonify(result)
+
+    @app.post("/api/exercise/resolve-w3w")
+    def exercise_resolve_w3w():
+        """Manually trigger w3w → coordinate resolution for all active cases."""
+        resolved = 0
+        cached = 0
+        failed = []
+        for cd in CaseDefinition.query.filter(CaseDefinition.active == True).all():  # noqa: E712
+            if cd.w3w:
+                had_coords = cd.lat is not None
+                lat, lng = resolve_w3w(cd.w3w)
+                if lat is not None:
+                    cd.lat, cd.lng = lat, lng
+                    resolved += 1
+                else:
+                    failed.append(cd.id)
+        db.session.commit()
+        # Diagnostic: quick connectivity check
+        diag = None
+        if failed:
+            try:
+                test_url = f"https://api.what3words.com/v3/convert-to-coordinates?key={W3W_API_KEY}&words=filled.count.soap&format=json"
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                with opener.open(test_url, timeout=5) as resp:
+                    test_data = json.loads(resp.read().decode())
+                if "error" in test_data:
+                    diag = f"API-Fehler: {test_data['error'].get('message', 'unbekannt')}"
+                else:
+                    diag = "API erreichbar – ggf. ungültige w3w-Adressen"
+            except OSError:
+                diag = "API nicht erreichbar – kein Internetzugang vom Server"
+            except Exception as e:
+                diag = f"Unbekannter Fehler: {str(e)[:100]}"
+        return jsonify({"ok": True, "resolved": resolved, "failed": failed, "diag": diag})
 
     @app.get("/cert")
     def download_cert():
@@ -797,7 +885,8 @@ function show(id){
     @app.get("/api/exercise/config")
     def get_exercise_config():
         cfg = db.session.get(ExerciseConfig, 1)
-        return jsonify({"evt_count": cfg.evt_count if cfg else 6})
+        return jsonify({"evt_count": cfg.evt_count if cfg else 6,
+                        "base_url": cfg.base_url if cfg else ""})
 
     @app.post("/api/exercise/config")
     def update_exercise_config():
@@ -808,8 +897,101 @@ function show(id){
             if not (1 <= n <= 6):
                 return jsonify({"error": "evt_count must be 1-6"}), 400
             cfg.evt_count = n
+        if "base_url" in data:
+            url = str(data["base_url"]).strip().rstrip("/")
+            cfg.base_url = url
         db.session.commit()
-        return jsonify({"evt_count": cfg.evt_count})
+        return jsonify({"evt_count": cfg.evt_count, "base_url": cfg.base_url or ""})
+
+    # ---------------------------
+    # App Update (git pull from main)
+    # ---------------------------
+    _GIT_REPO = "https://github.com/jeckersberger/OpMan_GPT.git"
+
+    @app.post("/api/update")
+    def app_update():
+        """Zieht die neueste Version aus main und startet die App neu."""
+        import subprocess
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 0. Sicherstellen dass origin auf das richtige Repo zeigt
+        try:
+            subprocess.run(
+                ["git", "remote", "set-url", "origin", _GIT_REPO],
+                cwd=app_dir, capture_output=True, timeout=5
+            )
+        except Exception:
+            pass
+
+        # 1. Git pull
+        try:
+            pull = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                cwd=app_dir, capture_output=True, text=True, timeout=30
+            )
+            if pull.returncode != 0:
+                return jsonify({"ok": False, "step": "git pull",
+                                "error": pull.stderr.strip()}), 500
+            git_output = pull.stdout.strip()
+        except FileNotFoundError:
+            return jsonify({"ok": False, "step": "git pull",
+                            "error": "git nicht installiert oder Code nicht als Git-Repo gemountet"}), 500
+        except Exception as e:
+            return jsonify({"ok": False, "step": "git pull", "error": str(e)}), 500
+
+        already_up_to_date = "Already up to date" in git_output or "Bereits aktuell" in git_output
+
+        # 2. pip install (nur bare-metal mit venv)
+        pip_output = ""
+        venv_pip = os.path.join(app_dir, "venv", "bin", "pip")
+        if os.path.exists(venv_pip):
+            try:
+                pip_run = subprocess.run(
+                    [venv_pip, "install", "--quiet", "-r",
+                     os.path.join(app_dir, "requirements.txt")],
+                    cwd=app_dir, capture_output=True, text=True, timeout=120
+                )
+                pip_output = pip_run.stdout.strip()
+            except Exception as e:
+                pip_output = f"pip warning: {e}"
+
+        # 3. Gunicorn graceful reload (SIGHUP an Master-Prozess)
+        restarted = False
+        if not already_up_to_date:
+            try:
+                import signal
+                os.kill(os.getppid(), signal.SIGHUP)
+                restarted = True
+            except Exception:
+                pass
+
+        return jsonify({
+            "ok": True,
+            "git": git_output,
+            "pip": pip_output,
+            "already_up_to_date": already_up_to_date,
+            "restarted": restarted,
+        })
+
+    @app.get("/api/update/check")
+    def update_check():
+        """Prüft ob Updates verfügbar sind (git fetch + log)."""
+        import subprocess
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        try:
+            subprocess.run(["git", "remote", "set-url", "origin", _GIT_REPO],
+                           cwd=app_dir, capture_output=True, timeout=5)
+            subprocess.run(["git", "fetch", "origin", "main"],
+                           cwd=app_dir, capture_output=True, timeout=15)
+            log = subprocess.run(
+                ["git", "log", "HEAD..origin/main", "--oneline"],
+                cwd=app_dir, capture_output=True, text=True, timeout=10
+            )
+            commits = [l for l in log.stdout.strip().split("\n") if l]
+            return jsonify({"available": len(commits) > 0,
+                            "commits": commits, "count": len(commits)})
+        except Exception as e:
+            return jsonify({"available": False, "error": str(e)})
 
     @app.post("/api/exercise/import-missions")
     def import_exercise_missions():
@@ -905,10 +1087,23 @@ function show(id){
         cd.w3w_alarm      = data.get("w3w_alarm", "").strip() or None
         cd.lat            = float(data["lat"]) if data.get("lat") else None
         cd.lng            = float(data["lng"]) if data.get("lng") else None
+        # Always resolve w3w → coordinates (w3w is authoritative source)
+        if cd.w3w:
+            lat, lng = resolve_w3w(cd.w3w)
+            if lat is not None:
+                cd.lat = lat
+                cd.lng = lng
         cd.rmi_soll       = data.get("rmi_soll", "").strip() or None
         cd.sk_soll        = data.get("sk_soll", "").strip() or None
         cd.pzc_soll       = data.get("pzc_soll", "").strip() or None
         cd.kein_transport = bool(data.get("kein_transport"))
+        # ABCD-Soll (4 Einzelfelder → JSON)
+        abcd_soll = {}
+        for letter in ("A", "B", "C", "D"):
+            v = data.get(f"abcd_soll_{letter}", "").strip()
+            if v:
+                abcd_soll[letter] = int(v)
+        cd.abcd_soll_json = json.dumps(abcd_soll, ensure_ascii=False) if abcd_soll else None
         cd.besonderheit   = data.get("besonderheit", "").strip() or None
         cd.hinweis        = data.get("hinweis", "").strip() or None
         cd.sort_order     = int(data["sort_order"]) if data.get("sort_order") else 0
@@ -1002,6 +1197,13 @@ function show(id){
                     cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
                 if "sampler" in item:
                     cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
+                if "abcd_soll" in item:
+                    cd.abcd_soll_json = json.dumps(item["abcd_soll"], ensure_ascii=False)
+                # Always resolve w3w → coordinates (w3w is authoritative source)
+                if cd.w3w:
+                    lat, lng = resolve_w3w(cd.w3w)
+                    if lat is not None:
+                        cd.lat, cd.lng = lat, lng
                 cd.updated_at = _utcnow()
                 # CaseDoc sicherstellen
                 if db.session.get(CaseDoc, cid) is None:

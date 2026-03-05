@@ -290,32 +290,44 @@
     }
     .evt-count-sel select { width:56px; padding:.15rem .3rem; }
 
-    /* ── Sprechwunsch-Panel ── */
-    .sw-panel{position:fixed;bottom:1.25rem;right:1.25rem;z-index:500;width:310px;
+    /* ── Sprechwunsch-Panel (same as map page) ── */
+    .sw-panel{position:fixed;bottom:1.25rem;right:1.25rem;z-index:500;width:min(680px, 98vw);
       background:var(--panel);border:1px solid var(--border);border-radius:10px;
       box-shadow:0 6px 30px rgba(0,0,0,.55);overflow:hidden;
       transform:translateX(120%);opacity:0;pointer-events:none;
       transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .25s ease;}
     .sw-panel.sw-visible{transform:translateX(0);opacity:1;pointer-events:auto;}
-    .sw-header{display:flex;align-items:center;gap:.5rem;padding:.45rem .85rem;
+    .sw-header{display:flex;align-items:center;gap:.5rem;padding:.5rem 1rem;
       font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
       background:rgba(245,200,66,.1);color:#f5c842;border-bottom:1px solid rgba(245,200,66,.18);}
-    .sw-list{list-style:none;margin:0;padding:0;max-height:320px;overflow-y:auto;}
-    .sw-item{display:flex;align-items:center;gap:.55rem;padding:.42rem .8rem;
+    .sw-list{list-style:none;margin:0;padding:0;max-height:420px;overflow-y:auto;}
+    .sw-item{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;
       border-bottom:1px solid var(--border);transition:background .15s;}
     .sw-item:last-child{border-bottom:none;}
-    .sw-item.s0{background:rgba(255,79,79,.13);border-left:3px solid #ff4f4f;}
-    .sw-item.s5{background:rgba(245,200,66,.04);border-left:3px solid transparent;}
-    .sw-badge{font-size:.72rem;font-weight:800;padding:.12rem .4rem;border-radius:4px;white-space:nowrap;flex-shrink:0;}
+    .sw-item.s0{background:rgba(255,79,79,.1);border-left:4px solid #ff4f4f;}
+    .sw-item.s5{background:rgba(245,200,66,.04);border-left:4px solid rgba(245,200,66,.5);}
+    .sw-names{flex:1;display:flex;flex-direction:column;gap:.1rem;overflow:hidden;}
+    .sw-callsign{font-size:1.05rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .sw-subname{font-size:.75rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .sw-group{font-size:.7rem;font-weight:700;padding:.08rem .35rem;border-radius:4px;white-space:nowrap;width:fit-content;margin-top:.05rem;}
+    .sw-group.regel{background:rgba(78,161,255,.12);color:#4ea1ff;border:1px solid rgba(78,161,255,.3);}
+    .sw-group.betten{background:rgba(192,132,252,.12);color:#c084fc;border:1px solid rgba(192,132,252,.3);}
+    .sw-meta{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;flex-shrink:0;}
+    .sw-badge{font-size:.68rem;font-weight:800;padding:.1rem .4rem;border-radius:4px;white-space:nowrap;}
     .sw-badge.s0{background:#3a1212;color:#ff4f4f;border:1px solid rgba(255,79,79,.45);}
     .sw-badge.s5{background:#2e2600;color:#f5c842;border:1px solid rgba(245,200,66,.4);}
-    .sw-name{font-weight:700;font-size:.85rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .sw-time{font-size:.72rem;color:var(--muted);white-space:nowrap;flex-shrink:0;}
-    .sw-quit{padding:.28rem .55rem;background:transparent;border:1px solid var(--border);
-      border-radius:5px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer;
-      font-family:inherit;white-space:nowrap;flex-shrink:0;
+    .sw-time{font-size:.68rem;color:var(--muted);white-space:nowrap;}
+    .sw-quit{padding:.2rem .55rem;background:transparent;border:1px solid var(--border);
+      border-radius:5px;color:var(--muted);font-size:.75rem;font-weight:700;cursor:pointer;
+      font-family:inherit;white-space:nowrap;line-height:1;
       transition:background .12s,color .12s,border-color .12s;}
     .sw-quit:hover{background:rgba(78,161,255,.15);border-color:var(--accent);color:var(--accent);}
+    .sw-cols{display:grid;grid-template-columns:1fr 1fr;}
+    .sw-col{border-right:1px solid var(--border);}
+    .sw-col:last-child{border-right:none;}
+    .sw-col-header{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:.3rem .75rem;border-bottom:1px solid var(--border);}
+    .sw-col-header.c-regel{color:#4ea1ff;}
+    .sw-col-header.c-betten{color:#c084fc;}
     @media print{ .sw-panel{display:none!important;} }
 
     /* ── Print ── */
@@ -827,6 +839,7 @@ function buildCaseCard(pid) {
       ${meta.patient_alarm?`<span style="grid-column:1/-1;font-size:.7rem;color:var(--yellow);">⚠ Alarmname: ${esc(meta.patient_alarm)}</span>`:''}
     </div>
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
+    ${meta.hinweis?`<div class="hint-box" style="border-color:var(--accent);background:rgba(52,152,219,.08);">📋 ${esc(meta.hinweis)}</div>`:''}
     <div class="soll-row">
       <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
       ${meta.abcd_soll?`<span class="soll-chip">ABCD: ${meta.abcd_soll.A}-${meta.abcd_soll.B}-${meta.abcd_soll.C}-${meta.abcd_soll.D}</span>`:''}
@@ -1371,35 +1384,63 @@ function _playSWTone(prio) {
 }
 const _swKnownIds = new Set();
 
+function _swRows(teamList) {
+  const byTime = (a, b) => new Date(a.updated_at) - new Date(b.updated_at);
+  const s0 = teamList.filter(t => t.radio_status === 0).sort(byTime);
+  const s5 = teamList.filter(t => t.radio_status === 5).sort(byTime);
+  return [...s0, ...s5].map(t => {
+    const cls   = t.radio_status === 0 ? 's0' : 's5';
+    const badge = t.radio_status === 0 ? 'S0 PRIO' : 'S5';
+    const time  = new Date(t.updated_at).toLocaleTimeString('de-DE',
+                    {hour:'2-digit', minute:'2-digit'});
+    const hasCallsign = t.callsign && t.callsign !== t.name;
+    const mainLine  = hasCallsign ? t.callsign : t.name;
+    const subLine   = hasCallsign ? t.name : null;
+    return `<li class="sw-item ${cls}">
+      <div class="sw-names">
+        <span class="sw-callsign">${esc(mainLine)}</span>
+        ${subLine ? `<span class="sw-subname">${esc(subLine)}</span>` : ''}
+      </div>
+      <div class="sw-meta">
+        <span class="sw-badge ${cls}">${badge}</span>
+        <span class="sw-time">${time}</span>
+        <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
+      </div>
+    </li>`;
+  }).join('') || `<li style="padding:.6rem 1rem;font-size:.8rem;color:var(--muted);">–</li>`;
+}
+
 function renderSprechwunschPanel() {
   const panel = document.getElementById('swPanel');
   if (!panel) return;
-  const byTime = (a,b) => new Date(a.updated_at) - new Date(b.updated_at);
-  const s0 = teams.filter(t => t.radio_status === 0).sort(byTime);
-  const s5 = teams.filter(t => t.radio_status === 5).sort(byTime);
-  const sw = [...s0, ...s5];
+
+  const sw = teams.filter(t => t.radio_status === 0 || t.radio_status === 5);
+
   if (!sw.length) { panel.classList.remove('sw-visible'); _swKnownIds.clear(); return; }
+
   // Ton für neue Einträge
   sw.forEach(t => { if(!_swKnownIds.has(t.id)){ _swKnownIds.add(t.id); _playSWTone(t.radio_status===0); }});
   const swIds = new Set(sw.map(t=>t.id));
   for(const id of _swKnownIds){ if(!swIds.has(id)) _swKnownIds.delete(id); }
+
+  const regel  = sw.filter(t => (t.radio_group || 'regelfunk') === 'regelfunk');
+  const betten = sw.filter(t => (t.radio_group || 'regelfunk') === 'bettenkanal');
+  const hasS0  = sw.some(t => t.radio_status === 0);
+  const label  = hasS0 ? '🚨 Sprechwunsch' : '📻 Sprechwunsch';
+
   panel.className = 'sw-panel sw-visible no-print';
-  const label = s0.length ? '🚨 Sprechwunsch' : '📻 Sprechwunsch';
-  const rows = sw.map(t => {
-    const cls   = t.radio_status === 0 ? 's0' : 's5';
-    const badge = t.radio_status === 0 ? 'S0 PRIO' : 'S5';
-    const time  = new Date(t.updated_at).toLocaleTimeString('de-DE',
-                    {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return `<li class="sw-item ${cls}">
-      <span class="sw-badge ${cls}">${badge}</span>
-      <span class="sw-name">${esc(t.name)}${t.callsign
-        ? ` <span style="font-weight:400;color:var(--muted)">(${esc(t.callsign)})</span>` : ''}</span>
-      <span class="sw-time">${time}</span>
-      <button class="sw-quit" onclick="quittieren(${t.id})">✓</button>
-    </li>`;
-  }).join('');
-  panel.innerHTML = `<div class="sw-header">${label}&nbsp;<span style="opacity:.7">${sw.length}</span></div>
-    <ul class="sw-list">${rows}</ul>`;
+  panel.innerHTML = `
+    <div class="sw-header">${label}&nbsp;<span style="opacity:.7;font-weight:400">${sw.length}</span></div>
+    <div class="sw-cols">
+      <div class="sw-col">
+        <div class="sw-col-header c-regel">📻 Regelfunk&nbsp;<span style="opacity:.6">${regel.length}</span></div>
+        <ul class="sw-list">${_swRows(regel)}</ul>
+      </div>
+      <div class="sw-col">
+        <div class="sw-col-header c-betten">🏥 Bettenkanal&nbsp;<span style="opacity:.6">${betten.length}</span></div>
+        <ul class="sw-list">${_swRows(betten)}</ul>
+      </div>
+    </div>`;
 }
 
 async function quittieren(teamId) {

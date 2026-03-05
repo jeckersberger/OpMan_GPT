@@ -14,6 +14,11 @@ services:
       # Anzahl gunicorn-Worker (Faustregel: 2 × CPU-Kerne + 1)
       GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
 
+      # Öffentliche Base-URL (für QR-Codes, EVT-Links etc.)
+      # Leer = automatische LAN-IP-Erkennung
+      # Beispiel: https://uebung.feuerwehr-musterstadt.de
+      BASE_URL: "${BASE_URL:-}"
+
     volumes:
       # SQLite-Datenbank, SSL-Zertifikate und VAPID-Keys persistieren.
       # :Z → SELinux-Label für private (nicht geteilte) Volumes (rootless-kompatibel).

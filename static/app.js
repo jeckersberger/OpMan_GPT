@@ -175,13 +175,14 @@ function upsertTeamMarker(t){
       : isLiveGps
         ? `<span style="color:#3ddc84">● Live-GPS (${Math.round(age)}s)</span>`
         : `<span style="color:#a6b3d1">○ ${t.gps_updated_at ? "GPS " + new Date(t.gps_updated_at).toLocaleTimeString("de-DE") : "Manuell"}</span>`);
-  // Punkt: GPS-Status (grau = kein GPS, blau = GPS aktiv/live)
-  const gpsCol = atStart ? "#888" : (isLiveGps ? "#2299ff" : "#888");
+  // Punkt: FMS-Statusfarbe als Füllung, Rand zeigt GPS-Status
+  const fmsCol = statusCol;
+  const borderCol = atStart ? "#666" : (isLiveGps ? "#fff" : "#666");
   const style = {
     radius: atStart ? 5 : 7,
-    color: atStart ? "#666" : (isLiveGps ? "#2299ff" : "#666"),
+    color: borderCol,
     weight: 3,
-    fillColor: gpsCol,
+    fillColor: fmsCol,
     fillOpacity: atStart ? 0.45 : 0.95,
   };
 
@@ -844,6 +845,174 @@ function renderAssignments(){
   });
 }
 
+// ---------------- Render: Exercise Cases in Schnellkoordination ----------------
+function _caseStatusText(doc) {
+  if (!doc) return "offen";
+  if (doc.completed) return "abgeschlossen";
+  if (doc.status8_time) return "S8 – Am Transportziel";
+  if (doc.status7_time) return "S7 – Patient aufgenommen";
+  if (doc.status4_time) return "S4 – Am Einsatzort";
+  if (doc.status3_time) return "S3 – Einsatz übernommen";
+  if (doc.alarm_time)   return "alarmiert";
+  return "offen";
+}
+
+function _caseStatusColor(doc) {
+  if (!doc) return "#777";
+  if (doc.completed) return "#444";
+  if (doc.status8_time || doc.status7_time) return "#22cc66";
+  if (doc.status4_time) return "#2299ff";
+  if (doc.status3_time) return "#ff8800";
+  if (doc.alarm_time) return "#ffcc00";
+  return "#777";
+}
+
+function renderExerciseCases() {
+  const root = $("exerciseCasesList");
+  if (!root) return;
+
+  if (!exerciseGeodata || !exerciseGeodata.cases) {
+    root.innerHTML = "";
+    return;
+  }
+
+  const cases = exerciseGeodata.cases;
+  root.innerHTML = "";
+
+  // Verfügbare Trupps (S1/S2 und nicht zugewiesen)
+  const dispatchableTeams = teams.filter(t =>
+    DISPATCHABLE_CODES.has(Number(t.radio_status)) && !assignedTeamIds.has(t.id)
+  );
+
+  for (const [id, data] of Object.entries(cases)) {
+    const doc = casedocData.find(d => d.id === id);
+    const color = _caseStatusColor(doc);
+    const statusText = _caseStatusText(doc);
+    const completed = !!doc?.completed;
+    const isAlarmed = !!doc?.alarm_time;
+
+    const el = document.createElement("div");
+    el.className = "item";
+    el.style.borderLeft = `4px solid ${color}`;
+
+    // EVT assignment info
+    let evtLine = "";
+    if (doc?.assigned_evt) {
+      const assignedTeam = teams.find(t => t.name === doc.assigned_evt || t.callsign === doc.assigned_evt);
+      const teamStatus = assignedTeam ? Number(assignedTeam.radio_status) : null;
+      const teamCol = teamStatus !== null ? (STATUS_COLORS.get(teamStatus) || "#888") : "#888";
+      evtLine = `<div class="mini"><b>EVT:</b> <span style="color:${teamCol};font-weight:700;">${esc(doc.assigned_evt)}</span>`
+        + (assignedTeam ? ` <span style="background:${teamCol}22;color:${teamCol};border:1px solid ${teamCol};padding:1px 6px;border-radius:999px;font-size:11px;font-weight:600;">S${teamStatus}</span>` : "")
+        + `</div>`;
+    } else if (!completed) {
+      evtLine = `<div class="mini" style="color:#ff6b6b;">Kein EVT zugewiesen</div>`;
+    }
+
+    const timeLine = doc?.alarm_time
+      ? `<span class="badge" style="background:#ffcc0022;color:#ffcc00;border-color:#ffcc00;">⏰ ${new Date(doc.alarm_time).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"})}</span>`
+      : "";
+
+    // Team assignment dropdown (only for non-completed cases)
+    let assignHtml = "";
+    if (!completed) {
+      const options = dispatchableTeams.length
+        ? dispatchableTeams
+            .map(t => {
+              const sc = STATUS_COLORS.get(Number(t.radio_status)) || "#888";
+              return `<option value="${esc(t.id)}">${esc(t.name)} (S${t.radio_status})</option>`;
+            }).join("")
+        : `<option value="">Keine freien Trupps</option>`;
+
+      assignHtml = `
+        <div class="row" style="margin-top:4px;">
+          <select data-case-assign-team="${esc(id)}" style="flex:1;">
+            <option value="">Trupp wählen…</option>
+            ${options}
+          </select>
+          <button data-case-alarm-btn="${esc(id)}" style="background:#3a2800;color:#f5c842;border-color:#f5c842;font-weight:700;">
+            ${isAlarmed ? "Neu zuweisen" : "🔔 Alarmieren"}
+          </button>
+        </div>`;
+    }
+
+    el.innerHTML = `
+      <div class="row">
+        <div style="flex:1;">
+          <div><b>${esc(id)}: ${esc(data.schlagwort || "")}</b></div>
+          <div style="margin-top:4px;">
+            <span class="badge" style="background:${color}22;color:${color};border-color:${color};">${esc(statusText)}</span>
+            ${timeLine}
+            ${completed ? '<span class="badge" style="background:#3ddc8422;color:#3ddc84;border-color:#3ddc84;">✓ erledigt</span>' : ""}
+          </div>
+        </div>
+        <button data-case-pan="${esc(id)}" style="padding:6px 10px;flex-shrink:0;" title="Auf Karte zeigen">📍</button>
+      </div>
+      ${evtLine}
+      ${data.patient ? `<div class="mini">Patient: ${esc(data.patient)}</div>` : ""}
+      ${assignHtml}
+    `;
+    root.appendChild(el);
+  }
+
+  // Event handlers
+  root.querySelectorAll("[data-case-pan]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-case-pan");
+      if (exerciseMarkers.has(id)) {
+        const marker = exerciseMarkers.get(id);
+        map.setView(marker.getLatLng(), map.getZoom());
+        marker.openPopup();
+      }
+    });
+  });
+
+  root.querySelectorAll("[data-case-alarm-btn]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const caseId = btn.getAttribute("data-case-alarm-btn");
+      const sel = root.querySelector(`[data-case-assign-team="${caseId}"]`);
+      const teamId = sel?.value ? parseInt(sel.value, 10) : null;
+
+      if (!teamId) {
+        alert("Bitte einen freien Trupp auswählen.");
+        return;
+      }
+
+      const team = teams.find(t => t.id === teamId);
+      if (!team) return;
+
+      // Find or create mission for this case
+      const caseData = exerciseGeodata.cases[caseId];
+      const missionTitle = `${caseId}: ${caseData?.schlagwort || ""}`;
+      let mission = missions.find(m => m.title === missionTitle);
+
+      if (!mission) {
+        // Create mission for this case
+        mission = await api("/api/missions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: missionTitle,
+            description: caseData?.patient || "",
+            status: "offen",
+            priority: 1,
+            lat: caseData?.lat || null,
+            lng: caseData?.lng || null,
+          }),
+        });
+      }
+
+      // Assign team to mission (this also triggers alarm in backend)
+      await api("/api/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: teamId, mission_id: mission.id }),
+      });
+
+      await refreshAll(false);
+    });
+  });
+}
+
 // ---------------- Refresh ----------------
 function computeAssignedTeamIds(){
   assignedTeamIds = new Set(assignments.map(a => a.team_id));
@@ -897,6 +1066,7 @@ async function refreshAll(rebuild = true){
   }
 
   if (exerciseGeodata) refreshExerciseLayer();
+  renderExerciseCases();
   renderSprechwunschPanel();
 }
 
@@ -1035,27 +1205,7 @@ function wireUI(){
     await refreshAll();
   });
 
-  $("btnCreateMission").addEventListener("click", async () => {
-    const payload = {
-      title: $("missionTitle").value.trim(),
-      description: $("missionDesc").value.trim(),
-      status: $("missionStatus").value,
-      priority: parseInt($("missionPriority").value, 10),
-      lat: $("missionLat").value ? parseFloat($("missionLat").value) : null,
-      lng: $("missionLng").value ? parseFloat($("missionLng").value) : null,
-    };
-
-    const m = await api("/api/missions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    selectedMissionId = m.id;
-    $("missionTitle").value = "";
-    $("missionDesc").value = "";
-    await refreshAll();
-  });
+  // Mission creation is now handled through exercise case alarm buttons
 
 // global Assign (links+rechts auswählen)
   const btnAssign = $("btnAssign");
@@ -1142,6 +1292,7 @@ async function _silentRefreshAll() {
     for (const t of teams) upsertTeamMarker(t);
     for (const m of missions) upsertMissionMarker(m);
     if (exerciseGeodata) refreshExerciseLayer();
+    renderExerciseCases();
     renderSprechwunschPanel();
   } catch (e) {
     clearTimeout(timer);
@@ -1196,6 +1347,14 @@ async function showQrSetup() {
   const grid = document.getElementById("qrGrid");
   grid.innerHTML = '<div style="text-align:center;color:#a6b3d1;padding:2rem;">Lade QR-Codes…</div>';
   qrModal.style.display = "flex";
+  // Aktuelle base_url laden und ins Input-Feld setzen
+  try {
+    const cfgRes = await fetch("/api/exercise/config");
+    if (cfgRes.ok) {
+      const cfgData = await cfgRes.json();
+      document.getElementById("qrBaseUrl").value = cfgData.base_url || "";
+    }
+  } catch (_) { /* silent */ }
   try {
     const res = await fetch("/api/qrcodes");
     if (!res.ok) throw new Error("Fehler beim Laden");
@@ -1209,6 +1368,22 @@ async function showQrSetup() {
     `).join('');
   } catch (e) {
     grid.innerHTML = `<div style="color:#ff6b6b;text-align:center;padding:1rem;">Fehler: ${esc(e.message)}</div>`;
+  }
+}
+
+async function saveQrBaseUrl() {
+  const url = document.getElementById("qrBaseUrl").value.trim();
+  try {
+    const res = await fetch("/api/exercise/config", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({base_url: url})
+    });
+    if (!res.ok) throw new Error("Speichern fehlgeschlagen");
+    // QR-Codes neu laden mit neuer Base-URL
+    await showQrSetup();
+  } catch (e) {
+    alert("Fehler: " + e.message);
   }
 }
 
@@ -1236,6 +1411,73 @@ function printQrCodes() {
     </body></html>`);
   w.document.close();
   w.onload = () => { w.print(); };
+}
+
+// ---------------- App Update ----------------
+async function showUpdateModal() {
+  const modal = document.getElementById("updateModal");
+  const info = document.getElementById("updateCheckInfo");
+  const status = document.getElementById("updateStatus");
+  const btn = document.getElementById("btnDoUpdate");
+  status.style.display = "none";
+  status.textContent = "";
+  btn.disabled = false;
+  btn.textContent = "⬆ Jetzt updaten";
+  info.textContent = "Prüfe auf Updates…";
+  modal.style.display = "flex";
+  try {
+    const res = await fetch("/api/update/check");
+    const data = await res.json();
+    if (data.error) {
+      info.innerHTML = `<span style="color:#f5c842;">⚠ Konnte nicht prüfen: ${esc(data.error)}</span>`;
+    } else if (data.available) {
+      info.innerHTML = `<span style="color:#3ddc84;">✓ ${data.count} neue(s) Commit(s) verfügbar:</span>`;
+      status.style.display = "block";
+      status.textContent = data.commits.join("\n");
+    } else {
+      info.innerHTML = `<span style="color:#a6b3d1;">✓ Bereits auf dem neuesten Stand.</span>`;
+    }
+  } catch (e) {
+    info.innerHTML = `<span style="color:#ff6b6b;">Fehler: ${esc(e.message)}</span>`;
+  }
+}
+
+async function doAppUpdate() {
+  const btn = document.getElementById("btnDoUpdate");
+  const status = document.getElementById("updateStatus");
+  const info = document.getElementById("updateCheckInfo");
+  btn.disabled = true;
+  btn.textContent = "⏳ Update läuft…";
+  status.style.display = "block";
+  status.textContent = "$ git pull origin main\n";
+  info.textContent = "";
+  try {
+    const res = await fetch("/api/update", {method: "POST"});
+    const data = await res.json();
+    if (!data.ok) {
+      status.textContent += `\n❌ Fehler bei ${data.step}:\n${data.error}`;
+      btn.textContent = "❌ Fehlgeschlagen";
+      return;
+    }
+    status.textContent += data.git + "\n";
+    if (data.pip) status.textContent += `\n$ pip install\n${data.pip}\n`;
+    if (data.already_up_to_date) {
+      status.textContent += "\n✓ Bereits auf dem neuesten Stand.";
+      btn.textContent = "✓ Aktuell";
+    } else {
+      status.textContent += "\n✓ Update erfolgreich!";
+      if (data.restarted) {
+        status.textContent += "\n⟳ App wird neu gestartet – Seite lädt gleich neu…";
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        status.textContent += "\n⚠ Bitte App manuell neu starten (Docker: bash update.sh --docker)";
+      }
+      btn.textContent = "✓ Fertig";
+    }
+  } catch (e) {
+    status.textContent += `\n❌ Verbindungsfehler: ${e.message}`;
+    btn.textContent = "❌ Fehlgeschlagen";
+  }
 }
 
 // ---------------- Übungs-Timer ----------------

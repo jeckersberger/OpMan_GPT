@@ -106,6 +106,7 @@ class ExerciseConfig(db.Model):
     __tablename__ = "exercise_config"
     id = db.Column(db.Integer, primary_key=True)
     evt_count = db.Column(db.Integer, nullable=False, default=6)
+    base_url = db.Column(db.String(300), nullable=True, default="")
 
 
 class CaseDefinition(db.Model):
@@ -138,6 +139,7 @@ class CaseDefinition(db.Model):
     abcde_json    = db.Column(db.Text, nullable=True)  # {"A":"...","B":"...",...}
     sampler_json  = db.Column(db.Text, nullable=True)  # {"S":"...","A":"...",...}
 
+    abcd_soll_json = db.Column(db.Text, nullable=True)  # {"A":1,"B":2,"C":4,"D":2}
     besonderheit  = db.Column(db.Text, nullable=True)  # Hinweis für EL / Mime
     hinweis       = db.Column(db.Text, nullable=True)  # extra Instruktionstext
 
@@ -165,6 +167,11 @@ class CaseDefinition(db.Model):
         except Exception: return {}
 
     @property
+    def abcd_soll(self):
+        try: return self._json.loads(self.abcd_soll_json) if self.abcd_soll_json else {}
+        except Exception: return {}
+
+    @property
     def sampler(self):
         try: return self._json.loads(self.sampler_json) if self.sampler_json else {}
         except Exception: return {}
@@ -178,7 +185,7 @@ class CaseDefinition(db.Model):
             "rmi_soll": self.rmi_soll, "sk_soll": self.sk_soll, "pzc_soll": self.pzc_soll,
             "kein_transport": self.kein_transport,
             "vitals": self.vitals, "befund": self.befund,
-            "abcde": self.abcde, "sampler": self.sampler,
+            "abcde": self.abcde, "abcd_soll": self.abcd_soll, "sampler": self.sampler,
             "besonderheit": self.besonderheit, "hinweis": self.hinweis,
         }
 

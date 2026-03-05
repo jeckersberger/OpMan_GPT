@@ -120,6 +120,8 @@
   <button onclick="showJsonKi()" style="color:#c084fc;border:1px solid #7c3aed;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">🤖 JSON-Vorlage für KI</button>
   <button class="grn" onclick="showImport()">⬆ JSON importieren</button>
   <a href="/api/cases/export">⬇ JSON exportieren</a>
+  <button id="btnResolveW3w" onclick="resolveW3W()" style="color:#3498db;border:1px solid #3498db;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">🌐 w3w → Koordinaten</button>
+  <span id="w3wStatus" style="font-size:.8rem;color:#aaa;"></span>
 </div>
 
 <!-- KI-Modal -->
@@ -376,6 +378,27 @@
 </div>
 
 <script>
+/* ── w3w manuell auflösen ── */
+async function resolveW3W() {
+  const btn = document.getElementById('btnResolveW3w');
+  const st  = document.getElementById('w3wStatus');
+  btn.disabled = true;
+  st.textContent = 'Auflösung läuft…';
+  try {
+    const r = await fetch('/api/exercise/resolve-w3w', {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      st.textContent = '\u2713 ' + d.resolved + ' aufgelöst' + (d.failed.length ? ', ' + d.failed.length + ' fehlgeschlagen (' + d.failed.join(', ') + ')' : '');
+      st.style.color = d.failed.length ? '#f39c12' : '#2ecc71';
+    } else {
+      st.textContent = '\u2717 Fehler'; st.style.color = '#e74c3c';
+    }
+  } catch(e) {
+    st.textContent = '\u2717 Netzwerkfehler'; st.style.color = '#e74c3c';
+  }
+  btn.disabled = false;
+}
+
 /* ── PZC-Ableitung aus RMI + SK ─────────────────────────────────────────────
    PZC = RMI (3 Stellen) + Leitsymptom (2 Stellen, fest je RMI) + SK (1 Stelle)
    Bekannte Leitsymptom-Codes (erweiterbar):                                  */

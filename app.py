@@ -291,7 +291,8 @@ def create_app():
                 "w3w": cd.w3w, "w3w_alarm": cd.w3w_alarm,
                 "lat": cd.lat, "lng": cd.lng,
                 "rmi_soll": cd.rmi_soll, "sk_soll": cd.sk_soll, "pzc_soll": cd.pzc_soll,
-                "besonderheit": cd.besonderheit, "kein_transport": cd.kein_transport,
+                "besonderheit": cd.besonderheit, "hinweis": cd.hinweis,
+                "kein_transport": cd.kein_transport,
                 "active": bool(cd.active),
             }
         return result
@@ -709,6 +710,22 @@ def create_app():
             db.session.commit()
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
         return jsonify(result)
+
+    @app.post("/api/exercise/resolve-w3w")
+    def exercise_resolve_w3w():
+        """Manually trigger w3w → coordinate resolution for all active cases."""
+        resolved = 0
+        failed = []
+        for cd in CaseDefinition.query.filter(CaseDefinition.active == True).all():  # noqa: E712
+            if cd.w3w:
+                lat, lng = resolve_w3w(cd.w3w)
+                if lat is not None:
+                    cd.lat, cd.lng = lat, lng
+                    resolved += 1
+                else:
+                    failed.append(cd.id)
+        db.session.commit()
+        return jsonify({"ok": True, "resolved": resolved, "failed": failed})
 
     @app.get("/cert")
     def download_cert():

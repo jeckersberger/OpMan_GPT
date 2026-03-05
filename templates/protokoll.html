@@ -443,7 +443,11 @@
 
 <!-- ═══ FALLDOKUMENTATION ═══ -->
 <div class="section">
-  <div class="section-title">Falldokumentation</div>
+  <div class="section-title" style="display:flex;align-items:center;gap:.8rem;">
+    Falldokumentation
+    <button class="btn btn-ghost btn-sm no-print" onclick="resolveW3W()" id="btnResolveW3w" style="font-size:.7rem;">🌐 w3w → Koordinaten</button>
+    <span id="w3wStatus" style="font-size:.7rem;color:var(--muted);"></span>
+  </div>
   <div class="case-grid" id="caseGrid"><div class="text-muted">Lade…</div></div>
 </div>
 
@@ -561,6 +565,27 @@
 
 <!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
 <script>
+/* ── w3w manuell auflösen ── */
+async function resolveW3W() {
+  const btn = document.getElementById('btnResolveW3w');
+  const st  = document.getElementById('w3wStatus');
+  btn.disabled = true;
+  st.textContent = 'Auflösung läuft…';
+  try {
+    const r = await fetch('/api/exercise/resolve-w3w', {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      st.textContent = `✓ ${d.resolved} aufgelöst` + (d.failed.length ? `, ${d.failed.length} fehlgeschlagen (${d.failed.join(', ')})` : '');
+      st.style.color = d.failed.length ? 'var(--yellow)' : 'var(--green)';
+    } else {
+      st.textContent = '✗ Fehler'; st.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    st.textContent = '✗ Netzwerkfehler'; st.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+}
+
 /* ── Übungsdaten – initial per Jinja, danach live via API ── */
 let CASES_META = {{ cases | tojson }};
 let _caseMetaKeys = JSON.stringify(Object.keys(CASES_META).sort());
@@ -839,6 +864,7 @@ function buildCaseCard(pid) {
       ${meta.patient_alarm?`<span style="grid-column:1/-1;font-size:.7rem;color:var(--yellow);">⚠ Alarmname: ${esc(meta.patient_alarm)}</span>`:''}
     </div>
     ${meta.besonderheit?`<div class="hint-box">⚠ ${esc(meta.besonderheit)}</div>`:''}
+    ${meta.hinweis?`<div class="hint-box" style="border-color:var(--accent);background:rgba(52,152,219,.08);">📋 ${esc(meta.hinweis)}</div>`:''}
     <div class="soll-row">
       <span class="soll-chip">PZC: ${esc(meta.pzc_soll||'–')}</span>
       ${meta.abcd_soll?`<span class="soll-chip">ABCD: ${meta.abcd_soll.A}-${meta.abcd_soll.B}-${meta.abcd_soll.C}-${meta.abcd_soll.D}</span>`:''}

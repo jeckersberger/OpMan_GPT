@@ -305,6 +305,18 @@ def create_app():
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
 
+        # Seed w3w cache from DB (so resolve works even without internet)
+        cache = _load_w3w_cache()
+        dirty_cache = False
+        for cd_row in CaseDefinition.query.all():
+            if cd_row.w3w and cd_row.lat is not None:
+                clean = cd_row.w3w.lstrip("/")
+                if clean not in cache:
+                    cache[clean] = {"lat": cd_row.lat, "lng": cd_row.lng}
+                    dirty_cache = True
+        if dirty_cache:
+            _save_w3w_cache(cache)
+
     def _cases_dict(active_only: bool = False):
         """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
         q = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id)

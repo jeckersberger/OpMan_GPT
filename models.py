@@ -42,6 +42,8 @@ class RadioLogEntry(db.Model):
     fms_status = db.Column(db.Integer,  nullable=True)
     case_ref   = db.Column(db.String(5), nullable=True)   # 'P1' … 'P6'
     message    = db.Column(db.Text,     nullable=False)
+    marked     = db.Column(db.Boolean,  nullable=False, default=False)
+    note       = db.Column(db.Text,     nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 

@@ -660,6 +660,17 @@ def create_app():
         db.session.commit()
         return jsonify(serialize_logentry(entry)), 201
 
+    @app.patch("/api/radiolog/<int:entry_id>")
+    def patch_logentry(entry_id: int):
+        entry = db.get_or_404(RadioLogEntry, entry_id)
+        data = request.get_json(force=True)
+        if "marked" in data:
+            entry.marked = bool(data["marked"])
+        if "note" in data:
+            entry.note = (data["note"] or "").strip() or None
+        db.session.commit()
+        return jsonify(serialize_logentry(entry))
+
     @app.delete("/api/radiolog/<int:entry_id>")
     def delete_logentry(entry_id: int):
         entry = db.get_or_404(RadioLogEntry, entry_id)
@@ -1485,7 +1496,7 @@ function show(id){
         rs_label  = RADIO_STATUS_LABELS.get(restore_rs, f"S{restore_rs}")
         db.session.add(RadioLogEntry(
             timestamp=_utcnow(),
-            sender="FüSt",
+            sender="Äskulap Feucht",
             receiver=team.callsign or team.name,
             fms_status=restore_rs,
             case_ref=_case_ref,
@@ -1736,7 +1747,7 @@ def _auto_log(team: "Team", rs: int, case_ref: str | None = None) -> None:
     entry = RadioLogEntry(
         timestamp=_utcnow(),
         sender=name,
-        receiver="FüSt",
+        receiver="Äskulap Feucht",
         fms_status=rs,
         case_ref=case_ref,
         message=f"FMS {rs} – {label}",
@@ -1811,6 +1822,8 @@ def serialize_logentry(e: RadioLogEntry):
         "fms_status": e.fms_status,
         "case_ref":   e.case_ref,
         "message":    e.message,
+        "marked":     e.marked,
+        "note":       e.note,
         "created_at": _fmt_dt(e.created_at),
     }
 

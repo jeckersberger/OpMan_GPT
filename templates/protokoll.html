@@ -226,7 +226,7 @@
     .log-list { display:flex; flex-direction:column; gap:.3rem; }
     .log-entry {
       display:grid;
-      grid-template-columns:72px 115px 90px 60px 45px 1fr 24px;
+      grid-template-columns:72px 115px 90px 60px 45px 1fr auto;
       gap:.35rem; align-items:start;
       background:var(--panel); border:1px solid var(--border);
       border-radius:7px; padding:.4rem .65rem; font-size:.76rem;
@@ -243,10 +243,20 @@
       display:inline-block; padding:.08rem .35rem; border-radius:10px;
       background:rgba(61,220,132,.08); color:var(--green); font-size:.7rem; font-weight:700;
     }
-    .log-entry .l-del  {
+    .log-entry .l-actions {
+      display:flex; gap:.3rem; align-items:center;
+    }
+    .log-entry .l-del, .log-entry .l-mark, .log-entry .l-note-btn  {
       background:none; border:none; color:var(--muted); cursor:pointer; font-size:.85rem; line-height:1; padding:0;
     }
     .log-entry .l-del:hover { color:var(--red); }
+    .log-entry .l-mark:hover { color:var(--accent); }
+    .log-entry .l-note-btn:hover { color:var(--accent); }
+    .log-entry.marked { border-left:3px solid var(--accent); background:rgba(78,161,255,.06); }
+    .log-entry .l-note {
+      grid-column:1/-1; font-size:.7rem; color:var(--accent);
+      padding:.15rem .4rem; margin-top:.1rem; font-style:italic;
+    }
     .log-empty { color:var(--muted); font-size:.82rem; padding:.5rem; }
     .text-muted { color:var(--muted); font-size:.8rem; }
 
@@ -1280,14 +1290,23 @@ function renderLogList() {
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp))
     .map(e=>{
       const fms=e.fms_status!=null?(FMS_LABELS[e.fms_status]||'S'+e.fms_status):'';
-      return `<div class="log-entry">
+      const markedCls=e.marked?'marked':'';
+      const markIcon=e.marked?'&#9733;':'&#9734;';
+      const noteIcon=e.note?'&#9998;':'&#9998;';
+      const noteStyle=e.note?'color:var(--accent)':'';
+      return `<div class="log-entry ${markedCls}">
         <span class="l-ts">${fmtTime(e.timestamp)||'–'}</span>
         <span class="l-from">${esc(e.sender)}</span>
         <span class="l-to">${e.receiver?'→ '+esc(e.receiver):''}</span>
         <span class="l-fms">${fms}</span>
         <span class="l-ref">${e.case_ref?esc(e.case_ref):''}</span>
         <span class="l-msg">${esc(e.message)}</span>
-        <button class="l-del no-print" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+        <span class="l-actions no-print">
+          <button class="l-mark" title="Markieren" onclick="toggleMark(${e.id})">${markIcon}</button>
+          <button class="l-note-btn" style="${noteStyle}" title="Notiz" onclick="editNote(${e.id})">&#9998;</button>
+          <button class="l-del" title="Löschen" onclick="deleteLogEntry(${e.id})">✕</button>
+        </span>
+        ${e.note?`<span class="l-note">&#128221; ${esc(e.note)}</span>`:''}
       </div>`;
     }).join('');
 }
@@ -1315,6 +1334,28 @@ async function addLogEntry() {
     document.getElementById('logFms').value='';
     document.getElementById('logCase').value='';
   }
+}
+
+async function toggleMark(id) {
+  const entry=logEntries.find(e=>e.id===id);
+  if(!entry) return;
+  const res=await fetch(`/api/radiolog/${id}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({marked:!entry.marked}),
+  });
+  if(res.ok){ Object.assign(entry, await res.json()); renderLogList(); }
+}
+
+async function editNote(id) {
+  const entry=logEntries.find(e=>e.id===id);
+  if(!entry) return;
+  const note=prompt('Notiz für diesen Funkspruch:', entry.note||'');
+  if(note===null) return;
+  const res=await fetch(`/api/radiolog/${id}`,{
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({note}),
+  });
+  if(res.ok){ Object.assign(entry, await res.json()); renderLogList(); }
 }
 
 async function deleteLogEntry(id) {

@@ -264,6 +264,22 @@
             <span id="pzc_hint" style="font-size:.65rem;color:var(--muted);margin-top:.1rem;"></span>
           </label>
         </div>
+        <div style="margin-top:.8rem;">
+          <div style="font-size:.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:.3rem;">ABCD-Soll (Bewertung 1–4, nur bei SK1)</div>
+          {% set asoll = cd.abcd_soll %}
+          <div class="field-grid" style="grid-template-columns:repeat(4,1fr);">
+            {% for letter in ['A','B','C','D'] %}
+            <label>{{ letter }}
+              <select name="abcd_soll_{{ letter }}">
+                <option value="">–</option>
+                {% for n in [1,2,3,4] %}
+                <option value="{{ n }}" {% if asoll.get(letter)|string == n|string %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
         <div style="margin-top:.6rem;">
           <label class="checkbox-label">
             <input type="checkbox" name="kein_transport" {% if cd.kein_transport %}checked{% endif %}>

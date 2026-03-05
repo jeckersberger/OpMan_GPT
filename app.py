@@ -264,6 +264,7 @@ def create_app():
                     lat=cd.get("lat"), lng=cd.get("lng"),
                     rmi_soll=cd.get("rmi_soll"), sk_soll=cd.get("sk_soll"),
                     pzc_soll=cd.get("pzc_soll"), besonderheit=cd.get("besonderheit"),
+                    abcd_soll_json=json.dumps(cd["abcd_soll"], ensure_ascii=False) if cd.get("abcd_soll") else None,
                     sort_order=i,
                 ))
             db.session.flush()
@@ -291,6 +292,7 @@ def create_app():
                 "w3w": cd.w3w, "w3w_alarm": cd.w3w_alarm,
                 "lat": cd.lat, "lng": cd.lng,
                 "rmi_soll": cd.rmi_soll, "sk_soll": cd.sk_soll, "pzc_soll": cd.pzc_soll,
+                "abcd_soll": cd.abcd_soll,
                 "besonderheit": cd.besonderheit, "hinweis": cd.hinweis,
                 "kein_transport": cd.kein_transport,
                 "active": bool(cd.active),
@@ -941,6 +943,13 @@ function show(id){
         cd.sk_soll        = data.get("sk_soll", "").strip() or None
         cd.pzc_soll       = data.get("pzc_soll", "").strip() or None
         cd.kein_transport = bool(data.get("kein_transport"))
+        # ABCD-Soll (4 Einzelfelder → JSON)
+        abcd_soll = {}
+        for letter in ("A", "B", "C", "D"):
+            v = data.get(f"abcd_soll_{letter}", "").strip()
+            if v:
+                abcd_soll[letter] = int(v)
+        cd.abcd_soll_json = json.dumps(abcd_soll, ensure_ascii=False) if abcd_soll else None
         cd.besonderheit   = data.get("besonderheit", "").strip() or None
         cd.hinweis        = data.get("hinweis", "").strip() or None
         cd.sort_order     = int(data["sort_order"]) if data.get("sort_order") else 0
@@ -1034,6 +1043,8 @@ function show(id){
                     cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
                 if "sampler" in item:
                     cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
+                if "abcd_soll" in item:
+                    cd.abcd_soll_json = json.dumps(item["abcd_soll"], ensure_ascii=False)
                 # Always resolve w3w → coordinates (w3w is authoritative source)
                 if cd.w3w:
                     lat, lng = resolve_w3w(cd.w3w)

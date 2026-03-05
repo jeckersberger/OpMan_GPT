@@ -303,14 +303,14 @@
 </div>
 
 {# ── EL-BLATT (nur für Übungsleitung, nicht auslegen) ── #}
-{% if cd.besonderheit or (cd.pzc_soll and cd.pzc_soll != '—') or cd.rmi_soll or cd.sk_soll or cd.w3w_alarm or cd.patient_alarm %}
+{% if cd.besonderheit or (cd.pzc_soll and cd.pzc_soll != '—') or cd.rmi_soll or cd.sk_soll or cd.abcd_soll or cd.w3w_alarm or cd.patient_alarm %}
 <div class="page el-page">
   <div class="el-header">NUR FÜR ÜBUNGSLEITUNG</div>
   <div class="el-subtitle">⚠ Nicht auslegen – nicht an Teilnehmer ausgeben! ⚠</div>
   <div class="el-case-id">Interne Hinweise – Patientenkarte {{ cd.id }}</div>
 
   {# Lösungsschlüssel #}
-  {% if (cd.pzc_soll and cd.pzc_soll != '—') or cd.rmi_soll or cd.sk_soll %}
+  {% if (cd.pzc_soll and cd.pzc_soll != '—') or cd.rmi_soll or cd.sk_soll or cd.abcd_soll %}
   <div class="section-head">Lösungsschlüssel</div>
   <table class="el-table">
     {% if cd.pzc_soll and cd.pzc_soll != '—' %}
@@ -321,6 +321,10 @@
     {% endif %}
     {% if cd.sk_soll and cd.sk_soll != '—' %}
     <tr><td>SK (Soll)</td><td>{{ cd.sk_soll }}</td></tr>
+    {% endif %}
+    {% if cd.abcd_soll %}
+    {% set asoll = cd.abcd_soll %}
+    <tr><td>ABCD-Schema (Soll)</td><td>{{ asoll.get('A','–') }} – {{ asoll.get('B','–') }} – {{ asoll.get('C','–') }} – {{ asoll.get('D','–') }}</td></tr>
     {% endif %}
   </table>
   {% endif %}

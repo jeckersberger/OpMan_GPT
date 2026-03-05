@@ -1347,6 +1347,14 @@ async function showQrSetup() {
   const grid = document.getElementById("qrGrid");
   grid.innerHTML = '<div style="text-align:center;color:#a6b3d1;padding:2rem;">Lade QR-Codes…</div>';
   qrModal.style.display = "flex";
+  // Aktuelle base_url laden und ins Input-Feld setzen
+  try {
+    const cfgRes = await fetch("/api/exercise/config");
+    if (cfgRes.ok) {
+      const cfgData = await cfgRes.json();
+      document.getElementById("qrBaseUrl").value = cfgData.base_url || "";
+    }
+  } catch (_) { /* silent */ }
   try {
     const res = await fetch("/api/qrcodes");
     if (!res.ok) throw new Error("Fehler beim Laden");
@@ -1360,6 +1368,22 @@ async function showQrSetup() {
     `).join('');
   } catch (e) {
     grid.innerHTML = `<div style="color:#ff6b6b;text-align:center;padding:1rem;">Fehler: ${esc(e.message)}</div>`;
+  }
+}
+
+async function saveQrBaseUrl() {
+  const url = document.getElementById("qrBaseUrl").value.trim();
+  try {
+    const res = await fetch("/api/exercise/config", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({base_url: url})
+    });
+    if (!res.ok) throw new Error("Speichern fehlgeschlagen");
+    // QR-Codes neu laden mit neuer Base-URL
+    await showQrSetup();
+  } catch (e) {
+    alert("Fehler: " + e.message);
   }
 }
 

@@ -408,10 +408,15 @@ def create_app():
             evt_url = f"http://{lan_ip}:5080/evt"
         else:
             evt_url = f"{proto}://{lan_ip}:{port}/evt"
+        # Benutzerdefinierte Base-URL hat Vorrang
+        cfg = db.session.get(ExerciseConfig, 1)
+        custom_base = (cfg.base_url.rstrip("/") if cfg and cfg.base_url else "").strip()
+        if custom_base:
+            evt_url = f"{custom_base}/evt"
         return jsonify({
             "ip": lan_ip,
             "port": port,
-            "base_url": f"{proto}://{lan_ip}:{port}",
+            "base_url": custom_base or f"{proto}://{lan_ip}:{port}",
             "evt_url":  evt_url,
         })
 
@@ -507,6 +512,10 @@ def create_app():
 
             cfg = db.session.get(ExerciseConfig, 1)
             evt_count = cfg.evt_count if cfg else 6
+
+            # Benutzerdefinierte Base-URL hat Vorrang vor automatischer Erkennung
+            if cfg and cfg.base_url:
+                base = cfg.base_url.rstrip("/")
 
             def _make_qr(url: str, box_size: int = 8) -> str:
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -882,7 +891,8 @@ function show(id){
     @app.get("/api/exercise/config")
     def get_exercise_config():
         cfg = db.session.get(ExerciseConfig, 1)
-        return jsonify({"evt_count": cfg.evt_count if cfg else 6})
+        return jsonify({"evt_count": cfg.evt_count if cfg else 6,
+                        "base_url": cfg.base_url if cfg else ""})
 
     @app.post("/api/exercise/config")
     def update_exercise_config():
@@ -893,8 +903,11 @@ function show(id){
             if not (1 <= n <= 6):
                 return jsonify({"error": "evt_count must be 1-6"}), 400
             cfg.evt_count = n
+        if "base_url" in data:
+            url = str(data["base_url"]).strip().rstrip("/")
+            cfg.base_url = url
         db.session.commit()
-        return jsonify({"evt_count": cfg.evt_count})
+        return jsonify({"evt_count": cfg.evt_count, "base_url": cfg.base_url or ""})
 
     @app.post("/api/exercise/import-missions")
     def import_exercise_missions():

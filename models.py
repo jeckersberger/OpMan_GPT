@@ -106,6 +106,7 @@ class ExerciseConfig(db.Model):
     __tablename__ = "exercise_config"
     id = db.Column(db.Integer, primary_key=True)
     evt_count = db.Column(db.Integer, nullable=False, default=6)
+    base_url = db.Column(db.String(300), nullable=True, default="")
 
 
 class CaseDefinition(db.Model):

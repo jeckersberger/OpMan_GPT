@@ -139,7 +139,15 @@
   <div id="qrSetupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center;overflow-y:auto;">
     <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:700px;width:95%;margin:2rem auto;">
       <h3 style="margin-bottom:.5rem;font-size:1rem;color:#c084fc;">🏷 QR-Codes pro EVT</h3>
-      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Jeder QR-Code öffnet die EVT-App mit dem richtigen Team vorausgewählt. Ausdrucken und an Weste / Gerät heften.</p>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:.5rem;">Jeder QR-Code öffnet die EVT-App mit dem richtigen Team vorausgewählt. Ausdrucken und an Weste / Gerät heften.</p>
+      <div style="margin-bottom:1rem;padding:.75rem;background:#0b1220;border:1px solid #223152;border-radius:8px;">
+        <label style="font-size:.75rem;color:#a6b3d1;display:block;margin-bottom:.3rem;">Base-URL (leer = automatisch LAN-IP)</label>
+        <div style="display:flex;gap:.5rem;">
+          <input id="qrBaseUrl" type="text" placeholder="z.B. https://meine-uebung.de" style="flex:1;padding:.4rem .6rem;background:#162035;color:#e8ecf4;border:1px solid #334155;border-radius:6px;font-family:inherit;font-size:.8rem;"/>
+          <button onclick="saveQrBaseUrl()" style="padding:.4rem .8rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:.8rem;white-space:nowrap;">Speichern & Neu generieren</button>
+        </div>
+        <div style="font-size:.65rem;color:#667;margin-top:.3rem;">Wenn gesetzt, werden alle QR-Codes mit dieser URL generiert statt der lokalen Netzwerk-IP.</div>
+      </div>
       <div id="qrGrid" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:1rem;"></div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;">
         <button onclick="printQrCodes()" style="padding:.5rem 1rem;background:#2a1a40;color:#c084fc;border:1px solid #7c3aed;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;">🖨 Drucken</button>

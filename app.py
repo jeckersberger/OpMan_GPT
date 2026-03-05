@@ -387,9 +387,17 @@ def create_app():
     def protokoll():
         return render_template("protokoll.html", cases=_cases_dict(active_only=True))
 
-    @app.get("/api/server-info")
-    def server_info():
-        """Gibt die LAN-IP-Adresse des Servers zurück (für Handy-QR-Code)."""
+    def _resolve_base_url() -> str:
+        """Zentrale URL-Auflösung: DB-Override > ENV BASE_URL > Auto-Detect LAN-IP."""
+        # 1. DB-Override (über QR-Setup Modal gesetzt)
+        cfg = db.session.get(ExerciseConfig, 1)
+        if cfg and cfg.base_url:
+            return cfg.base_url.rstrip("/")
+        # 2. Environment-Variable (docker-compose / .env)
+        env_url = os.environ.get("BASE_URL", "").strip().rstrip("/")
+        if env_url:
+            return env_url
+        # 3. Auto-Detect LAN-IP (Fallback)
         import socket as _socket
         try:
             s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
@@ -398,26 +406,30 @@ def create_app():
             s.close()
         except Exception:
             lan_ip = "127.0.0.1"
-        port = 5000
-        # HTTPS wenn Zertifikat vorhanden (run.py wurde verwendet)
         _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "instance", "cert.pem")
         proto = "https" if os.path.exists(_cert) else "http"
-        # EVT-URL: bei HTTPS ueber HTTP-Port 5080 (automatischer Zertifikat-Setup)
         if proto == "https":
-            evt_url = f"http://{lan_ip}:5080/evt"
-        else:
-            evt_url = f"{proto}://{lan_ip}:{port}/evt"
-        # Benutzerdefinierte Base-URL hat Vorrang
-        cfg = db.session.get(ExerciseConfig, 1)
-        custom_base = (cfg.base_url.rstrip("/") if cfg and cfg.base_url else "").strip()
-        if custom_base:
-            evt_url = f"{custom_base}/evt"
+            return f"http://{lan_ip}:5080"
+        return f"{proto}://{lan_ip}:5000"
+
+    @app.get("/api/server-info")
+    def server_info():
+        """Gibt die Base-URL und EVT-URL zurück (für Handy-QR-Code)."""
+        import socket as _socket
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            lan_ip = "127.0.0.1"
+        base = _resolve_base_url()
         return jsonify({
             "ip": lan_ip,
-            "port": port,
-            "base_url": custom_base or f"{proto}://{lan_ip}:{port}",
-            "evt_url":  evt_url,
+            "port": 5000,
+            "base_url": base,
+            "evt_url":  f"{base}/evt",
         })
 
     @app.get("/api/test-internet")
@@ -494,28 +506,9 @@ def create_app():
             return jsonify({"error": f"qrcode-Paket fehlt: {e} – pip install 'qrcode[svg]'"}), 500
 
         try:
-            import socket as _socket
-            try:
-                s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 80))
-                lan_ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                lan_ip = "127.0.0.1"
-            _cert = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "instance", "cert.pem")
-            proto = "https" if os.path.exists(_cert) else "http"
-            if proto == "https":
-                base = f"http://{lan_ip}:5080"
-            else:
-                base = f"{proto}://{lan_ip}:5000"
-
+            base = _resolve_base_url()
             cfg = db.session.get(ExerciseConfig, 1)
             evt_count = cfg.evt_count if cfg else 6
-
-            # Benutzerdefinierte Base-URL hat Vorrang vor automatischer Erkennung
-            if cfg and cfg.base_url:
-                base = cfg.base_url.rstrip("/")
 
             def _make_qr(url: str, box_size: int = 8) -> str:
                 qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,

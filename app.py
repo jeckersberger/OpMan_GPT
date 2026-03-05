@@ -109,7 +109,7 @@ def _fmt_dt(dt):
 # ---------------------------
 # what3words API
 # ---------------------------
-W3W_API_KEY = "2ZJ55EYB"
+W3W_API_KEY = os.environ.get("W3W_API_KEY", "2ZJ55EYB")
 W3W_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "w3w_cache.json")
 STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
 

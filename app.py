@@ -902,6 +902,83 @@ function show(id){
         db.session.commit()
         return jsonify({"evt_count": cfg.evt_count, "base_url": cfg.base_url or ""})
 
+    # ---------------------------
+    # App Update (git pull from main)
+    # ---------------------------
+    @app.post("/api/update")
+    def app_update():
+        """Zieht die neueste Version aus main und startet die App neu."""
+        import subprocess
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 1. Git pull
+        try:
+            pull = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                cwd=app_dir, capture_output=True, text=True, timeout=30
+            )
+            if pull.returncode != 0:
+                return jsonify({"ok": False, "step": "git pull",
+                                "error": pull.stderr.strip()}), 500
+            git_output = pull.stdout.strip()
+        except FileNotFoundError:
+            return jsonify({"ok": False, "step": "git pull",
+                            "error": "git nicht installiert oder Code nicht als Git-Repo gemountet"}), 500
+        except Exception as e:
+            return jsonify({"ok": False, "step": "git pull", "error": str(e)}), 500
+
+        already_up_to_date = "Already up to date" in git_output or "Bereits aktuell" in git_output
+
+        # 2. pip install (nur bare-metal mit venv)
+        pip_output = ""
+        venv_pip = os.path.join(app_dir, "venv", "bin", "pip")
+        if os.path.exists(venv_pip):
+            try:
+                pip_run = subprocess.run(
+                    [venv_pip, "install", "--quiet", "-r",
+                     os.path.join(app_dir, "requirements.txt")],
+                    cwd=app_dir, capture_output=True, text=True, timeout=120
+                )
+                pip_output = pip_run.stdout.strip()
+            except Exception as e:
+                pip_output = f"pip warning: {e}"
+
+        # 3. Gunicorn graceful reload (SIGHUP an Master-Prozess)
+        restarted = False
+        if not already_up_to_date:
+            try:
+                import signal
+                os.kill(os.getppid(), signal.SIGHUP)
+                restarted = True
+            except Exception:
+                pass
+
+        return jsonify({
+            "ok": True,
+            "git": git_output,
+            "pip": pip_output,
+            "already_up_to_date": already_up_to_date,
+            "restarted": restarted,
+        })
+
+    @app.get("/api/update/check")
+    def update_check():
+        """Prüft ob Updates verfügbar sind (git fetch + log)."""
+        import subprocess
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        try:
+            subprocess.run(["git", "fetch", "origin", "main"],
+                           cwd=app_dir, capture_output=True, timeout=15)
+            log = subprocess.run(
+                ["git", "log", "HEAD..origin/main", "--oneline"],
+                cwd=app_dir, capture_output=True, text=True, timeout=10
+            )
+            commits = [l for l in log.stdout.strip().split("\n") if l]
+            return jsonify({"available": len(commits) > 0,
+                            "commits": commits, "count": len(commits)})
+        except Exception as e:
+            return jsonify({"available": False, "error": str(e)})
+
     @app.post("/api/exercise/import-missions")
     def import_exercise_missions():
         """Erstellt Missions aus den Übungsfällen (statische Koordinaten)."""

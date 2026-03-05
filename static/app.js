@@ -1413,6 +1413,73 @@ function printQrCodes() {
   w.onload = () => { w.print(); };
 }
 
+// ---------------- App Update ----------------
+async function showUpdateModal() {
+  const modal = document.getElementById("updateModal");
+  const info = document.getElementById("updateCheckInfo");
+  const status = document.getElementById("updateStatus");
+  const btn = document.getElementById("btnDoUpdate");
+  status.style.display = "none";
+  status.textContent = "";
+  btn.disabled = false;
+  btn.textContent = "⬆ Jetzt updaten";
+  info.textContent = "Prüfe auf Updates…";
+  modal.style.display = "flex";
+  try {
+    const res = await fetch("/api/update/check");
+    const data = await res.json();
+    if (data.error) {
+      info.innerHTML = `<span style="color:#f5c842;">⚠ Konnte nicht prüfen: ${esc(data.error)}</span>`;
+    } else if (data.available) {
+      info.innerHTML = `<span style="color:#3ddc84;">✓ ${data.count} neue(s) Commit(s) verfügbar:</span>`;
+      status.style.display = "block";
+      status.textContent = data.commits.join("\n");
+    } else {
+      info.innerHTML = `<span style="color:#a6b3d1;">✓ Bereits auf dem neuesten Stand.</span>`;
+    }
+  } catch (e) {
+    info.innerHTML = `<span style="color:#ff6b6b;">Fehler: ${esc(e.message)}</span>`;
+  }
+}
+
+async function doAppUpdate() {
+  const btn = document.getElementById("btnDoUpdate");
+  const status = document.getElementById("updateStatus");
+  const info = document.getElementById("updateCheckInfo");
+  btn.disabled = true;
+  btn.textContent = "⏳ Update läuft…";
+  status.style.display = "block";
+  status.textContent = "$ git pull origin main\n";
+  info.textContent = "";
+  try {
+    const res = await fetch("/api/update", {method: "POST"});
+    const data = await res.json();
+    if (!data.ok) {
+      status.textContent += `\n❌ Fehler bei ${data.step}:\n${data.error}`;
+      btn.textContent = "❌ Fehlgeschlagen";
+      return;
+    }
+    status.textContent += data.git + "\n";
+    if (data.pip) status.textContent += `\n$ pip install\n${data.pip}\n`;
+    if (data.already_up_to_date) {
+      status.textContent += "\n✓ Bereits auf dem neuesten Stand.";
+      btn.textContent = "✓ Aktuell";
+    } else {
+      status.textContent += "\n✓ Update erfolgreich!";
+      if (data.restarted) {
+        status.textContent += "\n⟳ App wird neu gestartet – Seite lädt gleich neu…";
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        status.textContent += "\n⚠ Bitte App manuell neu starten (Docker: bash update.sh --docker)";
+      }
+      btn.textContent = "✓ Fertig";
+    }
+  } catch (e) {
+    status.textContent += `\n❌ Verbindungsfehler: ${e.message}`;
+    btn.textContent = "❌ Fehlgeschlagen";
+  }
+}
+
 // ---------------- Übungs-Timer ----------------
 let _timerStart   = null;   // Date when timer was started
 let _timerElapsed = 0;      // ms accumulated before last pause

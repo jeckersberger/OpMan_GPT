@@ -55,6 +55,8 @@
       <span class="hint">Klick auf Karte = Koordinaten übernehmen</span>
       <div class="divider"></div>
       <span id="lanInfo" class="hint" style="cursor:pointer;color:#4ea1ff;" title="Handy-Zugang anzeigen" onclick="showLanModal()">📡 …</span>
+      <div class="divider"></div>
+      <button class="navbtn" style="background:#0a1a0a;color:#3ddc84;border:1px solid #3ddc84;font-size:.75rem;" onclick="showUpdateModal()">⬆ Update</button>
     </nav>
   </header>
 
@@ -156,6 +158,20 @@
     </div>
   </div>
 
+
+  <!-- Update Modal -->
+  <div id="updateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#111b2e;border:1px solid #223152;border-radius:12px;padding:1.5rem;max-width:450px;width:90%;text-align:center;">
+      <h3 style="margin-bottom:.5rem;font-size:1rem;color:#3ddc84;">⬆ App-Update</h3>
+      <p style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Neueste Version aus <code style="background:#0b1220;padding:.1rem .4rem;border-radius:4px;">main</code> ziehen und App neu starten.</p>
+      <div id="updateStatus" style="display:none;text-align:left;background:#0b1220;border:1px solid #223152;border-radius:8px;padding:.75rem;margin-bottom:1rem;font-family:monospace;font-size:.75rem;color:#a6b3d1;max-height:200px;overflow-y:auto;white-space:pre-wrap;"></div>
+      <div id="updateCheckInfo" style="font-size:.8rem;color:#a6b3d1;margin-bottom:1rem;">Prüfe auf Updates…</div>
+      <div style="display:flex;gap:.75rem;justify-content:center;">
+        <button id="btnDoUpdate" onclick="doAppUpdate()" style="padding:.5rem 1rem;background:#0a2a0a;color:#3ddc84;border:1px solid #3ddc84;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;">⬆ Jetzt updaten</button>
+        <button onclick="document.getElementById('updateModal').style.display='none'" style="padding:.5rem 1rem;background:#4ea1ff;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;">Schließen</button>
+      </div>
+    </div>
+  </div>
 
 <!-- Sprechwunsch-Panel (fliegt rechts unten ein bei S0/S5) -->
   <div id="swPanel" class="sw-panel"></div>

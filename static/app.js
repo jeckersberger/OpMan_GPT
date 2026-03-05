@@ -664,6 +664,7 @@ function renderTeams(){
 // ---------------- Render: Missions ----------------
 function renderMissions(){
   const root = $("missionsList");
+  if (!root) return;
   root.innerHTML = "";
 
   // Panel nur anzeigen wenn Einsätze existieren
@@ -823,6 +824,7 @@ function renderMissions(){
 // ---------------- Render: Assignments ----------------
 function renderAssignments(){
   const root = $("assignmentsList");
+  if (!root) return;
   root.innerHTML = "";
 
   assignments.forEach(a => {

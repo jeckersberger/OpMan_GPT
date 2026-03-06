@@ -33,10 +33,8 @@ USER 1000
 
 EXPOSE 8000
 
-# GUNICORN_WORKERS kann per Env überschrieben werden
-CMD sh -c "exec gunicorn \
-      --bind 0.0.0.0:8000 \
-      --workers ${GUNICORN_WORKERS:-2} \
-      --timeout 120 \
-      --access-logfile - \
-      'app:create_app()'"
+# Entrypoint: git pull + gunicorn
+COPY --chown=opman:opman entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]

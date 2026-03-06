@@ -966,10 +966,11 @@ function show(id){
     # App Update (git pull from main)
     # ---------------------------
     def _git_repo_url():
-        """Gibt die Repo-URL zurück – mit Token falls GITHUB_TOKEN gesetzt (privates Repo)."""
+        """Gibt die Repo-URL zurück – mit User:Token falls gesetzt (privates Repo)."""
+        user = os.environ.get("GITHUB_USER", "").strip()
         token = os.environ.get("GITHUB_TOKEN", "").strip()
-        if token:
-            return f"https://{token}@github.com/jeckersberger/OpMan_GPT.git"
+        if user and token:
+            return f"https://{user}:{token}@github.com/jeckersberger/OpMan_GPT.git"
         return "https://github.com/jeckersberger/OpMan_GPT.git"
 
     def _ensure_git():

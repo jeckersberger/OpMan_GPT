@@ -965,7 +965,13 @@ function show(id){
     # ---------------------------
     # App Update (git pull from main)
     # ---------------------------
-    _GIT_REPO = "https://github.com/jeckersberger/OpMan_GPT.git"
+    def _git_repo_url():
+        """Gibt die Repo-URL zurück – mit User:Token falls gesetzt (privates Repo)."""
+        user = os.environ.get("GITHUB_USER", "").strip()
+        token = os.environ.get("GITHUB_TOKEN", "").strip()
+        if user and token:
+            return f"https://{user}:{token}@github.com/jeckersberger/OpMan_GPT.git"
+        return "https://github.com/jeckersberger/OpMan_GPT.git"
 
     def _ensure_git():
         """Prüft ob git verfügbar ist; versucht es ggf. zu installieren."""
@@ -1001,7 +1007,7 @@ function show(id){
                 cwd=app_dir, capture_output=True, timeout=5
             )
             subprocess.run(
-                ["git", "remote", "set-url", "origin", _GIT_REPO],
+                ["git", "remote", "set-url", "origin", _git_repo_url()],
                 cwd=app_dir, capture_output=True, timeout=5
             )
         except Exception:
@@ -1068,7 +1074,7 @@ function show(id){
         try:
             subprocess.run(["git", "config", "--global", "--add", "safe.directory", app_dir],
                            cwd=app_dir, capture_output=True, timeout=5)
-            subprocess.run(["git", "remote", "set-url", "origin", _GIT_REPO],
+            subprocess.run(["git", "remote", "set-url", "origin", _git_repo_url()],
                            cwd=app_dir, capture_output=True, timeout=5)
             subprocess.run(["git", "fetch", "origin", "main"],
                            cwd=app_dir, capture_output=True, timeout=15)

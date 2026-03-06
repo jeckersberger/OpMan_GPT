@@ -19,6 +19,10 @@ services:
       # Beispiel: https://uebung.feuerwehr-musterstadt.de
       BASE_URL: "${BASE_URL:-}"
 
+      # GitHub-Zugang für Updates aus dem privaten Repo
+      GITHUB_USER: "${GITHUB_USER:-}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+
     volumes:
       # Gesamtes Repo mounten → git pull im Container aktualisiert den Code
       # persistent auf dem Host-Dateisystem (überlebt Container-Neustarts).

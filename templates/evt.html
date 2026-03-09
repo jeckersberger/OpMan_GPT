@@ -879,7 +879,10 @@ document.getElementById('testAlarmDismiss').addEventListener('click', async () =
 });
 
 // ── Übungsende ──────────────────────────────────────────────
+let _uebungsendeActive = false;
+
 function showUebungsende() {
+  _uebungsendeActive = true;
   _playTestAlarmTone();
   if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
   document.getElementById('uebungsendeOverlay').classList.add('show');
@@ -907,7 +910,9 @@ function renderMain(team, doc, meta) {
   const rs      = team ? team.radio_status : null;
   const rsCls   = rs !== null ? `c-${[0,5].includes(rs) ? 0 : rs}` : '';
   const pending = !!(team && team.pending_alarm);
-  const rsLabel = rs !== null ? (FMS_LABELS[rs] || 'S' + rs) + (pending ? ' ·P' : '') : '–';
+  const rsLabel = _uebungsendeActive
+    ? '🏁 Übungsende'
+    : rs !== null ? (FMS_LABELS[rs] || 'S' + rs) + (pending ? ' ·P' : '') : '–';
   const notFound = !team;
 
   // Team-Status-Block

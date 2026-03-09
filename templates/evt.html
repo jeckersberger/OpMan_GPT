@@ -429,12 +429,10 @@
     <div style="font-size:1rem;color:#e7eefc;margin-bottom:.8rem;line-height:1.5;">
       Die Übung ist beendet!
     </div>
-    <div style="margin-bottom:1.2rem;padding:.8rem 1rem;background:rgba(0,0,0,.4);border-radius:8px;border:1px solid rgba(192,132,252,0.3);text-align:left;">
-      <div style="font-size:.9rem;color:#fff;font-weight:700;margin-bottom:.5rem;">Bitte folgende Schritte durchführen:</div>
+    <div style="margin-bottom:1.2rem;padding:.8rem 1rem;background:rgba(0,0,0,.4);border-radius:8px;border:1px solid rgba(192,132,252,0.3);text-align:center;">
       <div style="font-size:.85rem;color:#d4d4d4;line-height:1.6;">
-        1. Das heruntergeladene EVT-Script <b>deaktivieren</b><br>
-        2. Das Script vom Gerät <b>löschen</b><br>
-        3. Diese Seite schließen
+        Vielen Dank für die Teilnahme!<br>
+        Diese Seite kann jetzt <b>geschlossen</b> werden.
       </div>
     </div>
     <button class="alarm-dismiss" id="uebungsendeDismiss" style="background:#c084fc;color:#000;">✓ Verstanden</button>
@@ -885,7 +883,7 @@ function showUebungsende() {
   _playTestAlarmTone();
   if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
   document.getElementById('uebungsendeOverlay').classList.add('show');
-  _showNotification('ÜBUNGSENDE', 'Die Übung ist beendet. Bitte Script deaktivieren und löschen.');
+  _showNotification('ÜBUNGSENDE', 'Die Übung ist beendet. Diese Seite kann geschlossen werden.');
 }
 
 document.getElementById('uebungsendeDismiss').addEventListener('click', async () => {

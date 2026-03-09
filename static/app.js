@@ -1595,6 +1595,28 @@ async function sendTestAlarm() {
   }
 }
 
+// ---------------- Übungsende ----------------
+function showUebungsendeModal() {
+  $("uebungsendeModal").style.display = "flex";
+}
+
+async function sendUebungsende() {
+  const btn = $("ueSendBtn");
+  btn.disabled = true;
+  btn.textContent = "Sende…";
+  try {
+    await api("/api/uebungsende", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    $("uebungsendeModal").style.display = "none";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🏁 Senden";
+  }
+}
+
 // ---------------- Boot ----------------
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();

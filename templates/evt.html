@@ -891,7 +891,10 @@ document.getElementById('uebungsendeDismiss').addEventListener('click', async ()
   if (navigator.vibrate) navigator.vibrate(0);
   document.getElementById('uebungsendeOverlay').classList.remove('show');
   if (currentTeamId) {
-    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
+    await Promise.all([
+      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
+      setFms(1),  // S1 Frei auf Funk
+    ]);
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');

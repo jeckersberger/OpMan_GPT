@@ -429,10 +429,17 @@
     <div style="font-size:1rem;color:#e7eefc;margin-bottom:.8rem;line-height:1.5;">
       Die Übung ist beendet!
     </div>
+    <div style="margin-bottom:.8rem;padding:.6rem .8rem;background:rgba(0,0,0,.35);border-radius:8px;border:1px solid rgba(192,132,252,0.3);">
+      <div style="font-size:.7rem;color:#a6b3d1;margin-bottom:.3rem;">Startpunkt:</div>
+      <a href="https://what3words.com/{{ startpunkt_w3w }}" target="_blank"
+         style="color:#4ea1ff;font-size:.95rem;font-weight:600;text-decoration:none;">
+        📍 ///{{ startpunkt_w3w }}
+      </a>
+    </div>
     <div style="margin-bottom:1.2rem;padding:.8rem 1rem;background:rgba(0,0,0,.4);border-radius:8px;border:1px solid rgba(192,132,252,0.3);text-align:center;">
       <div style="font-size:.85rem;color:#d4d4d4;line-height:1.6;">
         Vielen Dank für die Teilnahme!<br>
-        Diese Seite kann jetzt <b>geschlossen</b> werden.
+        Bitte zum <b>Startpunkt</b> zurückkehren.
       </div>
     </div>
     <button class="alarm-dismiss" id="uebungsendeDismiss" style="background:#c084fc;color:#000;">✓ Verstanden</button>
@@ -619,6 +626,15 @@ async function poll() {
     // Testalarm erkennen
     if (data.team && data.team.test_alarm_at) {
       showTestAlarm(data.team);
+    } else if (_uebungsendeActive) {
+      // Reset wurde ausgelöst → Übungsende aufheben
+      _uebungsendeActive = false;
+      _testAlarmShown = null;
+      localStorage.removeItem('evt_testAlarmShown');
+      _stopTestAlarmTone();
+      if (navigator.vibrate) navigator.vibrate(0);
+      document.getElementById('uebungsendeOverlay').classList.remove('show');
+      document.getElementById('uebungsendeDismiss').style.display = '';
     }
 
     renderMain(data.team, data.case, data.case_meta);
@@ -890,7 +906,8 @@ function showUebungsende() {
 document.getElementById('uebungsendeDismiss').addEventListener('click', async () => {
   _stopTestAlarmTone();
   if (navigator.vibrate) navigator.vibrate(0);
-  document.getElementById('uebungsendeOverlay').classList.remove('show');
+  // Overlay bleibt sichtbar – nur Quittier-Button ausblenden
+  document.getElementById('uebungsendeDismiss').style.display = 'none';
   if (currentTeamId) {
     // Erst DELETE (Testalarm-Flag entfernen), dann S1 setzen (poll() darin)
     await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });

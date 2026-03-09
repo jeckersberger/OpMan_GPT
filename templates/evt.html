@@ -869,10 +869,8 @@ document.getElementById('testAlarmDismiss').addEventListener('click', async () =
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('testAlarmOverlay').classList.remove('show');
   if (currentTeamId) {
-    await Promise.all([
-      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
-      setFms(3),
-    ]);
+    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
+    await setFms(3);
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');
@@ -894,10 +892,9 @@ document.getElementById('uebungsendeDismiss').addEventListener('click', async ()
   if (navigator.vibrate) navigator.vibrate(0);
   document.getElementById('uebungsendeOverlay').classList.remove('show');
   if (currentTeamId) {
-    await Promise.all([
-      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
-      setFms(1),  // S1 Frei auf Funk
-    ]);
+    // Erst DELETE (Testalarm-Flag entfernen), dann S1 setzen (poll() darin)
+    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
+    await setFms(1);  // S1 Frei auf Funk
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');

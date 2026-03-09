@@ -869,17 +869,18 @@ document.getElementById('testAlarmDismiss').addEventListener('click', async () =
   if (navigator.vibrate) navigator.vibrate(0);  // Vibration stoppen
   document.getElementById('testAlarmOverlay').classList.remove('show');
   if (currentTeamId) {
-    await Promise.all([
-      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
-      setFms(3),
-    ]);
+    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
+    await setFms(3);
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');
 });
 
 // ── Übungsende ──────────────────────────────────────────────
+let _uebungsendeActive = false;
+
 function showUebungsende() {
+  _uebungsendeActive = true;
   _playTestAlarmTone();
   if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
   document.getElementById('uebungsendeOverlay').classList.add('show');
@@ -891,10 +892,9 @@ document.getElementById('uebungsendeDismiss').addEventListener('click', async ()
   if (navigator.vibrate) navigator.vibrate(0);
   document.getElementById('uebungsendeOverlay').classList.remove('show');
   if (currentTeamId) {
-    await Promise.all([
-      fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
-      setFms(1),  // S1 Frei auf Funk
-    ]);
+    // Erst DELETE (Testalarm-Flag entfernen), dann S1 setzen (poll() darin)
+    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
+    await setFms(1);  // S1 Frei auf Funk
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');
@@ -907,7 +907,9 @@ function renderMain(team, doc, meta) {
   const rs      = team ? team.radio_status : null;
   const rsCls   = rs !== null ? `c-${[0,5].includes(rs) ? 0 : rs}` : '';
   const pending = !!(team && team.pending_alarm);
-  const rsLabel = rs !== null ? (FMS_LABELS[rs] || 'S' + rs) + (pending ? ' ·P' : '') : '–';
+  const rsLabel = _uebungsendeActive
+    ? '🏁 Übungsende'
+    : rs !== null ? (FMS_LABELS[rs] || 'S' + rs) + (pending ? ' ·P' : '') : '–';
   const notFound = !team;
 
   // Team-Status-Block

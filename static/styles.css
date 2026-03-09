@@ -22,7 +22,7 @@ body{ display:flex; flex-direction:column; }
 }
 .brand{ font-weight:700; letter-spacing:0.2px; white-space:nowrap; flex-shrink:0; font-size:14px; }
 .topnav{ display:flex; gap:4px; align-items:center; color:var(--muted);
-  flex-wrap:nowrap; padding:2px 0;
+  flex-wrap:nowrap; padding:2px 0; margin-left:auto;
 }
 .navbtn{
   background:var(--panel); border:1px solid var(--border); color:var(--text);

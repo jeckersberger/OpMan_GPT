@@ -8,7 +8,7 @@
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=8" />
   <style>
     /* Puls-Animation für Live-GPS-Marker */
     @keyframes gps-pulse {
@@ -230,6 +230,6 @@
   {% if initial_data %}
   <script>window.__INITIAL_DATA__ = {{ initial_data | safe }};</script>
   {% endif %}
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>

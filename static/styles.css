@@ -16,17 +16,21 @@ html,body{ height:100%; margin:0; font-family: system-ui, -apple-system, Segoe U
   display:flex; align-items:center; justify-content:space-between;
   padding:0 14px; background:rgba(15, 23, 42, 0.92);
   border-bottom:1px solid var(--border); z-index:1000;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px); overflow:hidden;
 }
-.brand{ font-weight:700; letter-spacing:0.2px; }
-.topnav{ display:flex; gap:10px; align-items:center; color:var(--muted); }
+.brand{ font-weight:700; letter-spacing:0.2px; white-space:nowrap; flex-shrink:0; }
+.topnav{ display:flex; gap:10px; align-items:center; color:var(--muted);
+  overflow-x:auto; overflow-y:hidden; flex:1; min-width:0; padding:4px 0;
+  scrollbar-width:none; -ms-overflow-style:none;
+}
+.topnav::-webkit-scrollbar{ display:none; }
 .navbtn{
   background:var(--panel); border:1px solid var(--border); color:var(--text);
-  padding:8px 10px; border-radius:10px; cursor:pointer;
+  padding:8px 10px; border-radius:10px; cursor:pointer; white-space:nowrap; flex-shrink:0;
 }
 .navbtn:hover{ border-color:var(--accent); }
-.divider{ width:1px; height:24px; background:var(--border); margin:0 6px; }
-.hint{ font-size:12px; }
+.divider{ width:1px; height:24px; background:var(--border); margin:0 6px; flex-shrink:0; }
+.hint{ font-size:12px; white-space:nowrap; flex-shrink:0; }
 
 .layout{
   position:fixed; top:56px; bottom:0; left:0; right:0;

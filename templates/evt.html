@@ -421,6 +421,26 @@
   </div>
 </div>
 
+<!-- ══ ÜBUNGSENDE OVERLAY ══ -->
+<div class="alarm-overlay" id="uebungsendeOverlay" style="background:rgba(60,0,100,0.88);">
+  <div class="alarm-box" style="border-color:#c084fc;box-shadow:0 0 40px rgba(192,132,252,0.5);">
+    <div class="alarm-icon">🏁</div>
+    <div class="alarm-title" style="color:#c084fc;">ÜBUNGSENDE</div>
+    <div style="font-size:1rem;color:#e7eefc;margin-bottom:.8rem;line-height:1.5;">
+      Die Übung ist beendet!
+    </div>
+    <div style="margin-bottom:1.2rem;padding:.8rem 1rem;background:rgba(0,0,0,.4);border-radius:8px;border:1px solid rgba(192,132,252,0.3);text-align:left;">
+      <div style="font-size:.9rem;color:#fff;font-weight:700;margin-bottom:.5rem;">Bitte folgende Schritte durchführen:</div>
+      <div style="font-size:.85rem;color:#d4d4d4;line-height:1.6;">
+        1. Das heruntergeladene EVT-Script <b>deaktivieren</b><br>
+        2. Das Script vom Gerät <b>löschen</b><br>
+        3. Diese Seite schließen
+      </div>
+    </div>
+    <button class="alarm-dismiss" id="uebungsendeDismiss" style="background:#c084fc;color:#000;">✓ Verstanden</button>
+  </div>
+</div>
+
 <!-- ══ AKTIVIERUNGS-OVERLAY (Audio-Freischaltung) ══ -->
 <div class="activate-overlay" id="activateOverlay">
   <div class="activate-box">
@@ -830,6 +850,13 @@ function showTestAlarm(team) {
   if (_testAlarmShown === key) return;  // bereits angezeigt
   _testAlarmShown = key;
   localStorage.setItem('evt_testAlarmShown', key);
+
+  // Übungsende erkennen
+  if (team.test_alarm_text === '__UEBUNGSENDE__') {
+    showUebungsende();
+    return;
+  }
+
   _playTestAlarmTone();  // spielt in Schleife
   if (navigator.vibrate) navigator.vibrate([300, 100, 300, 500, 300, 100, 300]);
   document.getElementById('testAlarmText').textContent = team.test_alarm_text || 'Testalarm';
@@ -848,6 +875,25 @@ document.getElementById('testAlarmDismiss').addEventListener('click', async () =
       fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' }),
       setFms(3),
     ]);
+  }
+  _testAlarmShown = null;
+  localStorage.removeItem('evt_testAlarmShown');
+});
+
+// ── Übungsende ──────────────────────────────────────────────
+function showUebungsende() {
+  _playTestAlarmTone();
+  if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
+  document.getElementById('uebungsendeOverlay').classList.add('show');
+  _showNotification('ÜBUNGSENDE', 'Die Übung ist beendet. Bitte Script deaktivieren und löschen.');
+}
+
+document.getElementById('uebungsendeDismiss').addEventListener('click', async () => {
+  _stopTestAlarmTone();
+  if (navigator.vibrate) navigator.vibrate(0);
+  document.getElementById('uebungsendeOverlay').classList.remove('show');
+  if (currentTeamId) {
+    await fetch(`/api/testalarm/${currentTeamId}`, { method: 'DELETE' });
   }
   _testAlarmShown = null;
   localStorage.removeItem('evt_testAlarmShown');

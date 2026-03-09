@@ -1615,6 +1615,21 @@ function show(id){
         return jsonify({"ok": True})
 
     # ---------------------------
+    # Übungsende
+    # ---------------------------
+    @app.post("/api/uebungsende")
+    def send_uebungsende():
+        """Sendet Übungsende-Hinweis an alle EVT-Teams."""
+        now = _utcnow()
+        targets = Team.query.all()
+        for team in targets:
+            team.test_alarm_at   = now
+            team.test_alarm_text = "__UEBUNGSENDE__"
+            team.updated_at      = now
+        db.session.commit()
+        return jsonify({"ok": True, "sent_to": [t.id for t in targets]})
+
+    # ---------------------------
     # Web-Push Subscriptions
     # ---------------------------
     @app.get("/api/push/vapid-key")

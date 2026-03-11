@@ -386,6 +386,10 @@ def create_app():
         initial_data = _json.dumps(_build_dashboard_dict(), ensure_ascii=False)
         return render_template("index.html", initial_data=initial_data)
 
+    @app.get("/datenschutz")
+    def datenschutz():
+        return render_template("datenschutz.html", today=datetime.now().strftime("%d.%m.%Y"))
+
     @app.get("/protokoll")
     def protokoll():
         return render_template("protokoll.html", cases=_cases_dict(active_only=True))

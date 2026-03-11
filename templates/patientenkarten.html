@@ -31,7 +31,8 @@
       min-height: 297mm;
       background: #fff;
       box-shadow: 0 4px 24px rgba(0,0,0,.4);
-      border-radius: 4px;
+      border: 0.5pt solid #bbb;
+      border-radius: 0;
       padding: 12mm 14mm;
       display: flex;
       flex-direction: column;
@@ -58,7 +59,7 @@
     /* Zwei-Spalten: Patient + Vitals */
     .top-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
     .info-table { width: 100%; border-collapse: collapse; border: 1px solid #ccc; }
-    .info-table td { padding: 1.2mm 2.5mm; vertical-align: top; font-size: 8.5pt; border-bottom: 1px solid #ddd; }
+    .info-table td { padding: 1.8mm 3mm; vertical-align: top; font-size: 8.5pt; border-bottom: 1px solid #ddd; }
     .info-table tr:last-child td { border-bottom: none; }
     .info-table td:first-child { color: #555; white-space: nowrap; font-size: 8pt; border-right: 1px solid #ddd; width: 30%; }
     .info-table td:last-child { font-weight: 600; }
@@ -70,26 +71,26 @@
     .vitals-box table { width: 100%; border-collapse: collapse; }
     .vitals-box tr { border-bottom: 1px solid #e0e8f0; }
     .vitals-box tr:last-child { border-bottom: none; }
-    .vitals-box td { padding: 1mm 2.5mm; font-size: 8.5pt; }
+    .vitals-box td { padding: 1.5mm 2.5mm; font-size: 8.5pt; }
     .vitals-box td:first-child { color: #555; width: 50%; font-size: 8pt; border-right: 1px solid #e0e8f0; }
     .vitals-box td:last-child { font-weight: 700; }
-    .vitals-header { background: #555; color: #fff; font-weight: 700; font-size: 8pt;
+    .vitals-header { background: #333; color: #fff; font-weight: 700; font-size: 8pt;
                      padding: 1.5mm 2.5mm; }
 
     /* Sections */
-    .section { margin-bottom: 3mm; }
+    .section { margin-bottom: 4mm; }
     .section-head {
       background: #f0f0f0; color: #222; font-weight: 700; font-size: 8.5pt;
-      padding: 1.5mm 3mm; border-left: 3px solid #333; margin-bottom: 1.5mm;
+      padding: 2mm 3mm; border-left: 3px solid #333; margin-bottom: 2mm;
       letter-spacing: .03em;
     }
     .befund-list { margin: 0; padding: 0 0 0 5mm; }
-    .befund-list li { margin-bottom: .8mm; font-size: 8.5pt; }
+    .befund-list li { margin-bottom: 1mm; font-size: 8.5pt; line-height: 1.5; }
 
     .schema-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; }
     .schema-table tr { border-bottom: 1px solid #ddd; }
     .schema-table tr:last-child { border-bottom: none; }
-    .schema-table td { padding: 1.2mm 2.5mm; font-size: 8pt; vertical-align: top; border-right: 1px solid #ddd; }
+    .schema-table td { padding: 1.8mm 2.5mm; font-size: 8pt; vertical-align: top; border-right: 1px solid #ddd; line-height: 1.5; }
     .schema-table td:last-child { border-right: none; }
     .schema-table td.letter-cell {
       width: 18px; text-align: center; font-weight: 900; color: #fff;
@@ -121,10 +122,11 @@
 
     /* ── Rückseite ── */
     .back-page {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 8mm; text-align: center; position: relative;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: flex-start; padding-top: 50mm !important;
+      gap: 10mm; text-align: center; position: relative;
     }
-    .back-main { font-weight: 700; max-width: 140mm; line-height: 1.5; }
+    .back-main { font-weight: 700; max-width: 150mm; line-height: 1.5; }
     .back-thanks { color: #222; }
 
     /* ── EL-Blatt (Übungsleitung only) ── */
@@ -154,7 +156,8 @@
       .screen-bar { display: none !important; }
       .pages-wrap { gap: 0; }
       .page {
-        width: 100%; min-height: 100vh; box-shadow: none; border-radius: 0;
+        width: 100%; min-height: 100vh; box-shadow: none; border: 0.5pt solid #bbb;
+        border-radius: 0;
         page-break-after: always; break-after: page;
         padding: 12mm 14mm;
       }
@@ -223,13 +226,13 @@
       <div class="vitals-box">
         <div class="vitals-header">Vitalparameter</div>
         <table>
-          {% if v.RR   %}<tr><td>Blutdruck (RR)</td><td>{{ v.RR }} mmHg</td></tr>{% endif %}
-          {% if v.HF   %}<tr><td>Herzfrequenz (HF)</td><td>{{ v.HF }} /min</td></tr>{% endif %}
-          {% if v.AF   %}<tr><td>Atemfrequenz (AF)</td><td>{{ v.AF }} /min</td></tr>{% endif %}
-          {% if v.SpO2 %}<tr><td>Sauerstoffsättigung</td><td>{{ v.SpO2 }}</td></tr>{% endif %}
-          {% if v.Temp %}<tr><td>Temperatur</td><td>{{ v.Temp }} °C</td></tr>{% endif %}
+          {% if v.RR   %}<tr><td>RR</td><td>{{ v.RR }} mmHg</td></tr>{% endif %}
+          {% if v.HF   %}<tr><td>HF</td><td>{{ v.HF }} /min</td></tr>{% endif %}
+          {% if v.AF   %}<tr><td>AF</td><td>{{ v.AF }} /min</td></tr>{% endif %}
+          {% if v.SpO2 %}<tr><td>SpO2</td><td>{{ v.SpO2 }}</td></tr>{% endif %}
+          {% if v.Temp %}<tr><td>Temp</td><td>{{ v.Temp }} °C</td></tr>{% endif %}
           {% if v.GCS  %}<tr><td>GCS</td><td>{{ v.GCS }}</td></tr>{% endif %}
-          {% if v.BZ   %}<tr><td>Blutzucker (BZ)</td><td>{{ v.BZ }} mg/dl</td></tr>{% endif %}
+          {% if v.BZ   %}<tr><td>BZ</td><td>{{ v.BZ }} mg/dl</td></tr>{% endif %}
         </table>
       </div>
       {% endif %}

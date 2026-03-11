@@ -42,56 +42,58 @@
     /* Header */
     .card-header {
       display: flex; align-items: center; justify-content: space-between;
-      border: 1.5px solid #1a3a6b; border-radius: 4px;
-      padding: 2mm 3mm; margin-bottom: 3mm;
+      border: 1.5px solid #999; border-radius: 2px;
+      padding: 2.5mm 4mm; margin-bottom: 4mm;
     }
-    .card-header-left { font-size: 8pt; font-weight: 700; color: #1a3a6b; white-space: nowrap; }
+    .card-header-left { font-size: 8pt; font-weight: 700; color: #333; white-space: nowrap; }
     .card-header-center { flex: 1; text-align: center; padding: 0 4mm; }
-    .card-org { font-size: 8pt; font-weight: 700; color: #1a3a6b; }
+    .card-org { font-size: 8pt; font-weight: 700; color: #333; }
     .uebung-badge {
       background: #cc0000; color: #fff; font-weight: 900; font-size: 14pt;
-      padding: 2mm 5mm; border-radius: 3px; letter-spacing: .05em; white-space: nowrap;
+      padding: 2mm 5mm; border-radius: 2px; letter-spacing: .05em; white-space: nowrap;
     }
-    .card-title { font-size: 13pt; font-weight: 700; line-height: 1.2; }
+    .card-title { font-size: 14pt; font-weight: 700; line-height: 1.2; }
     .card-subtitle { font-size: 8.5pt; color: #444; margin-top: .5mm; }
 
     /* Zwei-Spalten: Patient + Vitals */
     .top-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
-    .info-table { width: 100%; border-collapse: collapse; }
-    .info-table td { padding: 1mm 2mm; vertical-align: top; font-size: 8.5pt; }
-    .info-table td:first-child { color: #555; white-space: nowrap; font-size: 8pt; }
+    .info-table { width: 100%; border-collapse: collapse; border: 1px solid #ccc; }
+    .info-table td { padding: 1.2mm 2.5mm; vertical-align: top; font-size: 8.5pt; border-bottom: 1px solid #ddd; }
+    .info-table tr:last-child td { border-bottom: none; }
+    .info-table td:first-child { color: #555; white-space: nowrap; font-size: 8pt; border-right: 1px solid #ddd; width: 30%; }
     .info-table td:last-child { font-weight: 600; }
     .w3w-blank { font-family: monospace; font-size: 8pt; color: #aaa; letter-spacing: .05em; }
-    .w3w-real  { font-family: monospace; font-size: 8.5pt; font-weight: 700; color: #1a3a6b; }
+    .w3w-real  { font-family: monospace; font-size: 8.5pt; font-weight: 700; color: #222; }
     .w3w-alarm-label { font-size: 7pt; color: #cc0000; font-weight: 700; }
 
-    .vitals-box { border: 1.5px solid #1a3a6b; border-radius: 4px; overflow: hidden; }
+    .vitals-box { border: 1px solid #ccc; border-radius: 2px; overflow: hidden; }
     .vitals-box table { width: 100%; border-collapse: collapse; }
     .vitals-box tr { border-bottom: 1px solid #e0e8f0; }
     .vitals-box tr:last-child { border-bottom: none; }
     .vitals-box td { padding: 1mm 2.5mm; font-size: 8.5pt; }
-    .vitals-box td:first-child { color: #555; width: 45%; font-size: 8pt; }
+    .vitals-box td:first-child { color: #555; width: 50%; font-size: 8pt; border-right: 1px solid #e0e8f0; }
     .vitals-box td:last-child { font-weight: 700; }
-    .vitals-header { background: #1a3a6b; color: #fff; font-weight: 700; font-size: 8pt;
+    .vitals-header { background: #555; color: #fff; font-weight: 700; font-size: 8pt;
                      padding: 1.5mm 2.5mm; }
 
     /* Sections */
     .section { margin-bottom: 3mm; }
     .section-head {
-      background: #e8eef8; color: #1a3a6b; font-weight: 700; font-size: 8pt;
-      padding: 1.5mm 3mm; border-left: 3px solid #1a3a6b; margin-bottom: 1.5mm;
-      text-transform: uppercase; letter-spacing: .05em;
+      background: #f0f0f0; color: #222; font-weight: 700; font-size: 8.5pt;
+      padding: 1.5mm 3mm; border-left: 3px solid #333; margin-bottom: 1.5mm;
+      letter-spacing: .03em;
     }
     .befund-list { margin: 0; padding: 0 0 0 5mm; }
     .befund-list li { margin-bottom: .8mm; font-size: 8.5pt; }
 
-    .schema-table { width: 100%; border-collapse: collapse; }
-    .schema-table tr { border-bottom: 1px solid #e8eef8; }
+    .schema-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; }
+    .schema-table tr { border-bottom: 1px solid #ddd; }
     .schema-table tr:last-child { border-bottom: none; }
-    .schema-table td { padding: 1.2mm 2mm; font-size: 8pt; vertical-align: top; }
+    .schema-table td { padding: 1.2mm 2.5mm; font-size: 8pt; vertical-align: top; border-right: 1px solid #ddd; }
+    .schema-table td:last-child { border-right: none; }
     .schema-table td.letter-cell {
       width: 18px; text-align: center; font-weight: 900; color: #fff;
-      background: #1a3a6b; border-radius: 2px; padding: 1mm;
+      background: #444; padding: 1mm;
     }
     .schema-table td.sampler-letter { background: #2a6b3a; }
     .schema-table td.label-cell { width: 60px; color: #555; font-size: 7.5pt; white-space: nowrap; }
@@ -120,15 +122,10 @@
     /* ── Rückseite ── */
     .back-page {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 6mm; text-align: center;
+      gap: 8mm; text-align: center; position: relative;
     }
-    .back-uebung { font-size: 28pt; font-weight: 900; color: #cc0000; letter-spacing: .1em; }
-    .back-org { font-size: 14pt; font-weight: 700; color: #1a3a6b; margin-bottom: 4mm; }
-    .back-main { font-size: 13pt; font-weight: 700; max-width: 120mm; line-height: 1.5; }
-    .back-thanks { font-size: 10pt; color: #444; }
-    .back-hinweis { font-size: 9pt; color: #555; max-width: 130mm; line-height: 1.6;
-                    border: 1px solid #ccc; border-radius: 4px; padding: 4mm 6mm; background: #f9f9f9; }
-    .back-notruf { font-size: 11pt; font-weight: 700; color: #cc0000; }
+    .back-main { font-weight: 700; max-width: 140mm; line-height: 1.5; }
+    .back-thanks { color: #222; }
 
     /* ── EL-Blatt (Übungsleitung only) ── */
     .el-page { border: 3px solid #cc0000 !important; }
@@ -142,7 +139,7 @@
       margin-bottom: 6mm;
     }
     .el-case-id {
-      text-align: center; font-size: 12pt; font-weight: 700; color: #1a3a6b;
+      text-align: center; font-size: 12pt; font-weight: 700; color: #222;
       margin-bottom: 6mm;
     }
     .el-table { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
@@ -283,23 +280,26 @@
   </div>
   {% endif %}
 
-  <div class="card-footer" style="justify-content:center;">
-    <span>BRK Funkübung Feucht – Patientenkarte {{ cd.id }} – Stand: {{ today }}</span>
+  <div class="card-footer">
+    <span>Interne Übungsunterlage – Patientenkarte {{ cd.id }} – Stand: {{ today }}</span>
+    <span>Seite {{ loop.index * 2 - 1 }}</span>
   </div>
 </div>
 
 {# ── RÜCKSEITE ── #}
 <div class="page back-page">
-  <div class="back-uebung">ÜBUNG</div>
-  <div class="back-org">BRK Funkübung Feucht</div>
-  <div class="back-main">DIES IST EINE ÜBUNG DES BRK</div>
-  <div class="back-main">Bitte lassen Sie diesen Zettel an der Position liegen.</div>
-  <div class="back-thanks">Vielen Dank für Ihre Unterstützung.</div>
-  <div class="back-hinweis">
-    <strong>Hinweis:</strong> Keine Gefahr. Es handelt sich nicht um einen echten Notfall.<br>
-    <span class="back-notruf">In einem echten Notfall: <strong>112</strong> rufen</span>
+  <div style="font-size:11pt;font-weight:600;color:#333;margin-bottom:12mm;">Patientenkarte {{ cd.id }} - Rückseite</div>
+  <div class="back-main" style="font-size:20pt;">DIES IST EINE ÜBUNG DES BRK</div>
+  <div class="back-main" style="font-size:14pt;">Bitte lassen Sie diesen Zettel an der Position liegen.</div>
+  <div class="back-thanks" style="font-size:13pt;font-weight:700;color:#222;">Vielen Dank für Ihre Unterstützung.</div>
+  <div style="font-size:9pt;color:#666;max-width:130mm;text-align:center;line-height:1.6;margin-top:8mm;">
+    Hinweis: Keine Gefahr. Es handelt sich nicht um einen echten Notfall.<br>
+    In einem echten Notfall: 112
   </div>
-  <div style="font-size:8pt;color:#aaa;margin-top:4mm;">Patientenkarte {{ cd.id }} – Rückseite</div>
+  <div class="card-footer" style="width:100%;position:absolute;bottom:12mm;left:14mm;right:14mm;">
+    <span>BRK Funkübung Feucht - Patientensteckkarten</span>
+    <span>Seite {{ loop.index * 2 }}</span>
+  </div>
 </div>
 
 {# ── EL-BLATT (nur für Übungsleitung, nicht auslegen) ── #}

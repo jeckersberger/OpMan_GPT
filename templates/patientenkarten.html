@@ -54,7 +54,7 @@
       padding: 2mm 5mm; border-radius: 2px; letter-spacing: .05em; white-space: nowrap;
     }
     .card-title { font-size: 14pt; font-weight: 700; line-height: 1.2; }
-    .card-subtitle { font-size: 8.5pt; color: #444; margin-top: .5mm; }
+    .card-subtitle { font-size: 8.5pt; color: #444; margin: 1.5mm 0 3mm 0; }
 
     /* Zwei-Spalten: Patient + Vitals */
     .top-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
@@ -72,7 +72,7 @@
     .vitals-box tr { border-bottom: 1px solid #e0e8f0; }
     .vitals-box tr:last-child { border-bottom: none; }
     .vitals-box td { padding: 1.5mm 2.5mm; font-size: 8.5pt; }
-    .vitals-box td:first-child { color: #555; width: 50%; font-size: 8pt; border-right: 1px solid #e0e8f0; }
+    .vitals-box td:first-child { color: #555; width: 35%; font-size: 8pt; border-right: 1px solid #e0e8f0; }
     .vitals-box td:last-child { font-weight: 700; }
     .vitals-header { background: #333; color: #fff; font-weight: 700; font-size: 8pt;
                      padding: 1.5mm 2.5mm; }
@@ -94,10 +94,10 @@
     .schema-table td:last-child { border-right: none; }
     .schema-table td.letter-cell {
       width: 18px; text-align: center; font-weight: 900; color: #fff;
-      background: #444; padding: 1mm;
+      background: #333; padding: 1mm;
     }
     .schema-table td.sampler-letter { background: #2a6b3a; }
-    .schema-table td.label-cell { width: 60px; color: #555; font-size: 7.5pt; white-space: nowrap; }
+    .schema-table td.label-cell { width: 90px; color: #555; font-size: 7.5pt; white-space: nowrap; }
     .schema-table td.content-cell { color: #222; }
 
     .special-box {
@@ -187,14 +187,14 @@
     <div class="card-header-left">BRK Funkübung Feucht</div>
     <div class="card-header-center">
       <div class="card-title">Patientenkarte {{ cd.id }}</div>
-      {% if cd.szenario %}
-      <div class="card-subtitle">Szenario: {{ cd.szenario }}</div>
-      {% elif cd.schlagwort %}
-      <div class="card-subtitle">Szenario: {{ cd.schlagwort }}</div>
-      {% endif %}
     </div>
     <div class="uebung-badge">ÜBUNG</div>
   </div>
+  {% if cd.szenario %}
+  <div class="card-subtitle">Szenario: {{ cd.szenario }}</div>
+  {% elif cd.schlagwort %}
+  <div class="card-subtitle">Szenario: {{ cd.schlagwort }}</div>
+  {% endif %}
 
   {% if cd.kein_transport %}
   <div class="special-box">
@@ -253,7 +253,7 @@
   {% set ab = cd.abcde %}
   {% if ab %}
   <div class="section">
-    <div class="section-head">ABCDE-Schema (Befundorientiert)</div>
+    <div class="section-head">ABCDE Schema (Befundorientiert)</div>
     <table class="schema-table">
       {% for letter in ['A','B','C','D','E'] %}{% if ab.get(letter) %}
       <tr>
@@ -269,9 +269,9 @@
   {% set sa = cd.sampler %}
   {% if sa %}
   <div class="section">
-    <div class="section-head">SAMPLER-Anamnese</div>
+    <div class="section-head">SAMPLER Anamnese</div>
     <table class="schema-table">
-      {% set sampler_labels = {'S':'Symptoms','A':'Allergies','M':'Medications','P':'Past history','L':'Last intake','E':'Events','R':'Risk factors'} %}
+      {% set sampler_labels = {'S':'Symptoms','A':'Allergies','M':'Medications','P':'Past medical history','L':'Last intake','E':'Events','R':'Risk factors'} %}
       {% for letter in ['S','A','M','P','L','E','R'] %}{% if sa.get(letter) %}
       <tr>
         <td class="letter-cell sampler-letter">{{ letter }}</td>

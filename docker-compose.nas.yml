@@ -1,0 +1,81 @@
+# ─────────────────────────────────────────────────────────────────
+# OpMan GPT – NAS-Installation mit Cloudflare Tunnel
+#
+# Verwendung:
+#   1. .env aus .env.example kopieren und anpassen (SECRET_KEY + CLOUDFLARE_TUNNEL_TOKEN)
+#   2. docker compose -f docker-compose.nas.yml up -d
+#
+# Cloudflare Tunnel Token holen:
+#   https://one.dash.cloudflare.com → Networks → Tunnels → Tunnel anlegen
+#   → "Docker" auswählen → den angezeigte Token kopieren
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── OpMan GPT App ──────────────────────────────────────────────
+  opman:
+    build: .
+    image: opman-gpt:latest
+    restart: unless-stopped
+    container_name: opman
+
+    # Kein direkter Port-Expose nötig – Cloudflare Tunnel greift intern zu.
+    # Für lokalen Zugriff (LAN ohne Tunnel) die Zeile auskommentieren:
+    # ports:
+    #   - "${HOST_PORT:-8000}:8000"
+
+    expose:
+      - "8000"
+
+    environment:
+      SECRET_KEY: "${SECRET_KEY}"
+      GUNICORN_WORKERS: "${GUNICORN_WORKERS:-2}"
+      # BASE_URL wird automatisch vom Tunnel bereitgestellt – leer lassen,
+      # oder auf deine Cloudflare-Domain setzen:
+      # BASE_URL=https://opman.example.com
+      BASE_URL: "${BASE_URL:-}"
+      GITHUB_USER: "${GITHUB_USER:-}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+
+    volumes:
+      - .:/app:Z
+      - ./instance:/app/instance:Z
+
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - opman-net
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Cloudflare Tunnel ──────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    container_name: opman-cloudflared
+
+    command: tunnel --no-autoupdate run
+
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}"
+
+    depends_on:
+      opman:
+        condition: service_healthy
+
+    networks:
+      - opman-net
+
+    security_opt:
+      - no-new-privileges:true
+
+# ── Internes Netzwerk ──────────────────────────────────────────────
+networks:
+  opman-net:
+    driver: bridge

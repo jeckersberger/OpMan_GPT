@@ -19,7 +19,10 @@ def _ensure_package(import_name: str, pip_spec: str) -> None:
 
 _ensure_package("qrcode", "qrcode[svg]")
 from datetime import datetime, timezone
-from flask import Flask, render_template, request, jsonify, redirect
+import hashlib
+import hmac
+import functools
+from flask import Flask, render_template, request, jsonify, redirect, make_response
 from sqlalchemy import text
 from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
 
@@ -274,6 +277,7 @@ def create_app():
             "ALTER TABLE exercise_config ADD COLUMN base_url VARCHAR(300) DEFAULT ''",
             "ALTER TABLE radio_log ADD COLUMN marked BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE radio_log ADD COLUMN note TEXT",
+            "ALTER TABLE exercise_config ADD COLUMN admin_pin VARCHAR(4) NOT NULL DEFAULT '1234'",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -319,6 +323,91 @@ def create_app():
                     dirty_cache = True
         if dirty_cache:
             _save_w3w_cache(cache)
+
+    # ---------------------------
+    # Admin-PIN Authentifizierung
+    # ---------------------------
+    _ADMIN_COOKIE = "opman_admin_token"
+    _ADMIN_TOKEN_MAX_AGE = 365 * 24 * 3600  # 1 Jahr
+
+    def _make_admin_token(pin: str) -> str:
+        """Erzeugt ein signiertes Token aus PIN + SECRET_KEY."""
+        secret = app.config["SECRET_KEY"]
+        return hmac.new(secret.encode(), pin.encode(), hashlib.sha256).hexdigest()
+
+    def _check_admin() -> bool:
+        """Prüft ob das Admin-Cookie ein gültiges Token enthält."""
+        token = request.cookies.get(_ADMIN_COOKIE)
+        if not token:
+            return False
+        cfg = db.session.get(ExerciseConfig, 1)
+        pin = cfg.admin_pin if cfg else "1234"
+        return hmac.compare_digest(token, _make_admin_token(pin))
+
+    def admin_required(f):
+        """Decorator: blockiert API-Zugriff ohne gültiges Admin-Token."""
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if not _check_admin():
+                return jsonify({"error": "Admin-PIN erforderlich"}), 401
+            return f(*args, **kwargs)
+        return wrapper
+
+    def admin_page_required(f):
+        """Decorator: leitet Seiten-Aufrufe auf PIN-Eingabe um wenn nicht verifiziert."""
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if not _check_admin():
+                return render_template("pin_login.html")
+            return f(*args, **kwargs)
+        return wrapper
+
+    @app.post("/api/auth/verify-pin")
+    def verify_pin():
+        """Prüft die PIN und setzt ein Admin-Cookie."""
+        data = request.get_json(force=True)
+        pin = str(data.get("pin", "")).strip()
+        cfg = db.session.get(ExerciseConfig, 1)
+        correct = cfg.admin_pin if cfg else "1234"
+        if pin != correct:
+            return jsonify({"ok": False, "error": "Falsche PIN"}), 403
+        token = _make_admin_token(pin)
+        resp = make_response(jsonify({"ok": True}))
+        resp.set_cookie(_ADMIN_COOKIE, token,
+                        max_age=_ADMIN_TOKEN_MAX_AGE,
+                        httponly=True, samesite="Lax")
+        return resp
+
+    @app.get("/api/auth/status")
+    def auth_status():
+        """Prüft ob das Gerät bereits verifiziert ist."""
+        return jsonify({"authenticated": _check_admin()})
+
+    @app.post("/api/auth/change-pin")
+    @admin_required
+    def change_pin():
+        """Ändert die Admin-PIN (nur für verifizierte Admins)."""
+        data = request.get_json(force=True)
+        new_pin = str(data.get("new_pin", "")).strip()
+        if not new_pin.isdigit() or len(new_pin) != 4:
+            return jsonify({"error": "PIN muss genau 4 Ziffern haben"}), 400
+        cfg = db.get_or_404(ExerciseConfig, 1)
+        cfg.admin_pin = new_pin
+        db.session.commit()
+        # Neues Token setzen
+        token = _make_admin_token(new_pin)
+        resp = make_response(jsonify({"ok": True}))
+        resp.set_cookie(_ADMIN_COOKIE, token,
+                        max_age=_ADMIN_TOKEN_MAX_AGE,
+                        httponly=True, samesite="Lax")
+        return resp
+
+    @app.post("/api/auth/logout")
+    def admin_logout():
+        """Entfernt das Admin-Cookie."""
+        resp = make_response(jsonify({"ok": True}))
+        resp.delete_cookie(_ADMIN_COOKIE)
+        return resp
 
     def _cases_dict(active_only: bool = False):
         """Gibt CaseDefinitions als dict zurück. active_only=True → nur aktive Fälle."""
@@ -376,11 +465,13 @@ def create_app():
         }
 
     @app.get("/api/dashboard")
+    @admin_required
     def dashboard_data():
         """Alle Dashboard-Daten in einem einzigen Request."""
         return jsonify(_build_dashboard_dict())
 
     @app.get("/")
+    @admin_page_required
     def index():
         import json as _json
         initial_data = _json.dumps(_build_dashboard_dict(), ensure_ascii=False)
@@ -391,6 +482,7 @@ def create_app():
         return render_template("datenschutz.html", today=datetime.now().strftime("%d.%m.%Y"))
 
     @app.get("/protokoll")
+    @admin_page_required
     def protokoll():
         return render_template("protokoll.html", cases=_cases_dict(active_only=True))
 
@@ -476,10 +568,12 @@ def create_app():
                                startpunkt_w3w=STARTPUNKT_W3W)
 
     @app.get("/beobachter")
+    @admin_page_required
     def beobachter():
         return render_template("beobachter.html")
 
     @app.get("/api/beobachter")
+    @admin_required
     def beobachter_data():
         """Daten für die Beobachter-Ansicht: Teams + nur alarmierte Fälle."""
         teams_list = Team.query.order_by(Team.name).all()
@@ -502,6 +596,7 @@ def create_app():
         return jsonify({"teams": teams_out, "cases": cases_out})
 
     @app.get("/api/qrcodes")
+    @admin_required
     def qr_codes():
         """Generiert QR-Code-Seite für alle konfigurierten EVTs."""
         import io
@@ -602,11 +697,13 @@ def create_app():
         existing.status8_time  = doc.status8_time
 
     @app.get("/api/casedocs")
+    @admin_required
     def list_casedocs():
         docs = CaseDoc.query.order_by(CaseDoc.id).all()
         return jsonify([serialize_casedoc(d) for d in docs])
 
     @app.patch("/api/casedocs/<string:case_id>")
+    @admin_required
     def update_casedoc(case_id: str):
         doc = db.get_or_404(CaseDoc, case_id)
         data = request.get_json(force=True)
@@ -647,6 +744,7 @@ def create_app():
         return jsonify(serialize_casedoc(doc))
 
     @app.post("/api/casedocs/<string:case_id>/stamp")
+    @admin_required
     def stamp_casedoc(case_id: str):
         """Setzt einen Zeitstempel auf 'jetzt'."""
         doc = db.get_or_404(CaseDoc, case_id)
@@ -674,11 +772,13 @@ def create_app():
     # RadioLog API
     # ---------------------------
     @app.get("/api/radiolog")
+    @admin_required
     def list_radiolog():
         entries = RadioLogEntry.query.order_by(RadioLogEntry.timestamp.desc()).all()
         return jsonify([serialize_logentry(e) for e in entries])
 
     @app.post("/api/radiolog")
+    @admin_required
     def create_logentry():
         data = request.get_json(force=True)
         sender = (data.get("sender") or "").strip()
@@ -710,6 +810,7 @@ def create_app():
         return jsonify(serialize_logentry(entry)), 201
 
     @app.patch("/api/radiolog/<int:entry_id>")
+    @admin_required
     def patch_logentry(entry_id: int):
         entry = db.get_or_404(RadioLogEntry, entry_id)
         data = request.get_json(force=True)
@@ -721,6 +822,7 @@ def create_app():
         return jsonify(serialize_logentry(entry))
 
     @app.delete("/api/radiolog/<int:entry_id>")
+    @admin_required
     def delete_logentry(entry_id: int):
         entry = db.get_or_404(RadioLogEntry, entry_id)
         db.session.delete(entry)
@@ -731,6 +833,7 @@ def create_app():
     # Reset
     # ---------------------------
     @app.post("/api/reset")
+    @admin_required
     def reset_exercise():
         """Vollständiger Übungs-Reset.
 
@@ -819,6 +922,7 @@ def create_app():
         return jsonify(result)
 
     @app.post("/api/exercise/resolve-w3w")
+    @admin_required
     def exercise_resolve_w3w():
         """Manually trigger w3w → coordinate resolution for all active cases."""
         resolved = 0
@@ -952,6 +1056,7 @@ function show(id){
                         "base_url": cfg.base_url if cfg else ""})
 
     @app.post("/api/exercise/config")
+    @admin_required
     def update_exercise_config():
         cfg = db.get_or_404(ExerciseConfig, 1)
         data = request.get_json(force=True)
@@ -994,6 +1099,7 @@ function show(id){
         return bool(shutil.which("git"))
 
     @app.post("/api/update")
+    @admin_required
     def app_update():
         """Zieht die neueste Version aus main und startet die App neu."""
         import subprocess
@@ -1093,6 +1199,7 @@ function show(id){
             return jsonify({"available": False, "error": str(e)})
 
     @app.post("/api/exercise/import-missions")
+    @admin_required
     def import_exercise_missions():
         """Erstellt Missions aus den Übungsfällen (statische Koordinaten)."""
         created = []
@@ -1129,15 +1236,18 @@ function show(id){
     # Case Editor + Patientenkarten
     # ---------------------------
     @app.get("/cases")
+    @admin_page_required
     def cases_list():
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases)
 
     @app.get("/cases/new")
+    @admin_page_required
     def case_new():
         return render_template("cases.html", cases=[], editing=CaseDefinition(), is_new=True)
 
     @app.post("/cases/new")
+    @admin_required
     def case_new_save():
         data = request.form
         cid = (data.get("id") or "").strip().upper()
@@ -1152,12 +1262,14 @@ function show(id){
         return redirect("/cases")
 
     @app.get("/cases/<string:case_id>/edit")
+    @admin_page_required
     def case_edit(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases, editing=cd, is_new=False)
 
     @app.post("/cases/<string:case_id>/edit")
+    @admin_required
     def case_edit_save(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         _save_case_from_form(cd, request.form)
@@ -1165,6 +1277,7 @@ function show(id){
         return redirect("/cases")
 
     @app.post("/cases/<string:case_id>/delete")
+    @admin_required
     def case_delete(case_id):
         cd = db.get_or_404(CaseDefinition, case_id)
         # CaseDoc mitlöschen, damit kein verwaister Datensatz im Protokoll bleibt
@@ -1244,6 +1357,7 @@ function show(id){
         return jsonify(_cases_dict(active_only=False))
 
     @app.patch("/api/cases/<string:case_id>/active")
+    @admin_required
     def case_toggle_active(case_id: str):
         """Setzt das active-Flag eines Falls (body: {active: true/false})."""
         cd = db.get_or_404(CaseDefinition, case_id)
@@ -1264,6 +1378,7 @@ function show(id){
         )
 
     @app.post("/api/cases/import")
+    @admin_required
     def cases_import():
         try:
             raw = request.get_json(force=True) or {}
@@ -1313,12 +1428,14 @@ function show(id){
             return jsonify({"error": str(e)}), 500
 
     @app.get("/patientenkarten")
+    @admin_page_required
     def patientenkarten():
         from datetime import date
         cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("patientenkarten.html", cases=cases, today=date.today().isoformat())
 
     @app.get("/patientenkarten/<string:case_id>")
+    @admin_page_required
     def patientenkarte_single(case_id):
         from datetime import date
         cd = db.get_or_404(CaseDefinition, case_id)
@@ -1356,6 +1473,7 @@ function show(id){
         return jsonify([serialize_team(t, include_missions=True) for t in teams])
 
     @app.post("/api/teams")
+    @admin_required
     def create_team():
         data = request.get_json(force=True)
 
@@ -1571,6 +1689,7 @@ function show(id){
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.delete("/api/teams/<int:team_id>")
+    @admin_required
     def delete_team(team_id: int):
         team = db.get_or_404(Team, team_id)
         db.session.delete(team)
@@ -1581,6 +1700,7 @@ function show(id){
     # Testalarm
     # ---------------------------
     @app.post("/api/testalarm")
+    @admin_required
     def send_testalarm():
         """Sendet einen Testalarm an ausgewählte Teams oder alle.
 
@@ -1622,6 +1742,7 @@ function show(id){
     # Übungsende
     # ---------------------------
     @app.post("/api/uebungsende")
+    @admin_required
     def send_uebungsende():
         """Sendet Übungsende-Hinweis an alle EVT-Teams."""
         now = _utcnow()
@@ -1672,6 +1793,7 @@ function show(id){
         return jsonify([serialize_mission(m, include_teams=True) for m in missions])
 
     @app.post("/api/missions")
+    @admin_required
     def create_mission():
         data = request.get_json(force=True)
         title = (data.get("title") or "").strip()
@@ -1692,6 +1814,7 @@ function show(id){
         return jsonify(serialize_mission(mission, include_teams=True)), 201
 
     @app.patch("/api/missions/<int:mission_id>")
+    @admin_required
     def update_mission(mission_id: int):
         mission = db.get_or_404(Mission, mission_id)
         data = request.get_json(force=True)
@@ -1714,6 +1837,7 @@ function show(id){
         return jsonify(serialize_mission(mission, include_teams=True))
 
     @app.delete("/api/missions/<int:mission_id>")
+    @admin_required
     def delete_mission(mission_id: int):
         mission = db.get_or_404(Mission, mission_id)
         # Wenn Mission einem Übungsfall zugeordnet war (Titel "P1: …"),
@@ -1736,6 +1860,7 @@ function show(id){
         return jsonify([serialize_assignment(a) for a in assigns])
 
     @app.post("/api/assignments")
+    @admin_required
     def create_assignment():
         data = request.get_json(force=True)
         team_id = data.get("team_id")
@@ -1795,6 +1920,7 @@ function show(id){
         return jsonify(serialize_assignment(a)), 201
 
     @app.delete("/api/assignments/<int:assignment_id>")
+    @admin_required
     def delete_assignment(assignment_id: int):
         a = db.get_or_404(Assignment, assignment_id)
 

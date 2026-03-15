@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>OpMan-GPT – Admin-PIN</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0b1220; color: #e7eefc;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 1rem;
+    }
+    .pin-box {
+      background: #111b2e; border: 1px solid #223152; border-radius: 12px;
+      padding: 2rem; width: 100%; max-width: 340px; text-align: center;
+    }
+    .pin-box h1 {
+      font-size: 1.2rem; margin-bottom: .3rem; color: #fff;
+    }
+    .pin-box .sub {
+      font-size: .85rem; color: #a6b3d1; margin-bottom: 1.5rem;
+    }
+    .pin-dots {
+      display: flex; justify-content: center; gap: 12px; margin-bottom: 1.5rem;
+    }
+    .pin-dots .dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid #4ea1ff; background: transparent;
+      transition: background .15s;
+    }
+    .pin-dots .dot.filled { background: #4ea1ff; }
+    .pin-dots .dot.error { border-color: #ef4444; background: #ef4444; }
+    .numpad {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      max-width: 260px; margin: 0 auto;
+    }
+    .numpad button {
+      padding: 16px 0; font-size: 1.4rem; font-weight: 600;
+      border: 1px solid #223152; border-radius: 10px;
+      background: #0d1a2e; color: #e7eefc; cursor: pointer;
+      transition: background .15s, transform .1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .numpad button:active { background: #1e3a5f; transform: scale(.95); }
+    .numpad button.del {
+      font-size: 1rem; color: #a6b3d1;
+    }
+    .numpad button.empty {
+      visibility: hidden; cursor: default;
+    }
+    .error-msg {
+      color: #ef4444; font-size: .85rem; margin-top: 1rem;
+      min-height: 1.2em;
+    }
+    .evt-link {
+      display: block; margin-top: 1.5rem; padding-top: 1rem;
+      border-top: 1px solid #223152;
+      color: #4ea1ff; text-decoration: none; font-size: .85rem;
+    }
+    .evt-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="pin-box">
+  <h1>Einsatzleitung</h1>
+  <div class="sub">Bitte Admin-PIN eingeben</div>
+
+  <div class="pin-dots" id="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <div class="numpad" id="numpad">
+    <button onclick="addDigit('1')">1</button>
+    <button onclick="addDigit('2')">2</button>
+    <button onclick="addDigit('3')">3</button>
+    <button onclick="addDigit('4')">4</button>
+    <button onclick="addDigit('5')">5</button>
+    <button onclick="addDigit('6')">6</button>
+    <button onclick="addDigit('7')">7</button>
+    <button onclick="addDigit('8')">8</button>
+    <button onclick="addDigit('9')">9</button>
+    <button class="empty"></button>
+    <button onclick="addDigit('0')">0</button>
+    <button class="del" onclick="delDigit()">&larr;</button>
+  </div>
+
+  <div class="error-msg" id="error"></div>
+
+  <a href="/evt" class="evt-link">Zur EVT-App (kein PIN noetig)</a>
+</div>
+
+<script>
+let pin = '';
+const dots = document.querySelectorAll('#dots .dot');
+const errorEl = document.getElementById('error');
+
+function updateDots() {
+  dots.forEach((d, i) => {
+    d.classList.toggle('filled', i < pin.length);
+    d.classList.remove('error');
+  });
+}
+
+function addDigit(d) {
+  if (pin.length >= 4) return;
+  pin += d;
+  errorEl.textContent = '';
+  updateDots();
+  if (pin.length === 4) {
+    verify();
+  }
+}
+
+function delDigit() {
+  pin = pin.slice(0, -1);
+  errorEl.textContent = '';
+  updateDots();
+}
+
+async function verify() {
+  try {
+    const res = await fetch('/api/auth/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pin }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // PIN korrekt – Seite neu laden (jetzt mit Cookie)
+      window.location.reload();
+    } else {
+      // Falsche PIN – Fehler anzeigen
+      dots.forEach(d => d.classList.add('error'));
+      errorEl.textContent = 'Falsche PIN';
+      setTimeout(() => {
+        pin = '';
+        updateDots();
+      }, 800);
+    }
+  } catch (e) {
+    errorEl.textContent = 'Verbindungsfehler';
+    pin = '';
+    updateDots();
+  }
+}
+
+// Tastatur-Support
+document.addEventListener('keydown', function(e) {
+  if (e.key >= '0' && e.key <= '9') {
+    addDigit(e.key);
+  } else if (e.key === 'Backspace') {
+    delDigit();
+  }
+});
+</script>
+
+</body>
+</html>

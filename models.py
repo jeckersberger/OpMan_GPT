@@ -136,6 +136,7 @@ class ExerciseConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     evt_count = db.Column(db.Integer, nullable=False, default=6)
     base_url = db.Column(db.String(300), nullable=True, default="")
+    admin_pin = db.Column(db.String(4), nullable=False, default="1234")
 
 
 class CaseDefinition(db.Model):

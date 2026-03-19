@@ -371,6 +371,14 @@ function refreshExerciseLayer() {
 
   const cases = exerciseGeodata.cases || {};
 
+  // Cleanup: Marker entfernen die nicht mehr in den Geodaten sind
+  for (const [id, marker] of exerciseMarkers.entries()) {
+    if (!(id in cases)) {
+      marker.remove();
+      exerciseMarkers.delete(id);
+    }
+  }
+
   for (const [id, data] of Object.entries(cases)) {
     if (data.lat == null || data.lng == null) continue;
 

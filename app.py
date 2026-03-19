@@ -19,26 +19,41 @@ def _ensure_package(import_name: str, pip_spec: str) -> None:
 
 _ensure_package("qrcode", "qrcode[svg]")
 _ensure_package("flask_socketio", "flask-socketio")
-_ensure_package("gevent", "gevent")
 from datetime import datetime, timezone
 import hashlib
 import hmac
 import functools
 from flask import Flask, render_template, request, jsonify, redirect, make_response
-from flask_socketio import SocketIO, emit
 from sqlalchemy import text
 from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition, CaseProgressStep
 
-# ── Globale SocketIO-Instanz (wird in create_app() an Flask gebunden) ──
-socketio = SocketIO()
+# ── SocketIO: Optionaler Import (graceful fallback) ──
+_HAS_SOCKETIO = False
+try:
+    from flask_socketio import SocketIO, emit as sio_emit
+    socketio = SocketIO()
+    _HAS_SOCKETIO = True
+except ImportError:
+    socketio = None
+    print("[WARNUNG] flask-socketio nicht verfügbar – Echtzeit-Updates deaktiviert.", flush=True)
+
+# ── Gevent verfügbar? ──
+_HAS_GEVENT = False
+try:
+    import gevent  # noqa: F401
+    _HAS_GEVENT = True
+except ImportError:
+    pass
 
 
 def _emit_refresh(event_type: str = "data") -> None:
     """Broadcast an alle verbundenen Clients: Daten haben sich geändert."""
+    if not _HAS_SOCKETIO or socketio is None:
+        return
     try:
         socketio.emit("refresh", {"type": event_type}, namespace="/")
     except Exception:
-        pass  # Wenn SocketIO noch nicht initialisiert – ignorieren
+        pass
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -238,8 +253,14 @@ def create_app():
     db.init_app(app)
 
     # ── SocketIO initialisieren (Echtzeit-Updates für alle Clients) ──
-    socketio.init_app(app, async_mode="gevent", cors_allowed_origins="*",
-                      logger=False, engineio_logger=False)
+    if _HAS_SOCKETIO and socketio is not None:
+        _sio_mode = "gevent" if _HAS_GEVENT else "threading"
+        try:
+            socketio.init_app(app, async_mode=_sio_mode, cors_allowed_origins="*",
+                              logger=False, engineio_logger=False)
+            print(f"[SocketIO] Initialisiert (async_mode={_sio_mode})", flush=True)
+        except Exception as _sio_err:
+            print(f"[SocketIO] Init fehlgeschlagen ({_sio_err}) – Fallback auf Polling.", flush=True)
 
     # SQLite WAL-Modus aktivieren (wichtig für Multi-Worker gunicorn)
     with app.app_context():
@@ -3577,5 +3598,9 @@ function show(id){
         print(f"  EVT-App (Handy): http://{lip}:5080/evt")
         print()
 
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False,
-                 ssl_context=ssl_ctx, allow_unsafe_werkzeug=True)
+    if _HAS_SOCKETIO and socketio is not None:
+        socketio.run(app, host="0.0.0.0", port=5000, debug=False,
+                     ssl_context=ssl_ctx, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host="0.0.0.0", port=5000, debug=False,
+                ssl_context=ssl_ctx, threaded=True)

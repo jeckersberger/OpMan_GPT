@@ -235,11 +235,26 @@
       <input id="missionLng" type="hidden" />
 
       <section class="panel">
+        <h3>➕ Spontaner Einsatz</h3>
+        <div style="display:flex;flex-direction:column;gap:.4rem;padding:.4rem 0;">
+          <input type="text" id="quickCaseTitle" placeholder="Einsatzstichwort (z.B. Fahrradunfall)" style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:.35rem .5rem;font-size:.82rem;">
+          <input type="text" id="quickCasePatient" placeholder="Patientenname (optional)" style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:.35rem .5rem;font-size:.82rem;">
+          <div style="display:flex;gap:.4rem;align-items:center;">
+            <button onclick="quickCreateCase()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:.35rem .7rem;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;flex:1;">🚀 Fall anlegen</button>
+          </div>
+          <div id="quickCasePos" style="font-size:.7rem;color:var(--muted);">📍 Klick auf die Karte für Position</div>
+        </div>
+      </section>
+
+      <section class="panel">
         <h3>Schnellkoordination</h3>
         <div id="exerciseCasesList" class="list"></div>
       </section>
 
-      <!-- Aktive Einsätze & Zuordnung entfernt -->
+      <section class="panel" id="missionsPanel" style="display:none;">
+        <h3>Aktive Einsätze</h3>
+        <div id="missionsList" class="list"></div>
+      </section>
     </aside>
   </main>
 

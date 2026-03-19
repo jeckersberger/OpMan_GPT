@@ -309,6 +309,7 @@ def create_app():
             "ALTER TABLE case_docs ADD COLUMN abcde_schema TEXT",
             "ALTER TABLE case_definitions ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1",
             "ALTER TABLE case_definitions ADD COLUMN abcd_soll_json TEXT",
+            "ALTER TABLE case_definitions ADD COLUMN spontan BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE exercise_config ADD COLUMN base_url VARCHAR(300) DEFAULT ''",
             "ALTER TABLE radio_log ADD COLUMN marked BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE radio_log ADD COLUMN note TEXT",
@@ -1459,7 +1460,9 @@ function show(id){
 
     @app.get("/api/cases/export")
     def cases_export():
-        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        cases = CaseDefinition.query.filter(
+            CaseDefinition.spontan == False  # noqa: E712
+        ).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         payload = {"version": 1, "cases": [c.to_dict() for c in cases]}
         from flask import Response
         return Response(
@@ -2068,6 +2071,65 @@ function show(id){
         return jsonify({"ok": True})
 
     # ---------------------------
+    # Spontane Fälle (Ad-hoc während der Übung)
+    # ---------------------------
+    @app.post("/api/cases/spontan")
+    @admin_required
+    def create_spontan_case():
+        """Erstellt einen spontanen Fall mit Auto-ID (S1, S2, ...).
+
+        Spontane Fälle erscheinen in der Übung wie normale Fälle,
+        werden aber NICHT in den JSON-/Vorlagen-Export aufgenommen.
+        """
+        data = request.get_json(force=True)
+        schlagwort = (data.get("schlagwort") or "").strip()
+        if not schlagwort:
+            return jsonify({"error": "schlagwort is required"}), 400
+
+        # Auto-ID: S1, S2, S3, ...
+        existing = CaseDefinition.query.filter(
+            CaseDefinition.id.like("S%")
+        ).all()
+        existing_nums = []
+        for cd in existing:
+            try:
+                existing_nums.append(int(cd.id[1:]))
+            except ValueError:
+                pass
+        next_num = max(existing_nums, default=0) + 1
+        new_id = f"S{next_num}"
+
+        # Sort order: nach allen bestehenden Fällen
+        max_sort = db.session.query(db.func.max(CaseDefinition.sort_order)).scalar() or 0
+
+        cd = CaseDefinition(
+            id=new_id,
+            schlagwort=schlagwort,
+            patient=(data.get("patient") or "").strip() or "Unbekannt",
+            lat=data.get("lat"),
+            lng=data.get("lng"),
+            active=True,
+            spontan=True,
+            sort_order=max_sort + 1,
+        )
+        db.session.add(cd)
+
+        # CaseDoc sicherstellen
+        if db.session.get(CaseDoc, new_id) is None:
+            db.session.add(CaseDoc(id=new_id))
+
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "id": new_id,
+            "schlagwort": cd.schlagwort,
+            "patient": cd.patient,
+            "lat": cd.lat,
+            "lng": cd.lng,
+        }), 201
+
+    # ---------------------------
     # Übungsvorlagen: Export & Import
     # ---------------------------
     @app.get("/api/exercise/template/export")
@@ -2082,8 +2144,10 @@ function show(id){
                 "base_url": config.base_url if config else "",
             }
 
-            # Fälle exportieren
-            cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+            # Fälle exportieren (ohne spontane Fälle)
+            cases = CaseDefinition.query.filter(
+                CaseDefinition.spontan == False  # noqa: E712
+            ).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
             cases_data = [c.to_dict() for c in cases]
 
             # Teams exportieren

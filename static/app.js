@@ -134,6 +134,10 @@ function initMap(){
     $("missionLat").value = e.latlng.lat.toFixed(6);
     $("missionLng").value = e.latlng.lng.toFixed(6);
 
+    // Show position in quick-case form
+    const posEl = $("quickCasePos");
+    if (posEl) posEl.innerHTML = `📍 Position: <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b>`;
+
     // Reverse-W3W: GPS → what3words-Adresse auflösen
     const w3wEl = $("lastClickW3w");
     if (w3wEl) {
@@ -1663,3 +1667,43 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   loadLanInfo();
 });
+
+// ---- Spontaner Fall erstellen ----
+async function quickCreateCase() {
+  const titleEl = $("quickCaseTitle");
+  const patientEl = $("quickCasePatient");
+  const posEl = $("quickCasePos");
+  const title = (titleEl?.value || "").trim();
+  if (!title) {
+    alert("Bitte ein Einsatzstichwort eingeben.");
+    titleEl?.focus();
+    return;
+  }
+  const lat = $("missionLat")?.value ? parseFloat($("missionLat").value) : null;
+  const lng = $("missionLng")?.value ? parseFloat($("missionLng").value) : null;
+
+  try {
+    const result = await api("/api/cases/spontan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        schlagwort: title,
+        patient: patientEl?.value || "",
+        lat, lng,
+      }),
+    });
+    // Felder zurücksetzen
+    titleEl.value = "";
+    if (patientEl) patientEl.value = "";
+    if (posEl) posEl.innerHTML = `✅ <b>${esc(result.id)}</b> erstellt! Klick erneut auf die Karte für nächste Position.`;
+
+    // Geodata neu laden und Karte aktualisieren
+    try {
+      exerciseGeodata = await api("/api/exercise/geodata");
+      refreshExerciseLayer();
+    } catch (_) {}
+    await refreshAll(false);
+  } catch (e) {
+    alert("Fehler: " + (e.message || e));
+  }
+}

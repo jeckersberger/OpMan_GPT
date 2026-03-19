@@ -174,6 +174,7 @@ class CaseDefinition(db.Model):
     hinweis       = db.Column(db.Text, nullable=True)  # extra Instruktionstext
 
     active        = db.Column(db.Boolean,     nullable=False, default=True)  # für diese Übung aktiv?
+    spontan       = db.Column(db.Boolean,     nullable=False, default=False) # spontan erstellt (nicht exportierbar)
 
     sort_order    = db.Column(db.Integer, nullable=False, default=0)
     updated_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

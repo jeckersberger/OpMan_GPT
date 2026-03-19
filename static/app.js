@@ -965,10 +965,13 @@ function renderExerciseCases() {
         </div>`;
     }
 
+    const isSpontan = !!data.spontan || id.startsWith("S");
+    const w3wLine = data.w3w ? `<div class="mini">📍 <span style="font-family:monospace;color:#4ea1ff;">${esc(data.w3w)}</span></div>` : "";
+
     el.innerHTML = `
       <div class="row">
         <div style="flex:1;">
-          <div><b>${esc(id)}: ${esc(data.schlagwort || "")}</b></div>
+          <div><b>${esc(id)}: ${esc(data.schlagwort || "")}</b>${isSpontan ? ' <span class="badge" style="background:#f5c84222;color:#f5c842;border-color:#f5c842;font-size:10px;">spontan</span>' : ""}</div>
           <div style="margin-top:4px;">
             <span class="badge" style="background:${color}22;color:${color};border-color:${color};">${esc(statusText)}</span>
             ${timeLine}
@@ -976,9 +979,11 @@ function renderExerciseCases() {
           </div>
         </div>
         <button data-case-pan="${esc(id)}" style="padding:6px 10px;flex-shrink:0;" title="Auf Karte zeigen">📍</button>
+        ${isSpontan ? `<button data-case-del-spontan="${esc(id)}" style="padding:6px 10px;flex-shrink:0;background:#2a0a0a;color:#ff6b6b;border:1px solid #ff6b6b;" title="Spontan-Fall löschen">🗑</button>` : ""}
       </div>
       ${evtLine}
       ${data.patient ? `<div class="mini">Patient: ${esc(data.patient)}</div>` : ""}
+      ${w3wLine}
       ${assignHtml}
     `;
     root.appendChild(el);
@@ -1039,6 +1044,28 @@ function renderExerciseCases() {
       });
 
       await refreshAll(false);
+    });
+  });
+
+  // Delete spontaneous cases
+  root.querySelectorAll("[data-case-del-spontan]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const caseId = btn.getAttribute("data-case-del-spontan");
+      if (!confirm(`Spontan-Fall ${caseId} wirklich löschen?`)) return;
+      try {
+        await api(`/api/cases/${caseId}/spontan`, { method: "DELETE" });
+        // Remove marker from map
+        if (exerciseMarkers.has(caseId)) {
+          exerciseMarkers.get(caseId).remove();
+          exerciseMarkers.delete(caseId);
+        }
+        // Reload geodata
+        exerciseGeodata = await api("/api/exercise/geodata");
+        refreshExerciseLayer();
+        await refreshAll(false);
+      } catch (e) {
+        alert("Fehler beim Löschen: " + (e.message || e));
+      }
     });
   });
 }
@@ -1645,16 +1672,24 @@ async function sendUebungsende() {
 window.addEventListener("DOMContentLoaded", async () => {
   initMap();
   wireUI();
-  // Exercise-Geodaten VOR dem ersten Marker-Aufbau laden,
-  // damit upsertMissionMarker() doppelte Pins sofort erkennt.
+
+  // Use embedded geodata (avoids an extra API call on boot)
+  if (window.__INITIAL_GEODATA__) {
+    exerciseGeodata = window.__INITIAL_GEODATA__;
+    delete window.__INITIAL_GEODATA__;
+  } else {
+    try { exerciseGeodata = await api("/api/exercise/geodata"); } catch (_) {}
+  }
+
+  // refreshAll uses embedded __INITIAL_DATA__ (which includes casedocs)
   try {
-    [exerciseGeodata, casedocData] = await Promise.all([
-      api("/api/exercise/geodata"),
-      api("/api/casedocs"),
-    ]);
-  } catch (_) { /* kein Übungsbetrieb aktiv */ }
-  await refreshAll(true);
+    await refreshAll(true);
+  } catch (e) {
+    console.warn("Boot refreshAll failed:", e);
+  }
+
   if (exerciseGeodata) refreshExerciseLayer();
+
   // Auto-fit map bounds to exercise locations
   if (exerciseGeodata) {
     const pts = [];

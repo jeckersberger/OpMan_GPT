@@ -267,6 +267,9 @@
   {% if initial_data %}
   <script>window.__INITIAL_DATA__ = {{ initial_data | tojson }};</script>
   {% endif %}
-  <script src="/static/app.js?v=2"></script>
+  {% if initial_geodata %}
+  <script>window.__INITIAL_GEODATA__ = {{ initial_geodata | tojson }};</script>
+  {% endif %}
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

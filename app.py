@@ -557,9 +557,14 @@ def create_app():
     @app.get("/")
     @admin_page_required
     def index():
-        import json as _json
-        initial_data = _json.dumps(_build_dashboard_dict(), ensure_ascii=False)
-        return render_template("index.html", initial_data=initial_data)
+        # Pass dict directly – | tojson in the template handles serialisation.
+        # (Pre-serialising with json.dumps + | tojson double-encodes → boot crash!)
+        dashboard = _build_dashboard_dict()
+        # Embed geodata so the boot needs zero extra API calls
+        geodata = _build_geodata_dict()
+        return render_template("index.html",
+                               initial_data=dashboard,
+                               initial_geodata=geodata)
 
     @app.get("/datenschutz")
     def datenschutz():
@@ -982,14 +987,8 @@ def create_app():
     # ---------------------------
     # Exercise Geodata (what3words)
     # ---------------------------
-    @app.get("/api/exercise/geodata")
-    def exercise_geodata():
-        """Return exercise case coordinates from CaseDefinition DB.
-
-        Pure DB read – no W3W API calls. Coordinates are resolved once
-        when a case is saved (form or import) or via the manual
-        'w3w → Koordinaten' button.
-        """
+    def _build_geodata_dict() -> dict:
+        """Pure DB read – no W3W API calls."""
         result: dict = {"cases": {}, "startpunkt": None}
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
             result["cases"][cd.id] = {
@@ -997,9 +996,14 @@ def create_app():
                 "schlagwort": cd.schlagwort or "",
                 "patient": cd.patient or "",
                 "w3w": cd.w3w or "",
+                "spontan": cd.spontan,
             }
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
-        return jsonify(result)
+        return result
+
+    @app.get("/api/exercise/geodata")
+    def exercise_geodata():
+        return jsonify(_build_geodata_dict())
 
     @app.post("/api/exercise/resolve-w3w")
     @admin_required
@@ -1330,7 +1334,10 @@ function show(id){
     @app.get("/cases")
     @admin_page_required
     def cases_list():
-        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+        # Spontane Fälle (S1, S2…) nicht in der Fallverwaltung anzeigen
+        cases = CaseDefinition.query.filter(
+            CaseDefinition.spontan == False  # noqa: E712
+        ).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
         return render_template("cases.html", cases=cases)
 
     @app.get("/cases/new")
@@ -2128,6 +2135,25 @@ function show(id){
             "lat": cd.lat,
             "lng": cd.lng,
         }), 201
+
+    @app.delete("/api/cases/<string:case_id>/spontan")
+    @admin_required
+    def delete_spontan_case(case_id):
+        """Löscht einen spontanen Fall (S-Fall) per API (JSON-Response)."""
+        cd = db.session.get(CaseDefinition, case_id)
+        if not cd:
+            return jsonify({"error": "Fall nicht gefunden"}), 404
+        if not cd.spontan:
+            return jsonify({"error": "Nur spontane Fälle können hier gelöscht werden"}), 400
+        doc = db.session.get(CaseDoc, case_id)
+        if doc:
+            db.session.delete(doc)
+        # Auch CaseEvtResult-Einträge aufräumen
+        from models import CaseEvtResult
+        CaseEvtResult.query.filter_by(case_id=case_id).delete()
+        db.session.delete(cd)
+        db.session.commit()
+        return jsonify({"ok": True, "id": case_id})
 
     # ---------------------------
     # Übungsvorlagen: Export & Import

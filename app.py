@@ -983,24 +983,20 @@ def create_app():
     # ---------------------------
     @app.get("/api/exercise/geodata")
     def exercise_geodata():
-        """Return exercise case coordinates from CaseDefinition DB."""
+        """Return exercise case coordinates from CaseDefinition DB.
+
+        Pure DB read – no W3W API calls. Coordinates are resolved once
+        when a case is saved (form or import) or via the manual
+        'w3w → Koordinaten' button.
+        """
         result: dict = {"cases": {}, "startpunkt": None}
-        dirty = False
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
-            # Only resolve w3w → coordinates if coordinates are missing
-            if cd.w3w and cd.lat is None:
-                lat, lng = resolve_w3w(cd.w3w)
-                if lat is not None:
-                    cd.lat, cd.lng = lat, lng
-                    dirty = True
             result["cases"][cd.id] = {
                 "lat": cd.lat, "lng": cd.lng,
                 "schlagwort": cd.schlagwort or "",
                 "patient": cd.patient or "",
                 "w3w": cd.w3w or "",
             }
-        if dirty:
-            db.session.commit()
         result["startpunkt"] = {"lat": STARTPUNKT_LAT, "lng": STARTPUNKT_LNG, "w3w": STARTPUNKT_W3W}
         return jsonify(result)
 

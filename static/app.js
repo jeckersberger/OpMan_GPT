@@ -175,31 +175,9 @@ function initMap(){
   layers["🗺 OpenStreetMap"].addTo(map);
   L.control.layers(layers, {}, { position: "topright", collapsed: false }).addTo(map);
 
-  // Leaflet click handler
   map.on("click", (e) => {
     _handleMapClick(e.latlng.lat, e.latlng.lng);
   });
-  console.log("[initMap] Leaflet click handler registered");
-
-  // Fallback: native DOM click → falls Leaflet-Events nicht feuern,
-  // berechnen wir die Koordinaten manuell aus dem Pixel-Klick.
-  document.getElementById("map").addEventListener("click", (e) => {
-    // Nur als Fallback: wenn Leaflet den Click schon verarbeitet hat, ignorieren
-    if (map._lastClickTime && (Date.now() - map._lastClickTime < 300)) return;
-    try {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
-      const latlng = map.containerPointToLatLng(point);
-      console.log("[DOM fallback click]", latlng.lat, latlng.lng);
-      _handleMapClick(latlng.lat, latlng.lng);
-    } catch (err) {
-      console.warn("[DOM fallback click] error:", err);
-    }
-  });
-
-  // Markiere Leaflet-Clicks, damit der Fallback sie nicht doppelt feuert
-  map.on("click", () => { map._lastClickTime = Date.now(); });
-  console.log("[initMap] done");
 }
 
 // ---------------- Marker styles ----------------

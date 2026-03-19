@@ -2313,45 +2313,121 @@ function show(id){
     @app.get("/api/auswertung")
     @admin_required
     def api_auswertung():
-        """Liefert alle Auswertungsdaten als JSON im Format das das Frontend erwartet."""
+        """Liefert Auswertungsdaten gruppiert nach EVT-Teams."""
         cases = CaseDefinition.query.filter(
             CaseDefinition.active == True  # noqa: E712
         ).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
 
         docs = {d.id: d for d in CaseDoc.query.all()}
+        evt_results = CaseEvtResult.query.all()
+        all_teams = Team.query.order_by(Team.id).all()
 
         def _sec(a, b):
-            """Differenz in Sekunden zwischen zwei datetime-Objekten (oder None)."""
             if a and b:
                 return (b - a).total_seconds()
             return None
 
-        case_data = []
-        team_times: dict[str, dict[str, float | None]] = {}  # case_id → {evt → seconds}
+        def _iso(dt):
+            return dt.isoformat() if dt else None
+
+        # Alle EVT-Namen sammeln (aus Teams + CaseDoc.assigned_evt + CaseEvtResult)
+        evt_names: list[str] = []
+        seen = set()
+        for t in all_teams:
+            if t.name not in seen:
+                evt_names.append(t.name)
+                seen.add(t.name)
+        for d in docs.values():
+            if d.assigned_evt and d.assigned_evt not in seen:
+                evt_names.append(d.assigned_evt)
+                seen.add(d.assigned_evt)
+
+        # CaseEvtResult nach (case_id, evt_name) indizieren
+        result_map: dict[tuple[str, str], CaseEvtResult] = {}
+        for r in evt_results:
+            result_map[(r.case_id, r.evt_name)] = r
+
+        # Pro EVT: Fälle mit Timing-Daten
+        teams_out = []
+        for evt in evt_names:
+            cases_for_evt = []
+            for c in cases:
+                doc = docs.get(c.id)
+                # Prüfe ob dieses EVT dem Fall zugewiesen war
+                er = result_map.get((c.id, evt))
+                was_assigned = (doc and doc.assigned_evt == evt) or er is not None
+                if not was_assigned:
+                    continue
+
+                # Timing aus CaseEvtResult bevorzugen, Fallback auf CaseDoc
+                alarm = (er.alarm_time if er else None) or (doc.alarm_time if doc else None)
+                s3 = (er.status3_time if er else None) or (doc.status3_time if doc else None)
+                s4 = (er.status4_time if er else None) or (doc.status4_time if doc else None)
+                s7 = (er.status7_time if er else None) or (doc.status7_time if doc else None)
+                s8 = (er.status8_time if er else None) or (doc.status8_time if doc else None)
+                total = _sec(alarm, s8)
+
+                cases_for_evt.append({
+                    "case_id": c.id,
+                    "schlagwort": c.schlagwort or "",
+                    "patient": c.patient or "",
+                    "alarm_time": _iso(alarm),
+                    "status3_time": _iso(s3),
+                    "status4_time": _iso(s4),
+                    "status7_time": _iso(s7),
+                    "status8_time": _iso(s8),
+                    "s3_seconds": _sec(alarm, s3),
+                    "s4_seconds": _sec(alarm, s4),
+                    "s7_seconds": _sec(alarm, s7),
+                    "s8_seconds": _sec(alarm, s8),
+                    "total_seconds": total,
+                    "completed": (doc.completed if doc else False) or (total is not None),
+                    "pzc_soll": c.pzc_soll,
+                    "pzc_reported": (er.pzc_reported if er else None) or (doc.pzc_reported if doc else None),
+                    "abcd_soll": json.loads(c.abcd_soll_json) if c.abcd_soll_json else {},
+                    "abcd_reported": json.loads(
+                        (er.abcde_schema if er and er.abcde_schema else None)
+                        or (doc.abcde_schema if doc and doc.abcde_schema else None)
+                        or "{}"
+                    ),
+                })
+
+            completed = sum(1 for cc in cases_for_evt if cc["completed"])
+            avg_total = None
+            totals = [cc["total_seconds"] for cc in cases_for_evt if cc["total_seconds"] is not None]
+            if totals:
+                avg_total = sum(totals) / len(totals)
+
+            teams_out.append({
+                "evt_name": evt,
+                "cases": cases_for_evt,
+                "cases_total": len(cases),
+                "cases_assigned": len(cases_for_evt),
+                "cases_completed": completed,
+                "avg_total_seconds": avg_total,
+            })
+
+        # Gesamt-Übersicht (alle Fälle mit CaseDoc-Daten)
+        all_cases = []
         for c in cases:
             doc = docs.get(c.id)
             alarm = doc.alarm_time if doc else None
-            s3 = doc.status3_time if doc else None
-            s4 = doc.status4_time if doc else None
-            s7 = doc.status7_time if doc else None
             s8 = doc.status8_time if doc else None
-            total = _sec(alarm, s8) if alarm and s8 else None
-
-            case_data.append({
+            all_cases.append({
                 "case_id": c.id,
                 "schlagwort": c.schlagwort or "",
                 "patient": c.patient or "",
-                "alarm_time": alarm.isoformat() if alarm else None,
-                "status3_time": s3.isoformat() if s3 else None,
-                "status4_time": s4.isoformat() if s4 else None,
-                "status7_time": s7.isoformat() if s7 else None,
-                "status8_time": s8.isoformat() if s8 else None,
-                "s3_seconds": _sec(alarm, s3),
-                "s4_seconds": _sec(alarm, s4),
-                "s7_seconds": _sec(alarm, s7),
-                "s8_seconds": _sec(alarm, s8),
-                "total_seconds": total,
                 "assigned_evt": doc.assigned_evt if doc else None,
+                "alarm_time": _iso(alarm),
+                "status3_time": _iso(doc.status3_time if doc else None),
+                "status4_time": _iso(doc.status4_time if doc else None),
+                "status7_time": _iso(doc.status7_time if doc else None),
+                "status8_time": _iso(s8),
+                "s3_seconds": _sec(alarm, doc.status3_time if doc else None),
+                "s4_seconds": _sec(alarm, doc.status4_time if doc else None),
+                "s7_seconds": _sec(alarm, doc.status7_time if doc else None),
+                "s8_seconds": _sec(alarm, s8),
+                "total_seconds": _sec(alarm, s8),
                 "completed": doc.completed if doc else False,
                 "pzc_soll": c.pzc_soll,
                 "pzc_reported": doc.pzc_reported if doc else None,
@@ -2359,14 +2435,10 @@ function show(id){
                 "abcd_reported": json.loads(doc.abcde_schema) if doc and doc.abcde_schema else {},
             })
 
-            # EVT-Vergleich: Zeitdaten pro Fall und Team
-            if doc and doc.assigned_evt and total is not None:
-                team_times.setdefault(c.id, {})[doc.assigned_evt] = total
-
         return jsonify({
             "ok": True,
-            "cases": case_data,
-            "team_times": team_times,
+            "teams": teams_out,
+            "all_cases": all_cases,
         })
 
     # ── Funkprotokoll Export Routes ──

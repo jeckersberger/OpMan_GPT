@@ -50,8 +50,24 @@
     .btn-orange  { background:var(--orange); color:#000; }
     .btn-sm      { padding:.2rem .45rem; font-size:.74rem; }
 
+    /* ── Team Selector Tabs ── */
+    .team-tabs {
+      display:flex; gap:.4rem; padding:.8rem 1.1rem .4rem; max-width:1400px; margin:0 auto;
+      flex-wrap:wrap; align-items:center;
+    }
+    .team-tab {
+      padding:.4rem .9rem; border-radius:8px; border:1px solid var(--border);
+      background:var(--panel); color:var(--muted); cursor:pointer;
+      font-size:.82rem; font-weight:600; font-family:inherit; transition:all .15s;
+      white-space:nowrap;
+    }
+    .team-tab:hover { background:var(--panel2); color:var(--text); border-color:var(--accent); }
+    .team-tab.active {
+      background:var(--accent); color:#fff; border-color:var(--accent);
+    }
+
     /* ── Main Content ── */
-    .container { padding:1.5rem 1.1rem; max-width:1400px; margin:0 auto; }
+    .container { padding:1rem 1.1rem 1.5rem; max-width:1400px; margin:0 auto; }
 
     /* ── Sections ── */
     .section { margin-bottom:2rem; }
@@ -95,7 +111,6 @@
 
     .timing-label { color:var(--muted); }
     .timing-value { font-weight:700; font-family:monospace; }
-    .timing-soll { color:var(--yellow); }
     .timing-good { color:var(--green); }
     .timing-bad { color:var(--red); }
     .timing-slow { color:var(--orange); }
@@ -155,9 +170,15 @@
     .evt-row:last-child { border-bottom:none; }
     .evt-name { min-width:100px; font-weight:700; }
     .evt-time { flex:1; font-family:monospace; font-size:.8rem; }
+    .evt-bar-bg {
+      flex:2; background:var(--panel); border-radius:4px; height:18px; overflow:hidden;
+    }
+    .evt-bar-fill {
+      height:100%; border-radius:4px; transition:width .3s ease;
+    }
 
     /* ── Summary ── */
-    .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin:1rem 0; }
+    .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin:1rem 0; }
     .summary-card {
       background:var(--panel2); border:1px solid var(--border); border-radius:8px;
       padding:1rem; text-align:center;
@@ -168,9 +189,14 @@
     .summary-value.warn { color:var(--yellow); }
     .summary-value.bad { color:var(--red); }
 
+    /* ── No-data message ── */
+    .no-data {
+      text-align:center; padding:3rem 1rem; color:var(--muted); font-size:.9rem;
+    }
+
     /* ── Print ── */
     @media print {
-      .topbar, .btn, button { display:none; }
+      .topbar, .btn, button, .team-tabs { display:none; }
       .container { max-width:100%; padding:0; }
       .case-card { page-break-inside:avoid; }
       body { background:white; color:black; }
@@ -182,68 +208,113 @@
       .pzc-grid { grid-template-columns:1fr; }
       .abcd-grid { grid-template-columns:repeat(2,1fr); }
       .summary-grid { grid-template-columns:1fr; }
+      .team-tabs { gap:.3rem; }
+      .team-tab { font-size:.75rem; padding:.35rem .6rem; }
     }
   </style>
 </head>
 <body>
   <!-- Topbar -->
   <header class="topbar">
-    <a href="/" class="back">← Zurück</a>
-    <h1>📊 Einsatz-Auswertung</h1>
+    <a href="/" class="back">&larr; Zur&uuml;ck</a>
+    <h1>&#x1F4CA; Einsatz-Auswertung</h1>
     <nav>
-      <a href="/">🗺 Karte</a>
-      <a href="/protokoll">📋 Protokoll</a>
-      <a href="/cases">📝 Fälle</a>
-      <a href="/beobachter">👁 Beobachter</a>
+      <a href="/">&#x1F5FA; Karte</a>
+      <a href="/protokoll">&#x1F4CB; Protokoll</a>
+      <a href="/cases">&#x1F4DD; F&auml;lle</a>
+      <a href="/beobachter">&#x1F441; Beobachter</a>
     </nav>
-    <button class="btn btn-primary" onclick="window.print()">🖨 Drucken</button>
+    <button class="btn btn-primary" onclick="window.print()">&#x1F5A8; Drucken</button>
   </header>
+
+  <!-- Team Selector Tabs -->
+  <div class="team-tabs" id="teamTabs" style="display:none;"></div>
 
   <!-- Main Content -->
   <div class="container">
-    <!-- Lade Daten via API -->
     <div id="loading" style="text-align:center;padding:2rem;color:var(--muted);">
-      Daten werden geladen…
+      Daten werden geladen&hellip;
     </div>
 
     <div id="content" style="display:none;">
-      <!-- Summary aller Fälle -->
+      <!-- Summary -->
       <div class="section">
-        <h2 class="section-title">📈 Übersicht</h2>
+        <h2 class="section-title" id="sectionTitle">&#x1F4C8; &Uuml;bersicht</h2>
         <div class="summary-grid" id="summaryGrid"></div>
       </div>
 
       <!-- Detailauswertung pro Fall -->
       <div class="section">
-        <h2 class="section-title">🎯 Auswertung pro Fall</h2>
+        <h2 class="section-title">&#x1F3AF; Auswertung pro Fall</h2>
         <div class="case-grid" id="caseGrid"></div>
       </div>
 
-      <!-- EVT-Vergleich (falls mehrere Teams) -->
+      <!-- EVT-Vergleich (nur in "Alle"-Ansicht) -->
       <div class="section" id="evtComparisonSection" style="display:none;">
-        <h2 class="section-title">🚑 Vergleich EVT-Teams</h2>
+        <h2 class="section-title">&#x1F691; Vergleich EVT-Teams</h2>
         <div id="evtComparison"></div>
       </div>
     </div>
   </div>
 
   <script>
+    let _auswertungData = null;
+    let _activeTab = '__all__';
+
+    /* ── Load data ── */
     async function loadAuswertung() {
       try {
         const res = await fetch('/api/auswertung');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        renderAuswertung(data);
+        if (!data.ok) throw new Error(data.error || 'Unbekannter Fehler');
+        _auswertungData = data;
+        buildTeamTabs(data);
+        showTab('__all__');
       } catch (err) {
-        document.getElementById('loading').innerHTML = '❌ Fehler beim Laden: ' + err.message;
+        document.getElementById('loading').innerHTML = '&#x274C; Fehler beim Laden: ' + err.message;
       }
     }
 
+    /* ── Build team selector tabs ── */
+    function buildTeamTabs(data) {
+      const container = document.getElementById('teamTabs');
+      let html = '<button class="team-tab active" data-tab="__all__" onclick="showTab(\'__all__\')">Alle</button>';
+      (data.teams || []).forEach(t => {
+        const name = t.evt_name;
+        const esc = name.replace(/'/g, "\\'");
+        html += '<button class="team-tab" data-tab="' + name + '" onclick="showTab(\'' + esc + '\')">'
+              + name
+              + ' <span style="font-size:.7rem;color:var(--muted);margin-left:.3rem;">'
+              + t.cases_assigned + '/' + t.cases_total
+              + '</span></button>';
+      });
+      container.innerHTML = html;
+      container.style.display = 'flex';
+    }
+
+    /* ── Switch tab ── */
+    function showTab(tabId) {
+      _activeTab = tabId;
+      document.querySelectorAll('.team-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+      });
+      if (tabId === '__all__') {
+        renderOverview(_auswertungData);
+      } else {
+        const team = (_auswertungData.teams || []).find(t => t.evt_name === tabId);
+        if (team) {
+          renderTeamView(team);
+        }
+      }
+    }
+
+    /* ── Render helpers ── */
     function formatDuration(seconds) {
       if (seconds === null || seconds === undefined) return '-';
       const mins = Math.floor(seconds / 60);
       const secs = Math.round(seconds % 60);
-      return `${mins}:${String(secs).padStart(2,'0')} min`;
+      return mins + ':' + String(secs).padStart(2, '0') + ' min';
     }
 
     function formatTime(isoStr) {
@@ -252,194 +323,287 @@
       return dt.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
     }
 
-    function getDurationColor(seconds, slow, normal) {
+    function getDurationColor(seconds, slowThreshold, goodThreshold) {
       if (seconds === null || seconds === undefined) return '';
-      if (seconds <= normal) return 'timing-good';
-      if (seconds <= slow) return 'timing-slow';
-      return 'timing-bad';
+      if (seconds <= goodThreshold) return 'green';
+      if (seconds <= slowThreshold) return 'yellow';
+      return 'red';
     }
 
-    function renderAuswertung(data) {
-      const { cases, team_times } = data;
+    /* ── Render "Alle" overview ── */
+    function renderOverview(data) {
+      const cases = data.all_cases || [];
+      const teams = data.teams || [];
 
-      // Render Summary
-      let totalDuration = 0;
-      let completedCount = 0;
+      document.getElementById('sectionTitle').innerHTML = '&#x1F4C8; Gesamt&uuml;bersicht';
+
+      // Summary
+      let totalDuration = 0, completedCount = 0;
       cases.forEach(c => {
-        if (c.total_seconds !== null) {
+        if (c.total_seconds !== null && c.total_seconds !== undefined) {
           totalDuration += c.total_seconds;
           completedCount++;
         }
       });
 
-      let summaryHtml = `
-        <div class="summary-card">
-          <div class="summary-label">Bearbeitete Fälle</div>
-          <div class="summary-value">${completedCount}/${cases.length}</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-label">Durchschnittliche Dauer</div>
-          <div class="summary-value ${completedCount > 0 ? 'good' : ''}">${completedCount > 0 ? formatDuration(totalDuration / completedCount) : '-'}</div>
-        </div>
-      `;
-      document.getElementById('summaryGrid').innerHTML = summaryHtml;
+      document.getElementById('summaryGrid').innerHTML =
+        '<div class="summary-card">' +
+          '<div class="summary-label">F&auml;lle gesamt</div>' +
+          '<div class="summary-value">' + cases.length + '</div>' +
+        '</div>' +
+        '<div class="summary-card">' +
+          '<div class="summary-label">Abgeschlossen</div>' +
+          '<div class="summary-value ' + (completedCount === cases.length && cases.length > 0 ? 'good' : '') + '">' + completedCount + '/' + cases.length + '</div>' +
+        '</div>' +
+        '<div class="summary-card">' +
+          '<div class="summary-label">&#x2205; Einsatzdauer</div>' +
+          '<div class="summary-value ' + (completedCount > 0 ? 'good' : '') + '">' + (completedCount > 0 ? formatDuration(totalDuration / completedCount) : '-') + '</div>' +
+        '</div>' +
+        '<div class="summary-card">' +
+          '<div class="summary-label">EVT-Teams</div>' +
+          '<div class="summary-value">' + teams.length + '</div>' +
+        '</div>';
 
-      // Render Case Cards
-      let caseHtml = '';
-      cases.forEach(c => {
-        const isCompleted = c.total_seconds !== null;
+      // Case cards (from all_cases)
+      renderCaseCards(cases);
 
-        // Timeline
-        let timelineHtml = '';
-        if (c.alarm_time) {
-          timelineHtml += `
-            <div class="timeline-event">
-              <div class="timeline-marker">Alarm</div>
-              <div class="timeline-bar">${formatTime(c.alarm_time)}</div>
-            </div>
-          `;
-        }
-        if (c.status3_time) {
-          const dur = c.s3_seconds;
-          const color = dur <= 120 ? 'green' : dur <= 180 ? 'yellow' : 'red';
-          timelineHtml += `
-            <div class="timeline-event">
-              <div class="timeline-marker">S3 (${dur}s)</div>
-              <div class="timeline-bar ${color}">${formatTime(c.status3_time)} | Ausrückzeit: ${formatDuration(dur)}</div>
-            </div>
-          `;
-        }
-        if (c.status4_time) {
-          const dur = c.s4_seconds;
-          const color = dur <= 300 ? 'green' : dur <= 600 ? 'yellow' : 'red';
-          timelineHtml += `
-            <div class="timeline-event">
-              <div class="timeline-marker">S4 (${dur}s)</div>
-              <div class="timeline-bar ${color}">${formatTime(c.status4_time)} | Anfahrt: ${formatDuration(dur)}</div>
-            </div>
-          `;
-        }
-        if (c.status7_time) {
-          const dur = c.s7_seconds;
-          const color = dur <= 600 ? 'green' : dur <= 900 ? 'yellow' : 'red';
-          timelineHtml += `
-            <div class="timeline-event">
-              <div class="timeline-marker">S7 (${dur}s)</div>
-              <div class="timeline-bar ${color}">${formatTime(c.status7_time)} | Vor-Ort: ${formatDuration(dur)}</div>
-            </div>
-          `;
-        }
-        if (c.status8_time) {
-          const dur = c.s8_seconds;
-          const color = dur <= 300 ? 'green' : dur <= 600 ? 'yellow' : 'red';
-          timelineHtml += `
-            <div class="timeline-event">
-              <div class="timeline-marker">S8 (${dur}s)</div>
-              <div class="timeline-bar ${color}">${formatTime(c.status8_time)} | Transport: ${formatDuration(dur)}</div>
-            </div>
-          `;
-        }
-
-        // PZC-Auswertung
-        let pzcHtml = '';
-        if (c.pzc_soll || c.pzc_reported) {
-          const correct = c.pzc_soll === c.pzc_reported;
-          pzcHtml = `
-            <div class="pzc-grid">
-              <div class="pzc-item ${correct ? 'correct' : 'wrong'}">
-                <div class="pzc-label">PZC (Soll)</div>
-                <div class="pzc-value" style="color:var(--yellow);">${c.pzc_soll || '-'}</div>
-              </div>
-              <div class="pzc-item ${correct ? 'correct' : 'wrong'}">
-                <div class="pzc-label">PZC (Gemeldet)</div>
-                <div class="pzc-value" style="color:${correct ? 'var(--green)' : 'var(--red);'}">${c.pzc_reported || '-'}</div>
-              </div>
-            </div>
-          `;
-        }
-
-        // ABCD-Auswertung
-        let abcdHtml = '';
-        if (c.abcd_soll || c.abcd_reported) {
-          const soll = c.abcd_soll || {};
-          const ist = c.abcd_reported || {};
-          const schemas = ['A', 'B', 'C', 'D'];
-          abcdHtml = '<div class="abcd-grid">';
-          schemas.forEach(s => {
-            const sollVal = soll[s] || '-';
-            const istVal = ist[s] || '-';
-            const match = sollVal === '-' || sollVal === istVal;
-            const almostMatch = sollVal !== '-' && Math.abs(sollVal - istVal) <= 1;
-            const statusClass = match ? 'correct' : almostMatch ? 'almost' : 'wrong';
-            abcdHtml += `
-              <div class="abcd-item ${statusClass}">
-                <div class="abcd-label">${s}</div>
-                <div class="abcd-soll">Soll: ${sollVal}</div>
-                <div class="abcd-ist">Ist: ${istVal}</div>
-              </div>
-            `;
-          });
-          abcdHtml += '</div>';
-        }
-
-        caseHtml += `
-          <div class="case-card ${isCompleted ? 'completed' : ''}">
-            <div class="case-header">
-              <div class="case-id ${isCompleted ? 'completed' : ''}">${c.case_id}</div>
-              <div>
-                <div class="case-schlagwort">${c.schlagwort}</div>
-                <div class="case-patient">${c.patient}</div>
-              </div>
-            </div>
-
-            <div class="timeline">
-              ${timelineHtml || '<p style="color:var(--muted);font-size:.8rem;">Noch nicht alarmiert</p>'}
-            </div>
-
-            ${pzcHtml}
-            ${abcdHtml}
-
-            ${isCompleted ? `
-              <div style="background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3);border-radius:6px;padding:.6rem;margin-top:1rem;font-size:.8rem;">
-                <strong style="color:var(--green);">✓ Gesamtdauer: ${formatDuration(c.total_seconds)}</strong>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      });
-
-      document.getElementById('caseGrid').innerHTML = caseHtml;
-
-      // EVT-Vergleich (if multiple teams)
-      if (team_times && Object.keys(team_times).length > 1) {
-        let evtHtml = '';
-        for (const [caseId, teamData] of Object.entries(team_times)) {
-          const teams = Object.entries(teamData).filter(([_, time]) => time);
-          if (teams.length > 1) {
-            evtHtml += `<div class="evt-comparison" style="margin-bottom:1rem;">
-              <h4 style="font-size:.85rem;margin-bottom:.8rem;color:var(--accent);">Fall ${caseId}</h4>`;
-            teams.forEach(([team, time]) => {
-              evtHtml += `
-                <div class="evt-row">
-                  <div class="evt-name">${team}</div>
-                  <div class="evt-time">${formatDuration(time)}</div>
-                </div>
-              `;
-            });
-            evtHtml += '</div>';
-          }
-        }
-        if (evtHtml) {
-          document.getElementById('evtComparison').innerHTML = evtHtml;
-          document.getElementById('evtComparisonSection').style.display = 'block';
-        }
-      }
+      // EVT comparison
+      renderEvtComparison(data);
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
     }
 
-    // Lade Daten beim Seitenaufruf
+    /* ── Render single team view ── */
+    function renderTeamView(team) {
+      document.getElementById('sectionTitle').innerHTML = '&#x1F4C8; ' + team.evt_name;
+
+      // Summary for this team
+      const cases = team.cases || [];
+      let totalDuration = 0, completedCount = 0;
+      cases.forEach(c => {
+        if (c.total_seconds !== null && c.total_seconds !== undefined) {
+          totalDuration += c.total_seconds;
+          completedCount++;
+        }
+      });
+
+      document.getElementById('summaryGrid').innerHTML =
+        '<div class="summary-card">' +
+          '<div class="summary-label">Zugewiesene F&auml;lle</div>' +
+          '<div class="summary-value">' + team.cases_assigned + '/' + team.cases_total + '</div>' +
+        '</div>' +
+        '<div class="summary-card">' +
+          '<div class="summary-label">Abgeschlossen</div>' +
+          '<div class="summary-value ' + (team.cases_completed === team.cases_assigned && team.cases_assigned > 0 ? 'good' : '') + '">' + team.cases_completed + '/' + team.cases_assigned + '</div>' +
+        '</div>' +
+        '<div class="summary-card">' +
+          '<div class="summary-label">&#x2205; Einsatzdauer</div>' +
+          '<div class="summary-value ' + (team.avg_total_seconds ? 'good' : '') + '">' + (team.avg_total_seconds ? formatDuration(team.avg_total_seconds) : '-') + '</div>' +
+        '</div>';
+
+      // Case cards for this team
+      renderCaseCards(cases);
+
+      // Hide EVT comparison in single-team view
+      document.getElementById('evtComparisonSection').style.display = 'none';
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+    }
+
+    /* ── Render case cards (shared) ── */
+    function renderCaseCards(cases) {
+      if (!cases.length) {
+        document.getElementById('caseGrid').innerHTML = '<div class="no-data">Keine F&auml;lle verf&uuml;gbar</div>';
+        return;
+      }
+
+      let html = '';
+      cases.forEach(c => {
+        const isCompleted = c.total_seconds !== null && c.total_seconds !== undefined;
+
+        // Timeline
+        let tl = '';
+        if (c.alarm_time) {
+          tl += '<div class="timeline-event">' +
+            '<div class="timeline-marker">Alarm</div>' +
+            '<div class="timeline-bar">' + formatTime(c.alarm_time) + '</div></div>';
+        }
+        if (c.status3_time) {
+          const d = c.s3_seconds;
+          const col = getDurationColor(d, 180, 120);
+          tl += '<div class="timeline-event">' +
+            '<div class="timeline-marker">S3 (' + Math.round(d) + 's)</div>' +
+            '<div class="timeline-bar ' + col + '">' + formatTime(c.status3_time) + ' | Ausr&uuml;ckzeit: ' + formatDuration(d) + '</div></div>';
+        }
+        if (c.status4_time) {
+          const d = c.s4_seconds;
+          const col = getDurationColor(d, 600, 300);
+          tl += '<div class="timeline-event">' +
+            '<div class="timeline-marker">S4 (' + Math.round(d) + 's)</div>' +
+            '<div class="timeline-bar ' + col + '">' + formatTime(c.status4_time) + ' | Anfahrt: ' + formatDuration(d) + '</div></div>';
+        }
+        if (c.status7_time) {
+          const d = c.s7_seconds;
+          const col = getDurationColor(d, 900, 600);
+          tl += '<div class="timeline-event">' +
+            '<div class="timeline-marker">S7 (' + Math.round(d) + 's)</div>' +
+            '<div class="timeline-bar ' + col + '">' + formatTime(c.status7_time) + ' | Vor-Ort: ' + formatDuration(d) + '</div></div>';
+        }
+        if (c.status8_time) {
+          const d = c.s8_seconds;
+          const col = getDurationColor(d, 600, 300);
+          tl += '<div class="timeline-event">' +
+            '<div class="timeline-marker">S8 (' + Math.round(d) + 's)</div>' +
+            '<div class="timeline-bar ' + col + '">' + formatTime(c.status8_time) + ' | Transport: ' + formatDuration(d) + '</div></div>';
+        }
+
+        // PZC
+        let pzcHtml = '';
+        if (c.pzc_soll || c.pzc_reported) {
+          const correct = c.pzc_soll === c.pzc_reported;
+          pzcHtml =
+            '<div class="pzc-grid">' +
+              '<div class="pzc-item ' + (correct ? 'correct' : 'wrong') + '">' +
+                '<div class="pzc-label">PZC (Soll)</div>' +
+                '<div class="pzc-value" style="color:var(--yellow);">' + (c.pzc_soll || '-') + '</div>' +
+              '</div>' +
+              '<div class="pzc-item ' + (correct ? 'correct' : 'wrong') + '">' +
+                '<div class="pzc-label">PZC (Gemeldet)</div>' +
+                '<div class="pzc-value" style="color:' + (correct ? 'var(--green)' : 'var(--red)') + ';">' + (c.pzc_reported || '-') + '</div>' +
+              '</div>' +
+            '</div>';
+        }
+
+        // ABCD
+        let abcdHtml = '';
+        if (c.abcd_soll || c.abcd_reported) {
+          const soll = c.abcd_soll || {};
+          const ist = c.abcd_reported || {};
+          abcdHtml = '<div class="abcd-grid">';
+          ['A','B','C','D'].forEach(s => {
+            const sollVal = soll[s] || '-';
+            const istVal = ist[s] || '-';
+            const match = sollVal === '-' || sollVal === istVal;
+            const almostMatch = sollVal !== '-' && !isNaN(sollVal) && !isNaN(istVal) && Math.abs(sollVal - istVal) <= 1;
+            const cls = match ? 'correct' : almostMatch ? 'almost' : 'wrong';
+            abcdHtml +=
+              '<div class="abcd-item ' + cls + '">' +
+                '<div class="abcd-label">' + s + '</div>' +
+                '<div class="abcd-soll">Soll: ' + sollVal + '</div>' +
+                '<div class="abcd-ist">Ist: ' + istVal + '</div>' +
+              '</div>';
+          });
+          abcdHtml += '</div>';
+        }
+
+        // Assigned EVT badge (only in "Alle" view)
+        let evtBadge = '';
+        if (_activeTab === '__all__' && c.assigned_evt) {
+          evtBadge = '<span style="font-size:.7rem;background:var(--panel2);color:var(--accent);padding:.15rem .4rem;border-radius:4px;margin-left:auto;white-space:nowrap;">' + c.assigned_evt + '</span>';
+        }
+
+        html +=
+          '<div class="case-card ' + (isCompleted ? 'completed' : '') + '">' +
+            '<div class="case-header">' +
+              '<div class="case-id ' + (isCompleted ? 'completed' : '') + '">' + c.case_id + '</div>' +
+              '<div>' +
+                '<div class="case-schlagwort">' + c.schlagwort + '</div>' +
+                '<div class="case-patient">' + c.patient + '</div>' +
+              '</div>' +
+              evtBadge +
+            '</div>' +
+            '<div class="timeline">' +
+              (tl || '<p style="color:var(--muted);font-size:.8rem;">Noch nicht alarmiert</p>') +
+            '</div>' +
+            pzcHtml +
+            abcdHtml +
+            (isCompleted
+              ? '<div style="background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3);border-radius:6px;padding:.6rem;margin-top:1rem;font-size:.8rem;">' +
+                  '<strong style="color:var(--green);">&#x2713; Gesamtdauer: ' + formatDuration(c.total_seconds) + '</strong>' +
+                '</div>'
+              : '') +
+          '</div>';
+      });
+
+      document.getElementById('caseGrid').innerHTML = html;
+    }
+
+    /* ── EVT comparison (overview tab only) ── */
+    function renderEvtComparison(data) {
+      const teams = data.teams || [];
+      if (teams.length < 2) {
+        document.getElementById('evtComparisonSection').style.display = 'none';
+        return;
+      }
+
+      // Find the max avg for bar scaling
+      const maxAvg = Math.max(...teams.map(t => t.avg_total_seconds || 0), 1);
+
+      // Per-team summary comparison
+      let html = '<div class="evt-comparison">' +
+        '<h4 style="font-size:.85rem;margin-bottom:.8rem;color:var(--accent);">Durchschnittliche Einsatzdauer</h4>';
+      const teamColors = ['var(--accent)', 'var(--green)', 'var(--orange)', 'var(--yellow)', 'var(--red)', '#c084fc', '#f472b6'];
+
+      teams.forEach((t, i) => {
+        const avg = t.avg_total_seconds;
+        const pct = avg ? Math.round((avg / maxAvg) * 100) : 0;
+        const color = teamColors[i % teamColors.length];
+        html +=
+          '<div class="evt-row">' +
+            '<div class="evt-name">' + t.evt_name + '</div>' +
+            '<div class="evt-time">' + (avg ? formatDuration(avg) : '-') + '</div>' +
+            '<div class="evt-bar-bg">' +
+              '<div class="evt-bar-fill" style="width:' + pct + '%;background:' + color + ';"></div>' +
+            '</div>' +
+          '</div>';
+      });
+      html += '</div>';
+
+      // Per-case cross-team comparison
+      // Group cases by case_id across teams
+      const caseMap = {};
+      teams.forEach(t => {
+        (t.cases || []).forEach(c => {
+          if (!caseMap[c.case_id]) caseMap[c.case_id] = { schlagwort: c.schlagwort, teams: {} };
+          if (c.total_seconds !== null && c.total_seconds !== undefined) {
+            caseMap[c.case_id].teams[t.evt_name] = c.total_seconds;
+          }
+        });
+      });
+
+      // Only show cases handled by multiple teams
+      const multiTeamCases = Object.entries(caseMap).filter(([_, v]) => Object.keys(v.teams).length > 1);
+      if (multiTeamCases.length > 0) {
+        html += '<div style="margin-top:1.5rem;">';
+        multiTeamCases.forEach(([caseId, info]) => {
+          const caseMax = Math.max(...Object.values(info.teams), 1);
+          html += '<div class="evt-comparison" style="margin-bottom:1rem;">' +
+            '<h4 style="font-size:.85rem;margin-bottom:.8rem;color:var(--accent);">Fall ' + caseId + ' &ndash; ' + info.schlagwort + '</h4>';
+          Object.entries(info.teams).forEach(([evtName, seconds]) => {
+            const pct = Math.round((seconds / caseMax) * 100);
+            const teamIdx = teams.findIndex(t => t.evt_name === evtName);
+            const color = teamColors[(teamIdx >= 0 ? teamIdx : 0) % teamColors.length];
+            html +=
+              '<div class="evt-row">' +
+                '<div class="evt-name">' + evtName + '</div>' +
+                '<div class="evt-time">' + formatDuration(seconds) + '</div>' +
+                '<div class="evt-bar-bg">' +
+                  '<div class="evt-bar-fill" style="width:' + pct + '%;background:' + color + ';"></div>' +
+                '</div>' +
+              '</div>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      document.getElementById('evtComparison').innerHTML = html;
+      document.getElementById('evtComparisonSection').style.display = 'block';
+    }
+
+    // Start
     loadAuswertung();
   </script>
 </body>

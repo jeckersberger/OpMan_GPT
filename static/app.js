@@ -691,9 +691,7 @@ function renderMissions(){
   if (!root) return;
   root.innerHTML = "";
 
-  // Panel nur anzeigen wenn Einsätze existieren
-  const panel = document.getElementById("missionsPanel");
-  if (panel) panel.style.display = missions.length ? "" : "none";
+  // missionsPanel bleibt permanent ausgeblendet
 
   missions.forEach(m => {
     const sel = (m.id === selectedMissionId);

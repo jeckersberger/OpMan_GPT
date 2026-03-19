@@ -2148,12 +2148,19 @@ function show(id){
         doc = db.session.get(CaseDoc, case_id)
         if doc:
             db.session.delete(doc)
-        # Auch CaseEvtResult-Einträge aufräumen
-        from models import CaseEvtResult
+        # CaseEvtResult-Einträge aufräumen
         CaseEvtResult.query.filter_by(case_id=case_id).delete()
+        # Zugehörige Mission + Assignments löschen (erstellt beim Alarmieren)
+        prefix = f"{case_id}:"
+        mission = Mission.query.filter(Mission.title.like(f"{prefix}%")).first()
+        deleted_mission_id = None
+        if mission:
+            deleted_mission_id = mission.id
+            Assignment.query.filter_by(mission_id=mission.id).delete()
+            db.session.delete(mission)
         db.session.delete(cd)
         db.session.commit()
-        return jsonify({"ok": True, "id": case_id})
+        return jsonify({"ok": True, "id": case_id, "deleted_mission_id": deleted_mission_id})
 
     # ---------------------------
     # Übungsvorlagen: Export & Import

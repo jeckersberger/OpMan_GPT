@@ -469,7 +469,7 @@ function upsertMissionMarker(m){
 
   // Übungsfälle werden bereits als Exercise-Marker dargestellt → kein doppelter Pin
   if (exerciseGeodata) {
-    const caseMatch = m.title.match(/^(P\d+):/);
+    const caseMatch = m.title.match(/^([PS]\d+):/);
     if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) return;
   }
 
@@ -526,7 +526,7 @@ function cleanupMarkers(){
     for (const [id, marker] of missionMarkers.entries()) {
       const m = missions.find(x => x.id === id);
       if (!m) continue;
-      const caseMatch = m.title.match(/^(P\d+):/);
+      const caseMatch = m.title.match(/^([PS]\d+):/);
       if (caseMatch && exerciseGeodata.cases && exerciseGeodata.cases[caseMatch[1]]) {
         marker.remove();
         missionMarkers.delete(id);
@@ -804,7 +804,7 @@ function renderMissions(){
       if (!m) return;
 
       // Übungsfall? → zum Exercise-Marker springen
-      const caseMatch = m.title.match(/^(P\d+):/);
+      const caseMatch = m.title.match(/^([PS]\d+):/);
       if (caseMatch && exerciseMarkers.has(caseMatch[1])) {
         const exMarker = exerciseMarkers.get(caseMatch[1]);
         map.setView(exMarker.getLatLng(), map.getZoom());
@@ -1080,11 +1080,19 @@ function renderExerciseCases() {
       const caseId = btn.getAttribute("data-case-del-spontan");
       if (!confirm(`Spontan-Fall ${caseId} wirklich löschen?`)) return;
       try {
-        await api(`/api/cases/${caseId}/spontan`, { method: "DELETE" });
-        // Remove marker from map
+        const result = await api(`/api/cases/${caseId}/spontan`, { method: "DELETE" });
+        // Remove exercise marker from map
         if (exerciseMarkers.has(caseId)) {
           exerciseMarkers.get(caseId).remove();
           exerciseMarkers.delete(caseId);
+        }
+        // Remove mission marker (created when case was alarmed)
+        if (result.deleted_mission_id) {
+          const mid = result.deleted_mission_id;
+          if (missionMarkers.has(mid)) {
+            missionMarkers.get(mid).remove();
+            missionMarkers.delete(mid);
+          }
         }
         // Reload geodata
         exerciseGeodata = await api("/api/exercise/geodata");

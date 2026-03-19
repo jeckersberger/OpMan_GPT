@@ -2298,7 +2298,7 @@ function show(id){
     # Auswertung (Evaluation)
     # ---------------------------
     @app.route("/auswertung")
-    @admin_required
+    @admin_page_required
     def auswertung_page():
         """Übungs-Auswertung: Darstellung der Ergebnisse nach Übungsende."""
         return render_template("auswertung.html")
@@ -2306,57 +2306,60 @@ function show(id){
     @app.get("/api/auswertung")
     @admin_required
     def api_auswertung():
-        """Liefert alle Auswertungsdaten als JSON: Fälle, EVT-Ergebnisse, Zeitverlauf."""
-        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order).all()
-        teams = Team.query.all()
-        results = CaseEvtResult.query.all()
+        """Liefert alle Auswertungsdaten als JSON im Format das das Frontend erwartet."""
+        cases = CaseDefinition.query.filter(
+            CaseDefinition.active == True  # noqa: E712
+        ).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
 
-        # Ergebnisse nach Fall und EVT gruppieren
-        results_by_case = {}
-        for r in results:
-            case_id = r.case_id
-            if case_id not in results_by_case:
-                results_by_case[case_id] = []
-            results_by_case[case_id].append({
-                "evt": r.evt_name,
-                "rmi": r.rmi,
-                "sk": r.sk,
-                "pzc": r.pzc,
-                "abcd": json.loads(r.abcd_json) if r.abcd_json else {},
-                "notes": r.notes,
-                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-            })
+        docs = {d.id: d for d in CaseDoc.query.all()}
 
-        # Falldaten mit Soll-Werten zusammenstellen
+        def _sec(a, b):
+            """Differenz in Sekunden zwischen zwei datetime-Objekten (oder None)."""
+            if a and b:
+                return (b - a).total_seconds()
+            return None
+
         case_data = []
+        team_times: dict[str, dict[str, float | None]] = {}  # case_id → {evt → seconds}
         for c in cases:
+            doc = docs.get(c.id)
+            alarm = doc.alarm_time if doc else None
+            s3 = doc.status3_time if doc else None
+            s4 = doc.status4_time if doc else None
+            s7 = doc.status7_time if doc else None
+            s8 = doc.status8_time if doc else None
+            total = _sec(alarm, s8) if alarm and s8 else None
+
             case_data.append({
-                "id": c.id,
-                "schlagwort": c.schlagwort,
-                "patient": c.patient,
-                "rmi_soll": c.rmi_soll,
-                "sk_soll": c.sk_soll,
+                "case_id": c.id,
+                "schlagwort": c.schlagwort or "",
+                "patient": c.patient or "",
+                "alarm_time": alarm.isoformat() if alarm else None,
+                "status3_time": s3.isoformat() if s3 else None,
+                "status4_time": s4.isoformat() if s4 else None,
+                "status7_time": s7.isoformat() if s7 else None,
+                "status8_time": s8.isoformat() if s8 else None,
+                "s3_seconds": _sec(alarm, s3),
+                "s4_seconds": _sec(alarm, s4),
+                "s7_seconds": _sec(alarm, s7),
+                "s8_seconds": _sec(alarm, s8),
+                "total_seconds": total,
+                "assigned_evt": doc.assigned_evt if doc else None,
+                "completed": doc.completed if doc else False,
                 "pzc_soll": c.pzc_soll,
+                "pzc_reported": doc.pzc_reported if doc else None,
                 "abcd_soll": json.loads(c.abcd_soll_json) if c.abcd_soll_json else {},
-                "results": results_by_case.get(c.id, []),
+                "abcd_reported": json.loads(doc.abcde_schema) if doc and doc.abcde_schema else {},
             })
 
-        # Team-Übersicht
-        team_data = []
-        for t in teams:
-            team_results = [r for r in results if r.evt_name == t.name]
-            team_data.append({
-                "name": t.name,
-                "cases_completed": len(team_results),
-                "total_cases": len(cases),
-            })
+            # EVT-Vergleich: Zeitdaten pro Fall und Team
+            if doc and doc.assigned_evt and total is not None:
+                team_times.setdefault(c.id, {})[doc.assigned_evt] = total
 
         return jsonify({
             "ok": True,
             "cases": case_data,
-            "teams": team_data,
-            "total_cases": len(cases),
-            "total_teams": len(teams),
+            "team_times": team_times,
         })
 
     # ── Funkprotokoll Export Routes ──

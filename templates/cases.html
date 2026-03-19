@@ -243,12 +243,6 @@
           <label>what3words Alarmadresse (falls Adressfalle)
             <input type="text" name="w3w_alarm" value="{{ cd.w3w_alarm or '' }}" placeholder="leer = keine Falle">
           </label>
-          <label>Breitengrad (lat)
-            <input type="text" name="lat" value="{{ cd.lat or '' }}" placeholder="49.377493">
-          </label>
-          <label>Längengrad (lng)
-            <input type="text" name="lng" value="{{ cd.lng or '' }}" placeholder="11.206863">
-          </label>
         </div>
       </div>
 
@@ -503,8 +497,6 @@ const KI_SCHEMA = {
       "geschlecht": "m",
       "w3w": "///erstes.arbeitswelt.spülmittel",
       "w3w_alarm": "",
-      "lat": 49.377493,
-      "lng": 11.206863,
       "rmi_soll": "211",
       "sk_soll": "1",
       "pzc_soll": "211271",

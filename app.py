@@ -987,10 +987,10 @@ def create_app():
         result: dict = {"cases": {}, "startpunkt": None}
         dirty = False
         for cd in CaseDefinition.query.filter(CaseDefinition.active == True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all():  # noqa: E712
-            # Always resolve w3w → coordinates (w3w is authoritative source)
-            if cd.w3w:
+            # Only resolve w3w → coordinates if coordinates are missing
+            if cd.w3w and cd.lat is None:
                 lat, lng = resolve_w3w(cd.w3w)
-                if lat is not None and (cd.lat != lat or cd.lng != lng):
+                if lat is not None:
                     cd.lat, cd.lng = lat, lng
                     dirty = True
             result["cases"][cd.id] = {

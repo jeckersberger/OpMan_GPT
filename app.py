@@ -24,7 +24,7 @@ import hmac
 import functools
 from flask import Flask, render_template, request, jsonify, redirect, make_response
 from sqlalchemy import text
-from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition
+from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition, CaseProgressStep
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -112,7 +112,9 @@ def _fmt_dt(dt):
 # ---------------------------
 # what3words API
 # ---------------------------
-W3W_API_KEY = os.environ.get("W3W_API_KEY", "2ZJ55EYB")
+W3W_API_KEY = os.environ.get("W3W_API_KEY", "")
+if not W3W_API_KEY:
+    print("[WARNUNG] W3W_API_KEY nicht in .env gesetzt – what3words-Auflösung funktioniert nur aus dem Cache.", flush=True)
 W3W_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "w3w_cache.json")
 STARTPUNKT_W3W = "dulden.ausgehend.erscheinende"
 
@@ -177,9 +179,42 @@ def resolve_w3w(words: str):
     return lat, lng
 
 
+def reverse_w3w(lat: float, lng: float):
+    """Reverse geocode GPS coordinates to a what3words address. Returns None on error."""
+    if not W3W_API_KEY:
+        return None
+    url = (
+        "https://api.what3words.com/v3/convert-to-3wa"
+        f"?key={W3W_API_KEY}&coordinates={lat},{lng}&language=de&format=json"
+    )
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+        if "words" in data:
+            return f"///{data['words']}"
+    except OSError:
+        try:
+            with urllib.request.urlopen(url, timeout=8) as resp:  # noqa: S310
+                data = json.loads(resp.read().decode())
+            if "words" in data:
+                return f"///{data['words']}"
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return None
+
+
 def create_app():
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-in-production")
+    _secret = os.environ.get("SECRET_KEY", "")
+    if not _secret or _secret == "bitte-aendern-openssl-rand-hex-32":
+        import secrets as _sec
+        _secret = _sec.token_hex(32)
+        print("[WARNUNG] SECRET_KEY nicht in .env gesetzt – generiere zufälligen Key für diese Sitzung.", flush=True)
+        print("[WARNUNG] Setze SECRET_KEY in deiner .env-Datei für persistente Sessions!", flush=True)
+    app.config["SECRET_KEY"] = _secret
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///einsatzleiter.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     # WAL-Modus für SQLite: mehrere gunicorn-Worker können gleichzeitig lesen
@@ -278,6 +313,7 @@ def create_app():
             "ALTER TABLE radio_log ADD COLUMN marked BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE radio_log ADD COLUMN note TEXT",
             "ALTER TABLE exercise_config ADD COLUMN admin_pin VARCHAR(4) NOT NULL DEFAULT '1234'",
+            "CREATE TABLE IF NOT EXISTS case_progress_steps (id INTEGER PRIMARY KEY, case_id VARCHAR(10) NOT NULL, delay_minutes INTEGER NOT NULL DEFAULT 0, instruction TEXT NOT NULL, vitals_change TEXT, sort_order INTEGER NOT NULL DEFAULT 0, created_at DATETIME NOT NULL)",
         ]
         with db.engine.connect() as _conn:
             for _sql in _migrations:
@@ -311,6 +347,53 @@ def create_app():
         if db.session.get(ExerciseConfig, 1) is None:
             db.session.add(ExerciseConfig(id=1, evt_count=6))
         db.session.commit()
+
+        # Seed default progress steps (Verlaufskarten) for each case
+        _DEFAULT_PROGRESS_STEPS = {
+            "P1": [  # VU schwer: Radfahrer vs. PKW
+                {"delay": 0, "instruction": "Patient ist wach und ansprechbar, mäßig erregt", "vitals": {"SpO2": "96%", "HF": "108", "RR": "20", "BD": "110/70"}},
+                {"delay": 3, "instruction": "Patient wird zunehmend unruhig, versucht aufzustehen", "vitals": {"SpO2": "94%", "HF": "120", "RR": "24"}},
+                {"delay": 5, "instruction": "SpO2 sinkt auf 88%, Patient wird ängstlich, flache Atmung", "vitals": {"SpO2": "88%", "HF": "128", "RR": "28"}},
+                {"delay": 8, "instruction": "RR fällt auf 80/50, Patient wird zunehmend schläfrig, Perfusion verschlechtert sich", "vitals": {"SpO2": "85%", "HF": "140", "BD": "80/50"}},
+            ],
+            "P2": [  # Sturz Skateboard
+                {"delay": 0, "instruction": "Patient klagt über Schmerzen im rechten Handgelenk, leicht angespannt", "vitals": {"SpO2": "98%", "HF": "96", "RR": "16", "BD": "120/80"}},
+                {"delay": 5, "instruction": "Schwellung des Handgelenks nimmt deutlich zu, Patient möchte Hand hochlagern", "vitals": {"SpO2": "98%", "HF": "102", "RR": "18"}},
+            ],
+            "P3": [  # COPD-Exazerbation
+                {"delay": 0, "instruction": "Patient hat deutliche Atemnot, sitzt aufrecht, sprechen nur in kurzen Sätzen möglich", "vitals": {"SpO2": "92%", "HF": "110", "RR": "26", "BD": "130/85"}},
+                {"delay": 3, "instruction": "SpO2 sinkt auf 85%, Patient wird zunehmend anxiös, schwitzend", "vitals": {"SpO2": "85%", "HF": "128", "RR": "32"}},
+                {"delay": 6, "instruction": "Patient wird somnolent, Reaktion auf Ansprache nur noch auf Schmerz, Atemfrequenz sinkt ominös", "vitals": {"SpO2": "80%", "HF": "100", "RR": "10", "Bewusstsein": "somnolent"}},
+            ],
+            "P4": [  # VU leicht
+                {"delay": 0, "instruction": "Patient sitzt aufrecht, möchte sich untersuchen lassen, wirkt irritiert", "vitals": {"SpO2": "98%", "HF": "88", "RR": "16", "BD": "125/82"}},
+                {"delay": 5, "instruction": "Patient wird ungeduldig, möchte gehen und nicht transportiert werden, wird hartnäckig", "vitals": {"SpO2": "98%", "HF": "92", "RR": "18"}},
+            ],
+            "P5": [  # Schlaganfall
+                {"delay": 0, "instruction": "Patient ist wach, Sprache noch verständlich, rechte Gesichtshälfte leicht hängend", "vitals": {"SpO2": "96%", "HF": "92", "RR": "18", "BD": "140/90"}},
+                {"delay": 4, "instruction": "Sprache wird verwaschener, Zeichen verschärfen sich, Patient wirkt verängstigt", "vitals": {"SpO2": "96%", "HF": "106", "RR": "20"}},
+                {"delay": 7, "instruction": "Arm-Parese verstärkt sich massiv, Hand erschlafft völlig, Sprache kaum noch verständlich", "vitals": {"SpO2": "95%", "HF": "110", "RR": "22", "Paresen": "massiv"}},
+            ],
+            "P6": [  # ACS
+                {"delay": 0, "instruction": "Patient liegt, klassischer Brustschmerz, blass und schwitzend", "vitals": {"SpO2": "95%", "HF": "104", "RR": "18", "BD": "135/88"}},
+                {"delay": 3, "instruction": "Schmerz verstärkt sich, strahlt in Arm und Nacken, Patient wirkt panisch", "vitals": {"SpO2": "94%", "HF": "128", "RR": "22"}},
+                {"delay": 6, "instruction": "Patient wird übelkeitend, Erbrechen eintretend, RR sinkt, Körpertemperatur kalt und feucht", "vitals": {"SpO2": "92%", "HF": "115", "BD": "110/75", "Uebel": "ja"}},
+            ],
+        }
+
+        # Seed only if no progress steps exist yet
+        if CaseProgressStep.query.count() == 0:
+            for case_id, steps in _DEFAULT_PROGRESS_STEPS.items():
+                for idx, step_data in enumerate(steps):
+                    ps = CaseProgressStep(
+                        case_id=case_id,
+                        delay_minutes=step_data["delay"],
+                        instruction=step_data["instruction"],
+                        vitals_change=json.dumps(step_data.get("vitals", {}), ensure_ascii=False),
+                        sort_order=idx,
+                    )
+                    db.session.add(ps)
+            db.session.commit()
 
         # Seed w3w cache from DB (so resolve works even without internet)
         cache = _load_w3w_cache()
@@ -955,6 +1038,18 @@ def create_app():
             except Exception as e:
                 diag = f"Unbekannter Fehler: {str(e)[:100]}"
         return jsonify({"ok": True, "resolved": resolved, "failed": failed, "diag": diag})
+
+    @app.get("/api/exercise/reverse-w3w")
+    def exercise_reverse_w3w():
+        """Reverse geocode GPS coordinates to a what3words address."""
+        lat = request.args.get("lat", type=float)
+        lng = request.args.get("lng", type=float)
+        if lat is None or lng is None:
+            return jsonify({"error": "lat and lng query params required"}), 400
+        words = reverse_w3w(lat, lng)
+        if words:
+            return jsonify({"ok": True, "words": words, "lat": lat, "lng": lng})
+        return jsonify({"ok": False, "error": "W3W-Auflösung fehlgeschlagen (kein API-Key oder kein Internet)"}), 502
 
     @app.get("/cert")
     def download_cert():
@@ -1696,6 +1791,43 @@ function show(id){
         db.session.commit()
         return jsonify({"ok": True})
 
+    @app.get("/api/teams/timeline")
+    @admin_required
+    def get_teams_timeline():
+        """Liefert eine kompakte Zeitleiste der Status-Wechsel pro Team.
+
+        Basierend auf RadioLogEntry-Einträgen, gruppiert nach Team (sender).
+        Jeder Eintrag mit fms_status und Team-Name wird berücksichtigt.
+
+        Response: {
+          "EVT 1": [
+            {"time": "2026-02-28T08:12:00Z", "fms": 1, "label": "Frei auf Funk", "case_ref": null},
+            {"time": "2026-02-28T08:14:00Z", "fms": 3, "label": "Einsatz übernommen", "case_ref": "P1"},
+            ...
+          ],
+          "EVT 2": [...]
+        }
+        """
+        entries = RadioLogEntry.query.filter(
+            RadioLogEntry.fms_status.isnot(None)
+        ).order_by(RadioLogEntry.timestamp.asc()).all()
+
+        # Group by sender (team name)
+        timeline_by_team = {}
+        for entry in entries:
+            team_name = entry.sender
+            if team_name not in timeline_by_team:
+                timeline_by_team[team_name] = []
+
+            timeline_by_team[team_name].append({
+                "time": _fmt_dt(entry.timestamp),
+                "fms": entry.fms_status,
+                "label": RADIO_STATUS_LABELS.get(entry.fms_status, f"S{entry.fms_status}"),
+                "case_ref": entry.case_ref
+            })
+
+        return jsonify(timeline_by_team)
+
     # ---------------------------
     # Testalarm
     # ---------------------------
@@ -1938,6 +2070,906 @@ function show(id){
             db.session.commit()
 
         return jsonify({"ok": True})
+
+    # ---------------------------
+    # Übungsvorlagen: Export & Import
+    # ---------------------------
+    @app.get("/api/exercise/template/export")
+    @admin_required
+    def exercise_template_export():
+        """Exportiert die komplette Übungskonfiguration inkl. Fälle, Teams, Config."""
+        try:
+            # Config auslesen
+            config = ExerciseConfig.query.filter_by(id=1).first()
+            config_data = {
+                "evt_count": config.evt_count if config else 6,
+                "base_url": config.base_url if config else "",
+            }
+
+            # Fälle exportieren
+            cases = CaseDefinition.query.order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+            cases_data = [c.to_dict() for c in cases]
+
+            # Teams exportieren
+            teams = Team.query.order_by(Team.id).all()
+            teams_data = []
+            for t in teams:
+                teams_data.append({
+                    "name": t.name,
+                    "callsign": t.callsign,
+                    "color": t.color,
+                    "lat": t.lat,
+                    "lng": t.lng,
+                })
+
+            # Komplettes Export-Paket
+            payload = {
+                "version": 1,
+                "exported_at": _fmt_dt(datetime.utcnow()),
+                "config": config_data,
+                "cases": cases_data,
+                "teams": teams_data,
+            }
+
+            from flask import Response
+            return Response(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                mimetype="application/json",
+                headers={"Content-Disposition": "attachment; filename=exercise_template.json"},
+            )
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.post("/api/exercise/template/import")
+    @admin_required
+    def exercise_template_import():
+        """Importiert Übungsvorlage: Config, Fälle, optional Teams."""
+        try:
+            raw = request.get_json(force=True) or {}
+
+            # Config aktualisieren
+            if "config" in raw:
+                cfg_data = raw["config"]
+                config = ExerciseConfig.query.filter_by(id=1).first()
+                if config is None:
+                    config = ExerciseConfig(id=1)
+                    db.session.add(config)
+                if "evt_count" in cfg_data:
+                    config.evt_count = int(cfg_data["evt_count"])
+                if "base_url" in cfg_data:
+                    config.base_url = cfg_data["base_url"]
+                db.session.commit()
+
+            # Fälle importieren (Upsert)
+            cases_updated = 0
+            cases_created = 0
+            if "cases" in raw and isinstance(raw["cases"], list):
+                for item in raw["cases"]:
+                    cid = str(item.get("id", "")).strip().upper()
+                    if not cid:
+                        continue
+                    cd = db.session.get(CaseDefinition, cid)
+                    if cd is None:
+                        cd = CaseDefinition(id=cid)
+                        db.session.add(cd)
+                        cases_created += 1
+                    else:
+                        cases_updated += 1
+
+                    # Alle Felder aktualisieren
+                    for field in ("schlagwort", "szenario", "patient", "patient_alarm",
+                                  "alter", "geschlecht", "w3w", "w3w_alarm", "lat", "lng",
+                                  "rmi_soll", "sk_soll", "pzc_soll", "besonderheit", "hinweis",
+                                  "kein_transport", "sort_order"):
+                        if field in item:
+                            setattr(cd, field, item[field])
+
+                    if "vitals" in item:
+                        cd.vitals_json = json.dumps(item["vitals"], ensure_ascii=False)
+                    if "befund" in item:
+                        cd.befund_json = json.dumps(item["befund"], ensure_ascii=False)
+                    if "abcde" in item:
+                        cd.abcde_json = json.dumps(item["abcde"], ensure_ascii=False)
+                    if "sampler" in item:
+                        cd.sampler_json = json.dumps(item["sampler"], ensure_ascii=False)
+                    if "abcd_soll" in item:
+                        cd.abcd_soll_json = json.dumps(item["abcd_soll"], ensure_ascii=False)
+
+                    # w3w → Koordinaten auflösen
+                    if cd.w3w:
+                        lat, lng = resolve_w3w(cd.w3w)
+                        if lat is not None:
+                            cd.lat, cd.lng = lat, lng
+
+                    cd.updated_at = _utcnow()
+
+                    # CaseDoc sicherstellen
+                    if db.session.get(CaseDoc, cid) is None:
+                        db.session.add(CaseDoc(id=cid))
+
+                db.session.commit()
+
+            # Teams importieren (Optional)
+            teams_created = 0
+            teams_ask_import = False
+            if "teams" in raw and isinstance(raw["teams"], list) and raw["teams"]:
+                teams_ask_import = True
+                # Hier nicht direkt importieren, sondern Signal zurückgeben
+                teams_created = len(raw["teams"])
+
+            return jsonify({
+                "ok": True,
+                "config_updated": True,
+                "cases_created": cases_created,
+                "cases_updated": cases_updated,
+                "teams_found": teams_created,
+                "ask_teams": teams_ask_import,
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ---------------------------
+    # Auswertung (Evaluation)
+    # ---------------------------
+    @app.route("/auswertung")
+    @admin_required
+    def auswertung_page():
+        """Übungs-Auswertung: Darstellung der Ergebnisse nach Übungsende."""
+        return render_template("auswertung.html")
+
+    @app.get("/api/auswertung")
+    @admin_required
+    def api_auswertung():
+        """Liefert alle Auswertungsdaten als JSON: Fälle, EVT-Ergebnisse, Zeitverlauf."""
+        cases = CaseDefinition.query.order_by(CaseDefinition.sort_order).all()
+        teams = Team.query.all()
+        results = CaseEvtResult.query.all()
+
+        # Ergebnisse nach Fall und EVT gruppieren
+        results_by_case = {}
+        for r in results:
+            case_id = r.case_id
+            if case_id not in results_by_case:
+                results_by_case[case_id] = []
+            results_by_case[case_id].append({
+                "evt": r.evt_name,
+                "rmi": r.rmi,
+                "sk": r.sk,
+                "pzc": r.pzc,
+                "abcd": json.loads(r.abcd_json) if r.abcd_json else {},
+                "notes": r.notes,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            })
+
+        # Falldaten mit Soll-Werten zusammenstellen
+        case_data = []
+        for c in cases:
+            case_data.append({
+                "id": c.id,
+                "schlagwort": c.schlagwort,
+                "patient": c.patient,
+                "rmi_soll": c.rmi_soll,
+                "sk_soll": c.sk_soll,
+                "pzc_soll": c.pzc_soll,
+                "abcd_soll": json.loads(c.abcd_soll_json) if c.abcd_soll_json else {},
+                "results": results_by_case.get(c.id, []),
+            })
+
+        # Team-Übersicht
+        team_data = []
+        for t in teams:
+            team_results = [r for r in results if r.evt_name == t.name]
+            team_data.append({
+                "name": t.name,
+                "cases_completed": len(team_results),
+                "total_cases": len(cases),
+            })
+
+        return jsonify({
+            "ok": True,
+            "cases": case_data,
+            "teams": team_data,
+            "total_cases": len(cases),
+            "total_teams": len(teams),
+        })
+
+    # ── Funkprotokoll Export Routes ──
+    @app.get("/api/radiolog/export/csv")
+    @admin_required
+    def export_radiolog_csv():
+        """Exportiert das Funkprotokoll als CSV."""
+        import csv
+        import io
+        from datetime import datetime as dt
+
+        # Query parameter
+        case_ref = request.args.get("case_ref", "").strip()
+        from_date = request.args.get("from", "").strip()
+        to_date = request.args.get("to", "").strip()
+
+        # Query bauen
+        q = RadioLogEntry.query
+
+        if case_ref:
+            q = q.filter_by(case_ref=case_ref)
+
+        if from_date:
+            try:
+                from_dt = dt.fromisoformat(from_date)
+                q = q.filter(RadioLogEntry.timestamp >= from_dt)
+            except (ValueError, TypeError):
+                pass
+
+        if to_date:
+            try:
+                to_dt = dt.fromisoformat(to_date)
+                q = q.filter(RadioLogEntry.timestamp <= to_dt)
+            except (ValueError, TypeError):
+                pass
+
+        entries = q.order_by(RadioLogEntry.timestamp).all()
+
+        # CSV in StringIO schreiben
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+
+        # Header
+        writer.writerow(["Zeitstempel", "Sender", "Empfänger", "FMS-Status", "Fallbezug", "Nachricht", "Markiert", "Notiz"])
+
+        # Zeilen
+        for entry in entries:
+            timestamp_str = entry.timestamp.isoformat() if entry.timestamp else ""
+            sender = entry.sender or ""
+            receiver = entry.receiver or ""
+            fms_label = RADIO_STATUS_LABELS.get(entry.fms_status, "") if entry.fms_status else ""
+            case_ref_val = entry.case_ref or ""
+            message = entry.message or ""
+            marked = "Ja" if entry.marked else "Nein"
+            note = entry.note or ""
+
+            # CSV-Injection verhindern
+            def escape_csv_injection(cell):
+                if cell and cell[0] in ('=', '+', '-', '@', '\t', '\r'):
+                    return "'" + cell
+                return cell
+
+            writer.writerow([
+                escape_csv_injection(timestamp_str),
+                escape_csv_injection(sender),
+                escape_csv_injection(receiver),
+                escape_csv_injection(fms_label),
+                escape_csv_injection(case_ref_val),
+                escape_csv_injection(message),
+                marked,
+                escape_csv_injection(note),
+            ])
+
+        # Response
+        csv_data = output.getvalue()
+        today = dt.now().strftime("%Y-%m-%d")
+
+        resp = make_response(csv_data)
+        resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+        resp.headers["Content-Disposition"] = f'attachment; filename="funkprotokoll_{today}.csv"'
+        return resp
+
+    @app.get("/api/radiolog/export/pdf")
+    @admin_required
+    def export_radiolog_pdf():
+        """Exportiert das Funkprotokoll als formatiertes PDF."""
+        from datetime import datetime as dt
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        except ImportError:
+            return jsonify({"error": "reportlab nicht installiert"}), 500
+
+        # Query parameter
+        case_ref = request.args.get("case_ref", "").strip()
+        from_date = request.args.get("from", "").strip()
+        to_date = request.args.get("to", "").strip()
+
+        # Query bauen
+        q = RadioLogEntry.query
+
+        if case_ref:
+            q = q.filter_by(case_ref=case_ref)
+
+        if from_date:
+            try:
+                from_dt = dt.fromisoformat(from_date)
+                q = q.filter(RadioLogEntry.timestamp >= from_dt)
+            except (ValueError, TypeError):
+                pass
+
+        if to_date:
+            try:
+                to_dt = dt.fromisoformat(to_date)
+                q = q.filter(RadioLogEntry.timestamp <= to_dt)
+            except (ValueError, TypeError):
+                pass
+
+        entries = q.order_by(RadioLogEntry.timestamp).all()
+
+        # PDF-Buffer
+        import io
+        pdf_buffer = io.BytesIO()
+
+        # Document setup
+        doc = SimpleDocTemplate(
+            pdf_buffer,
+            pagesize=A4,
+            rightMargin=1*cm,
+            leftMargin=1*cm,
+            topMargin=1.5*cm,
+            bottomMargin=1.5*cm,
+        )
+
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=colors.HexColor("#0b1220"),
+            spaceAfter=6,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+        )
+
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor("#666666"),
+            spaceAfter=12,
+            alignment=TA_CENTER,
+        )
+
+        # Story für PDF
+        story = []
+
+        # Header
+        cfg = db.session.get(ExerciseConfig, 1)
+        evt_count = cfg.evt_count if cfg else 6
+
+        today_str = dt.now().strftime("%d.%m.%Y")
+        title = Paragraph("Funkprotokoll – BRK Übung Feucht", title_style)
+        subtitle = Paragraph(f"Datum: {today_str} | Ort: Feucht | EVT-Anzahl: {evt_count}", subtitle_style)
+
+        story.append(title)
+        story.append(subtitle)
+        story.append(Spacer(1, 0.3*cm))
+
+        # Tabelle
+        if entries:
+            data = [["Zeit", "Sender", "Empfänger", "FMS", "Fall", "Nachricht"]]
+
+            # Datenzeilen
+            for entry in entries:
+                timestamp_str = entry.timestamp.strftime("%H:%M:%S") if entry.timestamp else ""
+                sender = entry.sender or ""
+                receiver = entry.receiver or ""
+                fms_label = RADIO_STATUS_LABELS.get(entry.fms_status, "") if entry.fms_status else "–"
+                case_val = entry.case_ref or "–"
+                message = entry.message or ""
+
+                # Message kürzen wenn zu lang
+                if len(message) > 60:
+                    message = message[:57] + "…"
+
+                data.append([timestamp_str, sender, receiver, fms_label, case_val, message])
+
+            table = Table(data, colWidths=[1.2*cm, 2.5*cm, 2.5*cm, 1.5*cm, 0.8*cm, 6*cm])
+
+            # Table Style
+            table.setStyle(TableStyle([
+                # Header
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0b1220")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+
+                # Datenzeilen
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ALIGN", (0, 1), (3, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+
+            story.append(table)
+        else:
+            story.append(Paragraph("Keine Einträge im Funkprotokoll.", styles['Normal']))
+
+        # PDF bauen
+        doc.build(story, onFirstPage=_add_pdf_footer, onLaterPages=_add_pdf_footer)
+
+        pdf_data = pdf_buffer.getvalue()
+        today = dt.now().strftime("%Y-%m-%d")
+
+        resp = make_response(pdf_data)
+        resp.headers["Content-Type"] = "application/pdf"
+        resp.headers["Content-Disposition"] = f'attachment; filename="funkprotokoll_{today}.pdf"'
+        return resp
+
+    def _add_pdf_footer(canvas, doc):
+        """Fügt Seitennummern zum PDF hinzu."""
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(1*cm, 0.5*cm, f"Seite {doc.page}")
+        canvas.restoreState()
+
+    # ---------------------------
+    # Case Progress Steps (Verlaufskarten)
+    # ---------------------------
+    @app.get("/api/cases/<case_id>/progress")
+    def list_progress_steps(case_id: str):
+        """Liste aller Verlaufskartenschritte für einen Fall."""
+        steps = CaseProgressStep.query.filter_by(case_id=case_id).order_by(CaseProgressStep.sort_order).all()
+        return jsonify([{
+            "id": s.id,
+            "case_id": s.case_id,
+            "delay_minutes": s.delay_minutes,
+            "instruction": s.instruction,
+            "vitals_change": json.loads(s.vitals_change) if s.vitals_change else {},
+            "sort_order": s.sort_order,
+        } for s in steps])
+
+    @app.post("/api/cases/<case_id>/progress")
+    @admin_required
+    def create_progress_step(case_id: str):
+        """Erstelle einen neuen Verlaufskartenschritt."""
+        data = request.get_json(force=True)
+
+        delay = data.get("delay_minutes", 0)
+        instruction = data.get("instruction", "")
+        vitals = data.get("vitals_change", {})
+
+        if not instruction:
+            return jsonify({"error": "instruction erforderlich"}), 400
+
+        # Berechne sort_order basierend auf existierenden Steps
+        max_order = db.session.query(db.func.max(CaseProgressStep.sort_order)).filter_by(case_id=case_id).scalar() or -1
+
+        step = CaseProgressStep(
+            case_id=case_id,
+            delay_minutes=delay,
+            instruction=instruction,
+            vitals_change=json.dumps(vitals, ensure_ascii=False),
+            sort_order=max_order + 1,
+        )
+        db.session.add(step)
+        db.session.commit()
+
+        return jsonify({
+            "id": step.id,
+            "case_id": step.case_id,
+            "delay_minutes": step.delay_minutes,
+            "instruction": step.instruction,
+            "vitals_change": vitals,
+            "sort_order": step.sort_order,
+        }), 201
+
+    @app.delete("/api/cases/<case_id>/progress/<int:step_id>")
+    @admin_required
+    def delete_progress_step(case_id: str, step_id: int):
+        """Lösche einen Verlaufskartenschritt."""
+        step = CaseProgressStep.query.filter_by(id=step_id, case_id=case_id).first_or_404()
+        db.session.delete(step)
+        db.session.commit()
+        return jsonify({"ok": True})
+
+    @app.get("/api/simulation/status")
+    def get_simulation_status():
+        """Gebe den aktuellen Simulationsstatus aller aktiven Fälle zurück.
+
+        Berechne für jeden Fall, welche Progress-Step gerade aktiv ist,
+        basierend auf alarm_time und delay_minutes.
+        """
+        result = {}
+
+        for case_id in ["P1", "P2", "P3", "P4", "P5", "P6"]:
+            case_doc = db.session.get(CaseDoc, case_id)
+            if not case_doc or not case_doc.alarm_time:
+                result[case_id] = {
+                    "case_id": case_id,
+                    "alarm_time": None,
+                    "active_step": None,
+                    "upcoming_steps": [],
+                    "past_steps": [],
+                }
+                continue
+
+            # Hole alle Progress-Steps für diesen Fall
+            steps = CaseProgressStep.query.filter_by(case_id=case_id).order_by(CaseProgressStep.sort_order).all()
+            if not steps:
+                result[case_id] = {
+                    "case_id": case_id,
+                    "alarm_time": _fmt_dt(case_doc.alarm_time),
+                    "active_step": None,
+                    "upcoming_steps": [],
+                    "past_steps": [],
+                }
+                continue
+
+            # Berechne verstrichene Zeit seit Alarm in Minuten
+            now = _utcnow()
+            elapsed_minutes = (now - case_doc.alarm_time).total_seconds() / 60.0
+
+            active_step = None
+            upcoming = []
+            past = []
+
+            for step in steps:
+                step_data = {
+                    "id": step.id,
+                    "delay_minutes": step.delay_minutes,
+                    "instruction": step.instruction,
+                    "vitals_change": json.loads(step.vitals_change) if step.vitals_change else {},
+                }
+
+                if step.delay_minutes <= elapsed_minutes:
+                    # Dieser Step ist aktiv oder bereits vergangen
+                    if active_step is None or step.delay_minutes > active_step["delay_minutes"]:
+                        # Wenn wir bereits einen aktiven haben, schiebe ihn in past
+                        if active_step:
+                            past.append(active_step)
+                        active_step = step_data
+                    else:
+                        past.append(step_data)
+                else:
+                    # Zukünftiger Step
+                    upcoming.append(step_data)
+
+            result[case_id] = {
+                "case_id": case_id,
+                "alarm_time": _fmt_dt(case_doc.alarm_time),
+                "elapsed_minutes": round(elapsed_minutes, 1),
+                "active_step": active_step,
+                "upcoming_steps": upcoming,
+                "past_steps": past,
+            }
+
+        return jsonify(result)
+
+    # ──────────────────────────────────────
+    # Meldezettel (Report Slip) PDF Generator
+    # ──────────────────────────────────────
+
+    def _generate_meldezettel_pdf(case_id: str) -> bytes:
+        """Generate PDF for a single case (Meldezettel)."""
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+        from reportlab.lib import colors
+        from io import BytesIO
+
+        # Get case definition and documentation
+        case_def = db.session.get(CaseDefinition, case_id)
+        case_doc = db.session.get(CaseDoc, case_id)
+
+        if not case_def:
+            return b""
+
+        # Create PDF in memory
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=0.8*cm, bottomMargin=0.8*cm,
+                               leftMargin=0.8*cm, rightMargin=0.8*cm)
+
+        # Container for PDF elements
+        story = []
+
+        # Get styles
+        styles = getSampleStyleSheet()
+        style_heading = ParagraphStyle(
+            'Heading', parent=styles['Heading1'],
+            fontSize=18, textColor=colors.HexColor('#e31e24'), spaceAfter=6, fontName='Helvetica-Bold'
+        )
+        style_subhead = ParagraphStyle(
+            'SubHeading', parent=styles['Heading2'],
+            fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=4, fontName='Helvetica-Bold'
+        )
+        style_normal = ParagraphStyle(
+            'Normal', parent=styles['Normal'],
+            fontSize=9, textColor=colors.HexColor('#333333'), spaceAfter=2
+        )
+        style_small = ParagraphStyle(
+            'Small', parent=styles['Normal'],
+            fontSize=8, textColor=colors.HexColor('#555555'), spaceAfter=1
+        )
+
+        # ── Header ──
+        header_text = f"Meldezettel – Funkübung BRK Feucht<br/>{datetime.now().strftime('%d.%m.%Y')}"
+        story.append(Paragraph(header_text, style_heading))
+        story.append(Spacer(1, 0.3*cm))
+
+        # ── Case ID (prominent) ──
+        case_id_para = Paragraph(f"<b>Fallnummer: {case_id}</b>", ParagraphStyle(
+            'CaseID', parent=styles['Normal'], fontSize=14, textColor=colors.HexColor('#e31e24'),
+            fontName='Helvetica-Bold', spaceAfter=3
+        ))
+        story.append(case_id_para)
+        story.append(Spacer(1, 0.2*cm))
+
+        # ── Schlagwort (case title) ──
+        if case_def.schlagwort:
+            story.append(Paragraph(f"<b>Schlagwort:</b> {case_def.schlagwort}", style_normal))
+
+        # ── Patient Information ──
+        patient_parts = []
+        if case_def.patient:
+            patient_parts.append(f"<b>Name:</b> {case_def.patient}")
+        if case_def.alter:
+            patient_parts.append(f"<b>Alter:</b> {case_def.alter}")
+        if case_def.geschlecht:
+            geschlecht_label = {"m": "männlich", "w": "weiblich", "d": "divers"}.get(case_def.geschlecht, case_def.geschlecht)
+            patient_parts.append(f"<b>Geschlecht:</b> {geschlecht_label}")
+
+        if patient_parts:
+            story.append(Paragraph(" | ".join(patient_parts), style_normal))
+
+        # ── Location ──
+        location_parts = []
+        if case_def.w3w:
+            location_parts.append(f"<b>w3w:</b> {case_def.w3w}")
+        if case_def.lat and case_def.lng:
+            location_parts.append(f"<b>Koordinaten:</b> {case_def.lat:.4f}, {case_def.lng:.4f}")
+        if location_parts:
+            story.append(Paragraph(" | ".join(location_parts), style_normal))
+
+        story.append(Spacer(1, 0.25*cm))
+
+        # ── Status Timeline ──
+        story.append(Paragraph("<b>Zeitverlauf:</b>", style_subhead))
+        timeline_data = [
+            ["Status", "Zeit"],
+            ["Alarm", _fmt_dt(case_doc.alarm_time) if case_doc and case_doc.alarm_time else "—"],
+            ["S3", _fmt_dt(case_doc.status3_time) if case_doc and case_doc.status3_time else "—"],
+            ["S4", _fmt_dt(case_doc.status4_time) if case_doc and case_doc.status4_time else "—"],
+            ["S7", _fmt_dt(case_doc.status7_time) if case_doc and case_doc.status7_time else "—"],
+            ["S8", _fmt_dt(case_doc.status8_time) if case_doc and case_doc.status8_time else "—"],
+        ]
+        timeline_table = Table(timeline_data, colWidths=[3*cm, 7*cm])
+        timeline_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e31e24')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ]))
+        story.append(timeline_table)
+        story.append(Spacer(1, 0.25*cm))
+
+        # ── Auswertung ──
+        story.append(Paragraph("<b>Auswertung:</b>", style_subhead))
+        eval_data = [["Feld", "Soll", "Reported"]]
+        if case_def.pzc_soll or (case_doc and case_doc.pzc_reported):
+            eval_data.append(["PZC", case_def.pzc_soll or "—", case_doc.pzc_reported if case_doc else "—"])
+        if case_doc and case_doc.zielklinik:
+            eval_data.append(["Zielklinik", "—", case_doc.zielklinik])
+        if case_doc and case_doc.abcde_schema:
+            eval_data.append(["ABCD-Schema", json.dumps(case_def.abcd_soll) if case_def.abcd_soll_json else "—",
+                            case_doc.abcde_schema[:50] + ("…" if len(case_doc.abcde_schema) > 50 else "")])
+
+        if len(eval_data) > 1:
+            eval_table = Table(eval_data, colWidths=[2.5*cm, 3.5*cm, 4*cm])
+            eval_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e31e24')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 7),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 1), (-1, -1), 2),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
+            ]))
+            story.append(eval_table)
+        story.append(Spacer(1, 0.2*cm))
+
+        # ── Notes ──
+        if case_doc and case_doc.notes:
+            story.append(Paragraph("<b>Notizen:</b>", style_subhead))
+            story.append(Paragraph(case_doc.notes.replace('\n', '<br/>'), style_small))
+            story.append(Spacer(1, 0.2*cm))
+
+        # ── Besonderheiten ──
+        if case_def.besonderheit:
+            story.append(Paragraph("<b>Besonderheiten:</b>", style_subhead))
+            story.append(Paragraph(case_def.besonderheit.replace('\n', '<br/>'), style_small))
+
+        # Build PDF
+        doc.build(story)
+        pdf_buffer.seek(0)
+        return pdf_buffer.getvalue()
+
+    @app.get("/api/meldezettel/<case_id>")
+    @admin_required
+    def meldezettel_single(case_id: str):
+        """Generate and return PDF for a single case."""
+        case_def = db.session.get(CaseDefinition, case_id.upper())
+        if not case_def:
+            return jsonify({"error": "Fall nicht gefunden"}), 404
+
+        pdf_bytes = _generate_meldezettel_pdf(case_id.upper())
+        from flask import Response
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="Meldezettel_{case_id.upper()}.pdf"'},
+        )
+
+    @app.get("/api/meldezettel")
+    @admin_required
+    def meldezettel_batch():
+        """Generate and return combined PDF for all active cases."""
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, PageBreak, Spacer, Paragraph, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from io import BytesIO
+        from flask import Response
+
+        active_cases = CaseDefinition.query.filter_by(active=True).order_by(CaseDefinition.sort_order, CaseDefinition.id).all()
+
+        if not active_cases:
+            return jsonify({"error": "Keine aktiven Fälle gefunden"}), 404
+
+        pdf_buffer = BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=0.8*cm, bottomMargin=0.8*cm,
+                               leftMargin=0.8*cm, rightMargin=0.8*cm)
+
+        story = []
+        styles = getSampleStyleSheet()
+
+        for i, case_def in enumerate(active_cases):
+            if i > 0:
+                story.append(PageBreak())
+
+            case_doc = db.session.get(CaseDoc, case_def.id)
+
+            style_heading = ParagraphStyle(
+                'Heading', parent=styles['Heading1'],
+                fontSize=18, textColor=colors.HexColor('#e31e24'), spaceAfter=6, fontName='Helvetica-Bold'
+            )
+            style_subhead = ParagraphStyle(
+                'SubHeading', parent=styles['Heading2'],
+                fontSize=11, textColor=colors.HexColor('#333333'), spaceAfter=4, fontName='Helvetica-Bold'
+            )
+            style_normal = ParagraphStyle(
+                'Normal', parent=styles['Normal'],
+                fontSize=9, textColor=colors.HexColor('#333333'), spaceAfter=2
+            )
+            style_small = ParagraphStyle(
+                'Small', parent=styles['Normal'],
+                fontSize=8, textColor=colors.HexColor('#555555'), spaceAfter=1
+            )
+
+            # Build each case page (reuse single-case logic)
+            header_text = f"Meldezettel – Funkübung BRK Feucht<br/>{datetime.now().strftime('%d.%m.%Y')}"
+            story.append(Paragraph(header_text, style_heading))
+            story.append(Spacer(1, 0.3*cm))
+
+            case_id_para = Paragraph(f"<b>Fallnummer: {case_def.id}</b>", ParagraphStyle(
+                'CaseID', parent=styles['Normal'], fontSize=14, textColor=colors.HexColor('#e31e24'),
+                fontName='Helvetica-Bold', spaceAfter=3
+            ))
+            story.append(case_id_para)
+            story.append(Spacer(1, 0.2*cm))
+
+            if case_def.schlagwort:
+                story.append(Paragraph(f"<b>Schlagwort:</b> {case_def.schlagwort}", style_normal))
+
+            patient_parts = []
+            if case_def.patient:
+                patient_parts.append(f"<b>Name:</b> {case_def.patient}")
+            if case_def.alter:
+                patient_parts.append(f"<b>Alter:</b> {case_def.alter}")
+            if case_def.geschlecht:
+                geschlecht_label = {"m": "männlich", "w": "weiblich", "d": "divers"}.get(case_def.geschlecht, case_def.geschlecht)
+                patient_parts.append(f"<b>Geschlecht:</b> {geschlecht_label}")
+            if patient_parts:
+                story.append(Paragraph(" | ".join(patient_parts), style_normal))
+
+            location_parts = []
+            if case_def.w3w:
+                location_parts.append(f"<b>w3w:</b> {case_def.w3w}")
+            if case_def.lat and case_def.lng:
+                location_parts.append(f"<b>Koordinaten:</b> {case_def.lat:.4f}, {case_def.lng:.4f}")
+            if location_parts:
+                story.append(Paragraph(" | ".join(location_parts), style_normal))
+
+            story.append(Spacer(1, 0.25*cm))
+
+            story.append(Paragraph("<b>Zeitverlauf:</b>", style_subhead))
+            timeline_data = [
+                ["Status", "Zeit"],
+                ["Alarm", _fmt_dt(case_doc.alarm_time) if case_doc and case_doc.alarm_time else "—"],
+                ["S3", _fmt_dt(case_doc.status3_time) if case_doc and case_doc.status3_time else "—"],
+                ["S4", _fmt_dt(case_doc.status4_time) if case_doc and case_doc.status4_time else "—"],
+                ["S7", _fmt_dt(case_doc.status7_time) if case_doc and case_doc.status7_time else "—"],
+                ["S8", _fmt_dt(case_doc.status8_time) if case_doc and case_doc.status8_time else "—"],
+            ]
+            timeline_table = Table(timeline_data, colWidths=[3*cm, 7*cm])
+            timeline_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e31e24')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ]))
+            story.append(timeline_table)
+            story.append(Spacer(1, 0.25*cm))
+
+            story.append(Paragraph("<b>Auswertung:</b>", style_subhead))
+            eval_data = [["Feld", "Soll", "Reported"]]
+            if case_def.pzc_soll or (case_doc and case_doc.pzc_reported):
+                eval_data.append(["PZC", case_def.pzc_soll or "—", case_doc.pzc_reported if case_doc else "—"])
+            if case_doc and case_doc.zielklinik:
+                eval_data.append(["Zielklinik", "—", case_doc.zielklinik])
+            if case_doc and case_doc.abcde_schema:
+                eval_data.append(["ABCD-Schema", json.dumps(case_def.abcd_soll) if case_def.abcd_soll_json else "—",
+                                case_doc.abcde_schema[:50] + ("…" if len(case_doc.abcde_schema) > 50 else "")])
+
+            if len(eval_data) > 1:
+                eval_table = Table(eval_data, colWidths=[2.5*cm, 3.5*cm, 4*cm])
+                eval_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e31e24')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                    ('FONTSIZE', (0, 1), (-1, -1), 7),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('TOPPADDING', (0, 1), (-1, -1), 2),
+                    ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
+                ]))
+                story.append(eval_table)
+            story.append(Spacer(1, 0.2*cm))
+
+            if case_doc and case_doc.notes:
+                story.append(Paragraph("<b>Notizen:</b>", style_subhead))
+                story.append(Paragraph(case_doc.notes.replace('\n', '<br/>'), style_small))
+                story.append(Spacer(1, 0.2*cm))
+
+            if case_def.besonderheit:
+                story.append(Paragraph("<b>Besonderheiten:</b>", style_subhead))
+                story.append(Paragraph(case_def.besonderheit.replace('\n', '<br/>'), style_small))
+
+        doc.build(story)
+        pdf_buffer.seek(0)
+        return Response(
+            pdf_buffer.getvalue(),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="Meldezettel_Alle.pdf"'},
+        )
 
     return app
 

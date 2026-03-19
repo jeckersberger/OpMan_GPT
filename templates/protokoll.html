@@ -262,6 +262,50 @@
     .log-empty { color:var(--muted); font-size:.82rem; padding:.5rem; }
     .text-muted { color:var(--muted); font-size:.8rem; }
 
+    /* ── Team Timeline (Status-Verlauf pro Trupp) ── */
+    .tt-container { display:flex; flex-direction:column; gap:.6rem; }
+    .tt-team-row {
+      background:var(--panel); border:1px solid var(--border); border-radius:8px;
+      padding:.6rem .7rem;
+    }
+    .tt-team-name {
+      font-weight:800; font-size:.85rem; color:var(--text); margin-bottom:.5rem;
+      letter-spacing:.05em; text-transform:uppercase;
+    }
+    .tt-timeline {
+      display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; min-height:36px;
+    }
+    .tt-status-badge {
+      display:flex; flex-direction:column; align-items:center;
+      padding:.3rem .45rem; border-radius:6px; background:var(--panel2);
+      border:1px solid var(--border); font-size:.7rem; font-weight:600;
+      min-width:50px; gap:.15rem;
+    }
+    .tt-status-badge .fms-code  { color:var(--accent); }
+    .tt-status-badge .fms-label { color:var(--muted); font-size:.65rem; max-width:48px; text-align:center; line-height:1.2; }
+    .tt-status-badge .fms-time  { color:var(--muted); font-size:.65rem; font-weight:400; }
+    .tt-status-badge .case-tag  { display:inline-block; background:rgba(61,220,132,.15); color:var(--green); padding:.08rem .25rem; border-radius:3px; font-size:.6rem; margin-top:.05rem; }
+
+    /* FMS Status colors */
+    .tt-status-badge.s1, .tt-status-badge.s2 { background:rgba(61,220,132,.1); border-color:rgba(61,220,132,.3); }
+    .tt-status-badge.s1 .fms-code, .tt-status-badge.s2 .fms-code { color:var(--green); }
+
+    .tt-status-badge.s3 { background:rgba(245,200,66,.1); border-color:rgba(245,200,66,.3); }
+    .tt-status-badge.s3 .fms-code { color:var(--yellow); }
+
+    .tt-status-badge.s4 { background:rgba(78,161,255,.1); border-color:rgba(78,161,255,.3); }
+    .tt-status-badge.s4 .fms-code { color:var(--accent); }
+
+    .tt-status-badge.s7, .tt-status-badge.s8 { background:rgba(255,159,67,.1); border-color:rgba(255,159,67,.3); }
+    .tt-status-badge.s7 .fms-code, .tt-status-badge.s8 .fms-code { color:var(--orange); }
+
+    .tt-status-badge.s0, .tt-status-badge.s5 { background:rgba(255,79,79,.1); border-color:rgba(255,79,79,.3); }
+    .tt-status-badge.s0 .fms-code, .tt-status-badge.s5 .fms-code { color:var(--red); }
+
+    .tt-arrow { color:var(--muted); font-size:.85rem; opacity:.6; }
+
+    .tt-empty { color:var(--muted); font-size:.8rem; font-style:italic; padding:.5rem; }
+
     /* ── Modal ── */
     .modal-overlay {
       position:fixed; inset:0; background:rgba(0,0,0,.65);
@@ -506,6 +550,20 @@
 
 <hr class="divider">
 
+<!-- ═══ STATUS-VERLAUF PRO TRUPP ═══ -->
+<div class="section">
+  <div class="section-title collapsible" onclick="toggleSection('tt')">
+    <span class="collapse-arrow" id="arr-tt">▶</span> 📈 Status-Verlauf pro Trupp
+  </div>
+  <div class="collapsible-body" id="sec-tt" style="max-height:0;">
+    <div style="padding-top:.5rem;">
+      <div class="tt-container" id="teamTimeline"></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
 <!-- ═══ FUNKPROTOKOLL ═══ -->
 <div class="section">
   <div class="section-title">Funkprotokoll</div>
@@ -574,6 +632,23 @@
     <div>
       <label class="form-label">&nbsp;</label>
       <button class="btn btn-primary" onclick="addLogEntry()">+ Eintrag</button>
+    </div>
+  </div>
+
+  <!-- Export Controls -->
+  <div class="no-print" style="display:flex; gap:.6rem; margin-bottom:1rem; flex-wrap:wrap; align-items:center; padding:.7rem; background:var(--panel); border:1px solid var(--border); border-radius:8px;">
+    <div style="flex:1; min-width:150px;">
+      <label class="form-label">Fallfilter</label>
+      <select id="exportCaseFilter" style="width:100%; padding:.32rem .45rem; border-radius:6px; border:1px solid var(--border); background:#0d1525; color:var(--text); font-size:.78rem; font-family:inherit;">
+        <option value="">– Alle Fälle –</option>
+        {% for cid in cases %}
+        <option value="{{ cid }}">{{ cid }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; gap:.5rem; align-items:flex-end;">
+      <button class="btn btn-success" onclick="exportCsv()" title="Funkprotokoll als CSV exportieren">📊 CSV</button>
+      <button class="btn btn-warn" onclick="exportPdf()" title="Funkprotokoll als PDF exportieren">📄 PDF</button>
     </div>
   </div>
 
@@ -1403,6 +1478,45 @@ function renderTimeline() {
     </div>`;
   }).join('')}`;
 }
+/* ── Team-basierte Status-Zeitleiste ────────────────────── */
+async function renderTeamTimeline() {
+  const container=document.getElementById('teamTimeline');
+  try {
+    const res=await fetch('/api/teams/timeline');
+    if(!res.ok) { container.innerHTML='<div class="tt-empty">Fehler beim Laden der Zeitleiste.</div>'; return; }
+    const timelineData=await res.json();
+    const teamNames=Object.keys(timelineData).sort();
+    if(!teamNames.length) {
+      container.innerHTML='<div class="tt-empty">Keine Status-Einträge vorhanden.</div>';
+      return;
+    }
+    container.innerHTML=teamNames.map(teamName=>{
+      const entries=timelineData[teamName]||[];
+      if(!entries.length) return '';
+      const timelineHtml=entries.map((entry,idx)=>{
+        const time=entry.time?new Date(entry.time).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'-';
+        const fmsClass=`s${entry.fms}`;
+        const caseTagHtml=entry.case_ref?`<span class="case-tag">${esc(entry.case_ref)}</span>`:'';
+        const badge=`<div class="tt-status-badge ${fmsClass}" title="${esc(entry.label)}">
+          <span class="fms-code">S${entry.fms}</span>
+          <span class="fms-label">${esc(entry.label)}</span>
+          <span class="fms-time">${time}</span>
+          ${caseTagHtml}
+        </div>`;
+        const arrow=idx<entries.length-1?'<span class="tt-arrow">→</span>':'';
+        return badge+arrow;
+      }).join('');
+      return `<div class="tt-team-row">
+        <div class="tt-team-name">${esc(teamName)}</div>
+        <div class="tt-timeline">${timelineHtml}</div>
+      </div>`;
+    }).join('');
+  } catch(err) {
+    console.error('Team timeline error:', err);
+    container.innerHTML='<div class="tt-empty">Fehler beim Laden der Zeitleiste.</div>';
+  }
+}
+
 
 /* ── Funkprotokoll ───────────────────────────────────────── */
 function fillVorlage() {
@@ -1496,6 +1610,21 @@ async function deleteLogEntry(id) {
   if(res.ok){ logEntries=logEntries.filter(e=>e.id!==id); renderLogList(); }
 }
 
+/* ── Export ───────────────────────────────────────────────── */
+function exportCsv() {
+  const caseRef = document.getElementById('exportCaseFilter').value || '';
+  let url = '/api/radiolog/export/csv';
+  if(caseRef) url += '?case_ref=' + encodeURIComponent(caseRef);
+  window.location.href = url;
+}
+
+function exportPdf() {
+  const caseRef = document.getElementById('exportCaseFilter').value || '';
+  let url = '/api/radiolog/export/pdf';
+  if(caseRef) url += '?case_ref=' + encodeURIComponent(caseRef);
+  window.location.href = url;
+}
+
 /* ── Reset ───────────────────────────────────────────────── */
 function showResetModal(){ document.getElementById('resetModal').classList.add('show'); }
 function hideResetModal(){ document.getElementById('resetModal').classList.remove('show'); }
@@ -1535,6 +1664,7 @@ async function refreshAll() {
   renderSprechwunschPanel();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tt)  renderTeamTimeline();
   if(sectionOpen.tp)  renderTeamProgress();
 }
 
@@ -1685,6 +1815,7 @@ async function softRefreshCaseDocs() {
   renderAlarmGrid();
   if(sectionOpen.nbr){ renderNachbesprechung(); renderEvtBewertung(); }
   if(sectionOpen.tl)  renderTimeline();
+  if(sectionOpen.tt)  renderTeamTimeline();
   if(sectionOpen.tp)  renderTeamProgress();
 }
 setInterval(softRefreshCaseDocs, 10000);

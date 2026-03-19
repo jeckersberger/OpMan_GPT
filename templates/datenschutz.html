@@ -74,27 +74,45 @@
     <li>EVT-Positionen auf der Übungskarte darzustellen</li>
     <li>Die Koordination der Übungskräfte zu unterstützen</li>
   </ul>
+  <p>GPS-Koordinaten werden in der lokalen Datenbank gespeichert, um die Kartendarstellung auch
+     nach einem Seitenwechsel oder Neustart beizubehalten. Die Daten werden bei einem Übungs-Reset
+     vollständig gelöscht.</p>
   <p>Die GPS-Freigabe kann jederzeit im Browser widerrufen werden.</p>
 
-  <h2>4. Speicherung und Löschung</h2>
-  <p>Alle Daten werden <span class="highlight">ausschließlich lokal</span> auf dem Übungsserver gespeichert.
-     Es erfolgt <strong>keine Übertragung an externe Server oder Cloud-Dienste</strong>.</p>
+  <h2>4. Externe Dienste</h2>
+  <p>Das System nutzt folgende externe Dienste:</p>
   <ul>
-    <li>GPS-Positionen werden nur im Arbeitsspeicher gehalten und nicht dauerhaft gespeichert</li>
-    <li>Übungsdaten (Funkprotokoll, Einsätze) werden in einer lokalen Datenbank gespeichert</li>
-    <li>Nach Übungsende können alle Daten über die Reset-Funktion vollständig gelöscht werden</li>
+    <li><strong>OpenStreetMap</strong> – Kartenkacheln werden von OpenStreetMap-Servern geladen.
+        Dabei wird die IP-Adresse des Geräts an die OSM-Server übertragen.</li>
+    <li><strong>what3words</strong> – Zur Auflösung von what3words-Adressen in GPS-Koordinaten
+        wird die API von what3words.com genutzt. Dabei werden die w3w-Adressen (keine GPS-Positionen
+        der Teilnehmer) an den Dienst übermittelt. Aufgelöste Koordinaten werden lokal gecacht,
+        um wiederholte Abfragen zu vermeiden.</li>
   </ul>
 
-  <h2>5. Web-Push-Benachrichtigungen</h2>
+  <h2>5. Speicherung und Löschung</h2>
+  <p>Die Übungsdaten werden <span class="highlight">lokal auf dem Übungsserver</span> in einer
+     SQLite-Datenbank gespeichert:</p>
+  <ul>
+    <li>GPS-Positionen der EVTs werden in der lokalen Datenbank persistiert (bis zum Reset)</li>
+    <li>Übungsdaten (Funkprotokoll, Einsätze, Falldokumentationen) werden lokal gespeichert</li>
+    <li>Web-Push-Abonnements werden lokal auf dem Server gehalten</li>
+    <li>Nach Übungsende können alle Daten über die Reset-Funktion vollständig gelöscht werden</li>
+    <li>Eine automatische Löschung nach einem definierten Zeitraum erfolgt derzeit nicht –
+        der Übungsleiter ist verantwortlich für die manuelle Löschung nach Übungsende</li>
+  </ul>
+
+  <h2>6. Web-Push-Benachrichtigungen</h2>
   <p>Das System bietet optionale Push-Benachrichtigungen für Alarme. Diese werden
      <span class="highlight">nur bei aktiver Zustimmung</span> aktiviert. Die Push-Abonnements
      werden lokal auf dem Übungsserver gespeichert und bei Übungsende gelöscht.</p>
 
-  <h2>6. Cookies und Local Storage</h2>
+  <h2>7. Cookies und Local Storage</h2>
   <p>Das System verwendet Browser-Local-Storage, um Einstellungen wie die gewählte
-     EVT-Zuordnung zu speichern. Es werden <strong>keine Tracking-Cookies</strong> verwendet.</p>
+     EVT-Zuordnung und quittierte Alarme zu speichern. Es werden <strong>keine Tracking-Cookies</strong> verwendet.
+     Flask-Sessions verwenden einen signierten Cookie für den Admin-PIN-Schutz.</p>
 
-  <h2>7. Rechte der Teilnehmer</h2>
+  <h2>8. Rechte der Teilnehmer</h2>
   <p>Jeder Teilnehmer hat das Recht:</p>
   <ul>
     <li>Die GPS-Standortfreigabe jederzeit zu widerrufen</li>
@@ -103,14 +121,18 @@
     <li>Die Löschung der eigenen Daten zu verlangen</li>
   </ul>
 
-  <h2>8. Rechtsgrundlage</h2>
+  <h2>9. Rechtsgrundlage</h2>
   <p>Die Verarbeitung erfolgt auf Grundlage der <strong>Einwilligung</strong> (Art. 6 Abs. 1 lit. a DSGVO)
      sowie des <strong>berechtigten Interesses</strong> (Art. 6 Abs. 1 lit. f DSGVO)
      an der Durchführung der Übung.</p>
 
-  <h2>9. Kontakt</h2>
+  <h2>10. Datenschutzbeauftragter</h2>
+  <p>Der Datenschutzbeauftragte des BRK Kreisverbands Nürnberger Land ist über die
+     Geschäftsstelle des Kreisverbands erreichbar.</p>
+
+  <h2>11. Kontakt</h2>
   <p>Bei Fragen zum Datenschutz wenden Sie sich an die Bereitschaftsleitung der
-     BRK Bereitschaft Feucht.</p>
+     BRK Bereitschaft Feucht oder den Datenschutzbeauftragten des Kreisverbands.</p>
 
   <div class="footer-note">
     Stand: {{ today }} | BRK Bereitschaft Feucht – Übungsmanagementsystem OpMan

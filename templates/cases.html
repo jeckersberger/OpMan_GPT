@@ -120,6 +120,9 @@
   <button onclick="showJsonKi()" style="color:#c084fc;border:1px solid #7c3aed;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">🤖 JSON-Vorlage für KI</button>
   <button class="grn" onclick="showImport()">⬆ JSON importieren</button>
   <a href="/api/cases/export">⬇ JSON exportieren</a>
+  <a href="/api/meldezettel" style="color:#e74c3c;border:1px solid #e74c3c;padding:.3rem .6rem;border-radius:6px;font-size:.85rem;">📄 Alle Meldezettel</a>
+  <button id="btnTemplateExport" onclick="exportTemplate()" style="color:#2ecc71;border:1px solid #2ecc71;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">💾 Vorlage exportieren</button>
+  <button id="btnTemplateImport" onclick="showTemplateImport()" style="color:#f39c12;border:1px solid #f39c12;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">📂 Vorlage importieren</button>
   <button id="btnResolveW3w" onclick="resolveW3W()" style="color:#3498db;border:1px solid #3498db;background:transparent;padding:.3rem .6rem;border-radius:6px;cursor:pointer;font-size:.85rem;">🌐 w3w → Koordinaten</button>
   <span id="w3wStatus" style="font-size:.8rem;color:#aaa;"></span>
 </div>
@@ -356,6 +359,7 @@
         <button type="submit" class="btn btn-primary">💾 Speichern</button>
         {% if not is_new %}
         <a href="/patientenkarten/{{ cd.id }}" target="_blank" class="btn btn-ghost">🖨 Diese Karte drucken</a>
+        <a href="/api/meldezettel/{{ cd.id }}" class="btn btn-ghost">📄 Meldezettel (PDF)</a>
         <form method="post" action="/cases/{{ cd.id }}/delete" style="margin:0;" onsubmit="return confirm('Fall {{ cd.id }} wirklich löschen?')">
           <button type="submit" class="btn btn-danger">🗑 Löschen</button>
         </form>
@@ -390,6 +394,23 @@
       <button class="btn btn-ghost" onclick="closeImport()">Abbrechen</button>
     </div>
     <div id="importResult" style="font-size:.8rem;"></div>
+  </div>
+</div>
+
+<!-- Template Import Modal -->
+<div class="modal-bg" id="templateImportModal">
+  <div class="modal">
+    <h3>📂 Übungsvorlage importieren</h3>
+    <p class="hint">Wähle eine Vorlagen-Datei (JSON) aus, um Fälle, Teams und Konfiguration zu importieren.<br>
+    Bestehende Fälle mit gleicher ID werden aktualisiert, neue werden angelegt.</p>
+    <div style="margin-bottom:1rem;">
+      <input type="file" id="templateFile" accept=".json" style="padding:.35rem .5rem;border:1px solid var(--border);border-radius:5px;background:var(--panel2);color:var(--text);font-size:.82rem;width:100%;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="doTemplateImport()">Importieren</button>
+      <button class="btn btn-ghost" onclick="closeTemplateImport()">Abbrechen</button>
+    </div>
+    <div id="templateImportResult" style="font-size:.8rem;"></div>
   </div>
 </div>
 
@@ -604,6 +625,102 @@ async function toggleActive(cid, newActive, btn) {
     }
   } catch(e) { console.error(e); }
 }
+
+/* ── Übungsvorlage exportieren ── */
+async function exportTemplate() {
+  const btn = document.getElementById('btnTemplateExport');
+  btn.disabled = true;
+  btn.textContent = '💾 Wird geladen…';
+  try {
+    const r = await fetch('/api/exercise/template/export');
+    if (!r.ok) {
+      const err = await r.json();
+      alert('Fehler: ' + (err.error || r.status));
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ubungsvorlage_' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Fehler: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Vorlage exportieren';
+  }
+}
+
+/* ── Übungsvorlage importieren ── */
+function showTemplateImport() {
+  document.getElementById('templateImportModal').classList.add('active');
+}
+
+function closeTemplateImport() {
+  document.getElementById('templateImportModal').classList.remove('active');
+  document.getElementById('templateFile').value = '';
+  document.getElementById('templateImportResult').textContent = '';
+}
+
+async function doTemplateImport() {
+  const fileInput = document.getElementById('templateFile');
+  const result = document.getElementById('templateImportResult');
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    result.style.color = '#f55';
+    result.textContent = 'Keine Datei ausgewählt.';
+    return;
+  }
+
+  result.style.color = 'var(--muted)';
+  result.textContent = 'Importiere…';
+
+  try {
+    const file = fileInput.files[0];
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    const res = await fetch('/api/exercise/template/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    const response_data = await res.json();
+    if (!res.ok) {
+      result.style.color = '#f55';
+      result.textContent = 'Fehler: ' + (response_data.error || res.status);
+      return;
+    }
+
+    let msg = '✓ ';
+    if (response_data.config_updated) msg += 'Config aktualisiert. ';
+    if (response_data.cases_created > 0) msg += response_data.cases_created + ' Fälle erstellt. ';
+    if (response_data.cases_updated > 0) msg += response_data.cases_updated + ' Fälle aktualisiert. ';
+    if (response_data.teams_found > 0) msg += response_data.teams_found + ' Teams in der Datei. ';
+
+    result.style.color = 'var(--green)';
+    result.textContent = msg;
+    setTimeout(() => location.reload(), 1500);
+  } catch(e) {
+    result.style.color = '#f55';
+    if (e instanceof SyntaxError) {
+      result.textContent = 'JSON-Fehler: ' + e.message;
+    } else {
+      result.textContent = 'Fehler: ' + e;
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeTemplateImport();
+  }
+});
 
 </script>
 </body>

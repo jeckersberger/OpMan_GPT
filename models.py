@@ -229,3 +229,16 @@ class PushSubscription(db.Model):
     p256dh     = db.Column(db.Text,       nullable=False)
     auth       = db.Column(db.Text,       nullable=False)
     created_at = db.Column(db.DateTime,   nullable=False, default=datetime.utcnow)
+
+
+class CaseProgressStep(db.Model):
+    """Zeitgesteuerte Anweisung für Mimen (Patient-Simulation / Verlaufskarten)."""
+    __tablename__ = "case_progress_steps"
+
+    id = db.Column(db.Integer, primary_key=True)
+    case_id = db.Column(db.String(10), nullable=False)  # P1, P2, ...
+    delay_minutes = db.Column(db.Integer, nullable=False, default=0)  # Minuten nach Alarm
+    instruction = db.Column(db.Text, nullable=False)  # Anweisung für den Mime
+    vitals_change = db.Column(db.Text, nullable=True)  # JSON: {"SpO2": "88%", "HF": "120"}
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

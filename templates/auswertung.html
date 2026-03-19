@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Einsatz-Auswertung – BRK Übung Feucht</title>
+  <style>
+    :root {
+      --bg:      #0b1220;
+      --panel:   #111b2e;
+      --panel2:  #162035;
+      --text:    #e7eefc;
+      --accent:  #4ea1ff;
+      --green:   #3ddc84;
+      --yellow:  #f5c842;
+      --red:     #ff4f4f;
+      --orange:  #ff9f43;
+      --muted:   #a6b3d1;
+      --border:  #223152;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+    /* ── Topbar ── */
+    .topbar {
+      display:flex; align-items:center; gap:.75rem; padding:0 1.1rem;
+      height:52px; background:var(--panel); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:100;
+    }
+    .topbar a.back {
+      color:var(--accent); text-decoration:none; font-size:.82rem;
+      padding:.28rem .65rem; border:1px solid var(--accent); border-radius:6px; white-space:nowrap;
+    }
+    .topbar a.back:hover { background:rgba(78,161,255,.12); }
+    .topbar h1 { font-size:.95rem; font-weight:700; flex:1; }
+    .topbar nav { display:flex; gap:.5rem; align-items:center; }
+    .topbar nav a { color:var(--accent); text-decoration:none; font-size:.8rem; padding:.3rem .6rem; border:1px solid var(--border); border-radius:6px; white-space:nowrap; }
+    .topbar nav a:hover { background:rgba(78,161,255,.12); }
+
+    .btn {
+      padding:.32rem .7rem; border-radius:6px; border:none; cursor:pointer;
+      font-size:.8rem; font-family:inherit; font-weight:600; transition:opacity .15s; white-space:nowrap;
+    }
+    .btn:hover { opacity:.85; }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-success { background:var(--green);  color:#000; }
+    .btn-warn    { background:var(--yellow); color:#000; }
+    .btn-danger  { background:var(--red);    color:#fff; }
+    .btn-ghost   { background:transparent; color:var(--muted); border:1px solid var(--border); }
+    .btn-orange  { background:var(--orange); color:#000; }
+    .btn-sm      { padding:.2rem .45rem; font-size:.74rem; }
+
+    /* ── Main Content ── */
+    .container { padding:1.5rem 1.1rem; max-width:1400px; margin:0 auto; }
+
+    /* ── Sections ── */
+    .section { margin-bottom:2rem; }
+    .section-title {
+      font-size:.85rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+      color:var(--muted); margin-bottom:1rem; display:flex; align-items:center; gap:.5rem;
+    }
+
+    /* ── Case Cards ── */
+    .case-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(600px,1fr)); gap:1rem; }
+    .case-card {
+      background:var(--panel); border:1px solid var(--border); border-radius:10px;
+      overflow:hidden; padding:1rem;
+    }
+    .case-card.completed { border-color:var(--green); }
+
+    .case-header {
+      display:flex; align-items:center; gap:.6rem; margin-bottom:1rem; padding-bottom:.8rem;
+      border-bottom:1px solid var(--border);
+    }
+    .case-id {
+      font-size:1.2rem; font-weight:800; background:var(--accent); color:#fff;
+      padding:.1rem .55rem; border-radius:6px; flex-shrink:0;
+    }
+    .case-id.completed { background:var(--green); color:#000; }
+    .case-schlagwort { font-size:.85rem; font-weight:600; flex:1; }
+    .case-patient { font-size:.75rem; color:var(--muted); }
+
+    /* ── Timings Table ── */
+    .timings-table {
+      width:100%; border-collapse:collapse; font-size:.8rem; margin-bottom:1rem;
+    }
+    .timings-table th {
+      background:var(--panel2); padding:.4rem .5rem; text-align:left; font-weight:700;
+      border-bottom:1px solid var(--border); color:var(--muted);
+    }
+    .timings-table td {
+      padding:.4rem .5rem; border-bottom:1px solid var(--border);
+    }
+    .timings-table tr:last-child td { border-bottom:none; }
+
+    .timing-label { color:var(--muted); }
+    .timing-value { font-weight:700; font-family:monospace; }
+    .timing-soll { color:var(--yellow); }
+    .timing-good { color:var(--green); }
+    .timing-bad { color:var(--red); }
+    .timing-slow { color:var(--orange); }
+
+    /* ── Timeline ── */
+    .timeline {
+      position:relative; padding:1rem 0; margin:1rem 0;
+    }
+    .timeline-event {
+      display:flex; margin-bottom:.8rem; font-size:.78rem;
+    }
+    .timeline-marker {
+      min-width:80px; font-weight:600; color:var(--accent);
+    }
+    .timeline-bar {
+      flex:1; background:var(--panel2); border-radius:4px; padding:.3rem .5rem;
+      border-left:3px solid var(--accent);
+    }
+    .timeline-bar.green { border-left-color:var(--green); }
+    .timeline-bar.yellow { border-left-color:var(--yellow); }
+    .timeline-bar.red { border-left-color:var(--red); }
+    .timeline-bar.orange { border-left-color:var(--orange); }
+
+    /* ── PZC-Auswertung ── */
+    .pzc-grid { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; margin:1rem 0; }
+    .pzc-item {
+      background:var(--panel2); border-radius:8px; padding:.6rem;
+      border-left:3px solid var(--border);
+    }
+    .pzc-item.correct { border-left-color:var(--green); background:rgba(61,220,132,.07); }
+    .pzc-item.wrong { border-left-color:var(--red); background:rgba(255,79,79,.07); }
+    .pzc-label { font-size:.7rem; color:var(--muted); margin-bottom:.2rem; }
+    .pzc-value { font-size:.95rem; font-weight:700; font-family:monospace; }
+
+    /* ── ABCD-Bewertung ── */
+    .abcd-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:1rem 0; }
+    .abcd-item {
+      background:var(--panel2); border:1px solid var(--border); border-radius:6px;
+      padding:.5rem; text-align:center;
+    }
+    .abcd-item.correct { background:rgba(61,220,132,.15); border-color:var(--green); }
+    .abcd-item.almost { background:rgba(245,200,66,.15); border-color:var(--yellow); }
+    .abcd-item.wrong { background:rgba(255,79,79,.15); border-color:var(--red); }
+    .abcd-label { font-size:.65rem; color:var(--muted); font-weight:600; }
+    .abcd-soll { font-size:.8rem; color:var(--yellow); }
+    .abcd-ist { font-size:.8rem; font-weight:700; margin-top:.2rem; }
+
+    /* ── EVT-Vergleich ── */
+    .evt-comparison {
+      background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+      padding:1rem; margin:1rem 0;
+    }
+    .evt-row {
+      display:flex; align-items:center; gap:.5rem; padding:.5rem 0;
+      border-bottom:1px solid var(--border);
+    }
+    .evt-row:last-child { border-bottom:none; }
+    .evt-name { min-width:100px; font-weight:700; }
+    .evt-time { flex:1; font-family:monospace; font-size:.8rem; }
+
+    /* ── Summary ── */
+    .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin:1rem 0; }
+    .summary-card {
+      background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+      padding:1rem; text-align:center;
+    }
+    .summary-label { font-size:.75rem; color:var(--muted); margin-bottom:.3rem; }
+    .summary-value { font-size:1.3rem; font-weight:800; font-family:monospace; }
+    .summary-value.good { color:var(--green); }
+    .summary-value.warn { color:var(--yellow); }
+    .summary-value.bad { color:var(--red); }
+
+    /* ── Print ── */
+    @media print {
+      .topbar, .btn, button { display:none; }
+      .container { max-width:100%; padding:0; }
+      .case-card { page-break-inside:avoid; }
+      body { background:white; color:black; }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width:768px) {
+      .case-grid { grid-template-columns:1fr; }
+      .pzc-grid { grid-template-columns:1fr; }
+      .abcd-grid { grid-template-columns:repeat(2,1fr); }
+      .summary-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Topbar -->
+  <header class="topbar">
+    <a href="/" class="back">← Zurück</a>
+    <h1>📊 Einsatz-Auswertung</h1>
+    <nav>
+      <a href="/">🗺 Karte</a>
+      <a href="/protokoll">📋 Protokoll</a>
+      <a href="/cases">📝 Fälle</a>
+      <a href="/beobachter">👁 Beobachter</a>
+    </nav>
+    <button class="btn btn-primary" onclick="window.print()">🖨 Drucken</button>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Lade Daten via API -->
+    <div id="loading" style="text-align:center;padding:2rem;color:var(--muted);">
+      Daten werden geladen…
+    </div>
+
+    <div id="content" style="display:none;">
+      <!-- Summary aller Fälle -->
+      <div class="section">
+        <h2 class="section-title">📈 Übersicht</h2>
+        <div class="summary-grid" id="summaryGrid"></div>
+      </div>
+
+      <!-- Detailauswertung pro Fall -->
+      <div class="section">
+        <h2 class="section-title">🎯 Auswertung pro Fall</h2>
+        <div class="case-grid" id="caseGrid"></div>
+      </div>
+
+      <!-- EVT-Vergleich (falls mehrere Teams) -->
+      <div class="section" id="evtComparisonSection" style="display:none;">
+        <h2 class="section-title">🚑 Vergleich EVT-Teams</h2>
+        <div id="evtComparison"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadAuswertung() {
+      try {
+        const res = await fetch('/api/auswertung');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderAuswertung(data);
+      } catch (err) {
+        document.getElementById('loading').innerHTML = '❌ Fehler beim Laden: ' + err.message;
+      }
+    }
+
+    function formatDuration(seconds) {
+      if (seconds === null || seconds === undefined) return '-';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return `${mins}:${String(secs).padStart(2,'0')} min`;
+    }
+
+    function formatTime(isoStr) {
+      if (!isoStr) return '-';
+      const dt = new Date(isoStr);
+      return dt.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    }
+
+    function getDurationColor(seconds, slow, normal) {
+      if (seconds === null || seconds === undefined) return '';
+      if (seconds <= normal) return 'timing-good';
+      if (seconds <= slow) return 'timing-slow';
+      return 'timing-bad';
+    }
+
+    function renderAuswertung(data) {
+      const { cases, team_times } = data;
+
+      // Render Summary
+      let totalDuration = 0;
+      let completedCount = 0;
+      cases.forEach(c => {
+        if (c.total_seconds !== null) {
+          totalDuration += c.total_seconds;
+          completedCount++;
+        }
+      });
+
+      let summaryHtml = `
+        <div class="summary-card">
+          <div class="summary-label">Bearbeitete Fälle</div>
+          <div class="summary-value">${completedCount}/${cases.length}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Durchschnittliche Dauer</div>
+          <div class="summary-value ${completedCount > 0 ? 'good' : ''}">${completedCount > 0 ? formatDuration(totalDuration / completedCount) : '-'}</div>
+        </div>
+      `;
+      document.getElementById('summaryGrid').innerHTML = summaryHtml;
+
+      // Render Case Cards
+      let caseHtml = '';
+      cases.forEach(c => {
+        const isCompleted = c.total_seconds !== null;
+
+        // Timeline
+        let timelineHtml = '';
+        if (c.alarm_time) {
+          timelineHtml += `
+            <div class="timeline-event">
+              <div class="timeline-marker">Alarm</div>
+              <div class="timeline-bar">${formatTime(c.alarm_time)}</div>
+            </div>
+          `;
+        }
+        if (c.status3_time) {
+          const dur = c.s3_seconds;
+          const color = dur <= 120 ? 'green' : dur <= 180 ? 'yellow' : 'red';
+          timelineHtml += `
+            <div class="timeline-event">
+              <div class="timeline-marker">S3 (${dur}s)</div>
+              <div class="timeline-bar ${color}">${formatTime(c.status3_time)} | Ausrückzeit: ${formatDuration(dur)}</div>
+            </div>
+          `;
+        }
+        if (c.status4_time) {
+          const dur = c.s4_seconds;
+          const color = dur <= 300 ? 'green' : dur <= 600 ? 'yellow' : 'red';
+          timelineHtml += `
+            <div class="timeline-event">
+              <div class="timeline-marker">S4 (${dur}s)</div>
+              <div class="timeline-bar ${color}">${formatTime(c.status4_time)} | Anfahrt: ${formatDuration(dur)}</div>
+            </div>
+          `;
+        }
+        if (c.status7_time) {
+          const dur = c.s7_seconds;
+          const color = dur <= 600 ? 'green' : dur <= 900 ? 'yellow' : 'red';
+          timelineHtml += `
+            <div class="timeline-event">
+              <div class="timeline-marker">S7 (${dur}s)</div>
+              <div class="timeline-bar ${color}">${formatTime(c.status7_time)} | Vor-Ort: ${formatDuration(dur)}</div>
+            </div>
+          `;
+        }
+        if (c.status8_time) {
+          const dur = c.s8_seconds;
+          const color = dur <= 300 ? 'green' : dur <= 600 ? 'yellow' : 'red';
+          timelineHtml += `
+            <div class="timeline-event">
+              <div class="timeline-marker">S8 (${dur}s)</div>
+              <div class="timeline-bar ${color}">${formatTime(c.status8_time)} | Transport: ${formatDuration(dur)}</div>
+            </div>
+          `;
+        }
+
+        // PZC-Auswertung
+        let pzcHtml = '';
+        if (c.pzc_soll || c.pzc_reported) {
+          const correct = c.pzc_soll === c.pzc_reported;
+          pzcHtml = `
+            <div class="pzc-grid">
+              <div class="pzc-item ${correct ? 'correct' : 'wrong'}">
+                <div class="pzc-label">PZC (Soll)</div>
+                <div class="pzc-value" style="color:var(--yellow);">${c.pzc_soll || '-'}</div>
+              </div>
+              <div class="pzc-item ${correct ? 'correct' : 'wrong'}">
+                <div class="pzc-label">PZC (Gemeldet)</div>
+                <div class="pzc-value" style="color:${correct ? 'var(--green)' : 'var(--red);'}">${c.pzc_reported || '-'}</div>
+              </div>
+            </div>
+          `;
+        }
+
+        // ABCD-Auswertung
+        let abcdHtml = '';
+        if (c.abcd_soll || c.abcd_reported) {
+          const soll = c.abcd_soll || {};
+          const ist = c.abcd_reported || {};
+          const schemas = ['A', 'B', 'C', 'D'];
+          abcdHtml = '<div class="abcd-grid">';
+          schemas.forEach(s => {
+            const sollVal = soll[s] || '-';
+            const istVal = ist[s] || '-';
+            const match = sollVal === '-' || sollVal === istVal;
+            const almostMatch = sollVal !== '-' && Math.abs(sollVal - istVal) <= 1;
+            const statusClass = match ? 'correct' : almostMatch ? 'almost' : 'wrong';
+            abcdHtml += `
+              <div class="abcd-item ${statusClass}">
+                <div class="abcd-label">${s}</div>
+                <div class="abcd-soll">Soll: ${sollVal}</div>
+                <div class="abcd-ist">Ist: ${istVal}</div>
+              </div>
+            `;
+          });
+          abcdHtml += '</div>';
+        }
+
+        caseHtml += `
+          <div class="case-card ${isCompleted ? 'completed' : ''}">
+            <div class="case-header">
+              <div class="case-id ${isCompleted ? 'completed' : ''}">${c.case_id}</div>
+              <div>
+                <div class="case-schlagwort">${c.schlagwort}</div>
+                <div class="case-patient">${c.patient}</div>
+              </div>
+            </div>
+
+            <div class="timeline">
+              ${timelineHtml || '<p style="color:var(--muted);font-size:.8rem;">Noch nicht alarmiert</p>'}
+            </div>
+
+            ${pzcHtml}
+            ${abcdHtml}
+
+            ${isCompleted ? `
+              <div style="background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3);border-radius:6px;padding:.6rem;margin-top:1rem;font-size:.8rem;">
+                <strong style="color:var(--green);">✓ Gesamtdauer: ${formatDuration(c.total_seconds)}</strong>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+
+      document.getElementById('caseGrid').innerHTML = caseHtml;
+
+      // EVT-Vergleich (if multiple teams)
+      if (team_times && Object.keys(team_times).length > 1) {
+        let evtHtml = '';
+        for (const [caseId, teamData] of Object.entries(team_times)) {
+          const teams = Object.entries(teamData).filter(([_, time]) => time);
+          if (teams.length > 1) {
+            evtHtml += `<div class="evt-comparison" style="margin-bottom:1rem;">
+              <h4 style="font-size:.85rem;margin-bottom:.8rem;color:var(--accent);">Fall ${caseId}</h4>`;
+            teams.forEach(([team, time]) => {
+              evtHtml += `
+                <div class="evt-row">
+                  <div class="evt-name">${team}</div>
+                  <div class="evt-time">${formatDuration(time)}</div>
+                </div>
+              `;
+            });
+            evtHtml += '</div>';
+          }
+        }
+        if (evtHtml) {
+          document.getElementById('evtComparison').innerHTML = evtHtml;
+          document.getElementById('evtComparisonSection').style.display = 'block';
+        }
+      }
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+    }
+
+    // Lade Daten beim Seitenaufruf
+    loadAuswertung();
+  </script>
+</body>
+</html>

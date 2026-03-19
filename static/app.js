@@ -133,6 +133,25 @@ function initMap(){
     // quick-fill create forms
     $("missionLat").value = e.latlng.lat.toFixed(6);
     $("missionLng").value = e.latlng.lng.toFixed(6);
+
+    // Reverse-W3W: GPS → what3words-Adresse auflösen
+    const w3wEl = $("lastClickW3w");
+    if (w3wEl) {
+      w3wEl.textContent = "⏳ …";
+      w3wEl.style.color = "#a6b3d1";
+      fetch(`/api/exercise/reverse-w3w?lat=${e.latlng.lat.toFixed(6)}&lng=${e.latlng.lng.toFixed(6)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.ok && d.words) {
+            const clean = d.words.replace("///", "");
+            w3wEl.innerHTML = `<a href="https://what3words.com/${esc(clean)}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;">${esc(d.words)}</a>`;
+          } else {
+            w3wEl.textContent = "—";
+            w3wEl.style.color = "#667";
+          }
+        })
+        .catch(() => { w3wEl.textContent = "—"; w3wEl.style.color = "#667"; });
+    }
   });
 }
 
@@ -350,7 +369,8 @@ function refreshExerciseLayer() {
     }
 
     const tooltipText = `${completed ? "✓ FERTIG | " : ""}${id}: ${data.schlagwort}${walkExtra}`;
-    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}` +
+    const w3wLink = data.w3w ? `<br>📍 <a href="https://what3words.com/${esc(data.w3w.replace('///',''))}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;font-size:.85em;">${esc(data.w3w)}</a>` : "";
+    const popupHtml = `<b>${esc(id)}</b>: ${esc(data.schlagwort)}<br>Patient: ${esc(data.patient)}${w3wLink}` +
       (completed ? `<br><b style="color:#3ddc84">✓ Station abgeschlossen</b>` : "");
 
     if (exerciseMarkers.has(id)) {

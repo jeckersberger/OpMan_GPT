@@ -6,7 +6,7 @@
   <title>Einsatzleiter</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/static/lib/leaflet.css"/>
 
   <link rel="stylesheet" href="/static/styles.css?v=10" />
   <style>
@@ -263,7 +263,7 @@
        style="font-size:.7rem;color:#667;text-decoration:none;opacity:.6;">Datenschutz</a>
   </footer>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/lib/leaflet.js"></script>
   {% if initial_data %}
   <script>window.__INITIAL_DATA__ = {{ initial_data | tojson }};</script>
   {% endif %}

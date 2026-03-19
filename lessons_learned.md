@@ -46,3 +46,21 @@
 **Lösung:** Mindestens HTTP Basic Auth für administrative Endpoints (Reset, Update, Team-Verwaltung).
 **Regel für die Zukunft:** Auch interne/LAN-Tools brauchen Zugriffskontrolle. Die Frage ist nicht "wer könnte angreifen", sondern "was passiert, wenn jemand versehentlich oder absichtlich den falschen Button drückt". Ein einfacher Passwortschutz für kritische Funktionen kostet 30 Minuten, spart aber potenziell eine ruinierte Übung.
 **Kategorie:** Architektur
+
+### 2026-03-19 – Parallele Agenten brauchen sauberes Merging
+
+**Projekt:** OpMan-GPT – 6 Feature-Enhancements parallel
+**Was passiert ist:** 6 Sub-Agenten haben gleichzeitig an app.py, models.py und Templates gearbeitet. Die meisten Änderungen wurden korrekt zusammengeführt, aber die Auswertungs-Routen (/auswertung, /api/auswertung) und die Sicherheitsfixes (SECRET_KEY, W3W_API_KEY) fehlten nach dem Merge.
+**Ursache:** Worktree-basierte Agenten haben jeweils ihre eigene Kopie bearbeitet. Beim Zurückmergen wurden einige Änderungen überschrieben.
+**Lösung:** Manueller Verifikations-Scan nach dem Merge: Jede erwartete Route/Funktion per grep prüfen, Syntax-Check ausführen.
+**Regel für die Zukunft:** Nach parallelen Agent-Änderungen IMMER eine Checkliste der erwarteten Änderungen erstellen und per grep/syntax-check verifizieren. Nie blind darauf vertrauen, dass Merges vollständig sind.
+**Kategorie:** Architektur
+
+### 2026-03-19 – W3W Reverse-Geocoding braucht HTML-Element
+
+**Projekt:** OpMan-GPT – W3W-Kartenintegration
+**Was passiert ist:** JavaScript-Code für Reverse-W3W referenzierte `document.getElementById("lastClickW3w")`, aber das HTML-Element existierte nicht in index.html.
+**Ursache:** JS und HTML wurden in verschiedenen Phasen bearbeitet – das HTML-Element wurde vergessen.
+**Lösung:** `<span id="lastClickW3w">—</span>` in der .maphud-Sektion eingefügt.
+**Regel für die Zukunft:** Bei Frontend-Features immer die vollständige Kette prüfen: HTML-Element → CSS-Styling → JavaScript-Logik → API-Endpoint. Wenn eins fehlt, funktioniert nichts.
+**Kategorie:** Debugging

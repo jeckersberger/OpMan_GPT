@@ -108,8 +108,56 @@ async function api(url, options){
 }
 
 // ---------------- Map ----------------
+function _handleMapClick(lat, lng) {
+  console.log("[map click]", lat, lng);
+  lastClickedLatLng = { lat, lng };
+  lastClickedW3w = "";
+
+  const el = $("lastClick");
+  if (el) el.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+  const latIn = $("missionLat");
+  const lngIn = $("missionLng");
+  if (latIn) latIn.value = lat.toFixed(6);
+  if (lngIn) lngIn.value = lng.toFixed(6);
+
+  const posEl = $("quickCasePos");
+  if (posEl) posEl.innerHTML = `📍 <b>${lat.toFixed(5)}, ${lng.toFixed(5)}</b>`;
+
+  const w3wEl = $("lastClickW3w");
+  const quickW3w = $("quickCaseW3w");
+  if (w3wEl) { w3wEl.textContent = "⏳ auflösen…"; w3wEl.style.color = "#a6b3d1"; }
+  if (quickW3w) { quickW3w.value = ""; quickW3w.placeholder = "⏳ wird aufgelöst…"; }
+
+  fetch(`/api/exercise/reverse-w3w?lat=${lat.toFixed(6)}&lng=${lng.toFixed(6)}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok && d.words) {
+        lastClickedW3w = d.words;
+        const clean = d.words.replace("///", "");
+        if (w3wEl) w3wEl.innerHTML = `<a href="https://what3words.com/${esc(clean)}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;">${esc(d.words)}</a>`;
+        if (quickW3w) quickW3w.value = d.words;
+        if (posEl) posEl.innerHTML = `📍 <b>${lat.toFixed(5)}, ${lng.toFixed(5)}</b> — <span style="font-family:monospace;color:#4ea1ff;">${esc(d.words)}</span>`;
+      } else {
+        if (w3wEl) { w3wEl.textContent = d.error || "nicht verfügbar"; w3wEl.style.color = "#ff6b6b"; }
+        if (quickW3w) quickW3w.placeholder = "W3W nicht verfügbar";
+      }
+    })
+    .catch((err) => {
+      console.warn("[W3W reverse] Fehler:", err);
+      if (w3wEl) { w3wEl.textContent = "Fehler"; w3wEl.style.color = "#ff6b6b"; }
+      if (quickW3w) quickW3w.placeholder = "W3W-Auflösung fehlgeschlagen";
+    });
+}
+
 function initMap(){
-  map = L.map("map").setView([49.3783, 11.2134], 15); // Default: Feucht
+  console.log("[initMap] start");
+  try {
+    map = L.map("map").setView([49.3783, 11.2134], 15);
+  } catch (err) {
+    console.error("[initMap] L.map() failed:", err);
+    return;
+  }
 
   const layers = {
     "🗺 OpenStreetMap": L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -127,47 +175,31 @@ function initMap(){
   layers["🗺 OpenStreetMap"].addTo(map);
   L.control.layers(layers, {}, { position: "topright", collapsed: false }).addTo(map);
 
+  // Leaflet click handler
   map.on("click", (e) => {
-    console.log("[map click]", e.latlng.lat, e.latlng.lng);
-    lastClickedLatLng = e.latlng;
-    lastClickedW3w = "";  // reset until resolved
-    $("lastClick").textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
-
-    // quick-fill create forms
-    $("missionLat").value = e.latlng.lat.toFixed(6);
-    $("missionLng").value = e.latlng.lng.toFixed(6);
-
-    // Show position in quick-case form
-    const posEl = $("quickCasePos");
-    if (posEl) posEl.innerHTML = `📍 <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b>`;
-
-    // Reset W3W fields
-    const w3wEl = $("lastClickW3w");
-    const quickW3w = $("quickCaseW3w");
-    if (w3wEl) { w3wEl.textContent = "⏳ auflösen…"; w3wEl.style.color = "#a6b3d1"; }
-    if (quickW3w) { quickW3w.value = ""; quickW3w.placeholder = "⏳ wird aufgelöst…"; }
-
-    // Reverse-W3W: GPS → what3words-Adresse auflösen
-    fetch(`/api/exercise/reverse-w3w?lat=${e.latlng.lat.toFixed(6)}&lng=${e.latlng.lng.toFixed(6)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.ok && d.words) {
-          lastClickedW3w = d.words;
-          const clean = d.words.replace("///", "");
-          if (w3wEl) w3wEl.innerHTML = `<a href="https://what3words.com/${esc(clean)}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;">${esc(d.words)}</a>`;
-          if (quickW3w) quickW3w.value = d.words;
-          if (posEl) posEl.innerHTML = `📍 <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b> — <span style="font-family:monospace;color:#4ea1ff;">${esc(d.words)}</span>`;
-        } else {
-          if (w3wEl) { w3wEl.textContent = d.error || "nicht verfügbar"; w3wEl.style.color = "#ff6b6b"; }
-          if (quickW3w) quickW3w.placeholder = "W3W nicht verfügbar";
-        }
-      })
-      .catch((err) => {
-        console.warn("[W3W reverse] Fehler:", err);
-        if (w3wEl) { w3wEl.textContent = "Fehler"; w3wEl.style.color = "#ff6b6b"; }
-        if (quickW3w) quickW3w.placeholder = "W3W-Auflösung fehlgeschlagen";
-      });
+    _handleMapClick(e.latlng.lat, e.latlng.lng);
   });
+  console.log("[initMap] Leaflet click handler registered");
+
+  // Fallback: native DOM click → falls Leaflet-Events nicht feuern,
+  // berechnen wir die Koordinaten manuell aus dem Pixel-Klick.
+  document.getElementById("map").addEventListener("click", (e) => {
+    // Nur als Fallback: wenn Leaflet den Click schon verarbeitet hat, ignorieren
+    if (map._lastClickTime && (Date.now() - map._lastClickTime < 300)) return;
+    try {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
+      const latlng = map.containerPointToLatLng(point);
+      console.log("[DOM fallback click]", latlng.lat, latlng.lng);
+      _handleMapClick(latlng.lat, latlng.lng);
+    } catch (err) {
+      console.warn("[DOM fallback click] error:", err);
+    }
+  });
+
+  // Markiere Leaflet-Clicks, damit der Fallback sie nicht doppelt feuert
+  map.on("click", () => { map._lastClickTime = Date.now(); });
+  console.log("[initMap] done");
 }
 
 // ---------------- Marker styles ----------------

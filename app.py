@@ -18,13 +18,27 @@ def _ensure_package(import_name: str, pip_spec: str) -> None:
         print(f"[startup] '{pip_spec}' erfolgreich installiert.", flush=True)
 
 _ensure_package("qrcode", "qrcode[svg]")
+_ensure_package("flask_socketio", "flask-socketio")
+_ensure_package("gevent", "gevent")
 from datetime import datetime, timezone
 import hashlib
 import hmac
 import functools
 from flask import Flask, render_template, request, jsonify, redirect, make_response
+from flask_socketio import SocketIO, emit
 from sqlalchemy import text
 from models import db, Team, Mission, Assignment, CaseDoc, CaseEvtResult, RadioLogEntry, ExerciseConfig, PushSubscription, CaseDefinition, CaseProgressStep
+
+# ── Globale SocketIO-Instanz (wird in create_app() an Flask gebunden) ──
+socketio = SocketIO()
+
+
+def _emit_refresh(event_type: str = "data") -> None:
+    """Broadcast an alle verbundenen Clients: Daten haben sich geändert."""
+    try:
+        socketio.emit("refresh", {"type": event_type}, namespace="/")
+    except Exception:
+        pass  # Wenn SocketIO noch nicht initialisiert – ignorieren
 
 # ---------------------------
 # Web-Push (VAPID)
@@ -222,6 +236,10 @@ def create_app():
     }
 
     db.init_app(app)
+
+    # ── SocketIO initialisieren (Echtzeit-Updates für alle Clients) ──
+    socketio.init_app(app, async_mode="gevent", cors_allowed_origins="*",
+                      logger=False, engineio_logger=False)
 
     # SQLite WAL-Modus aktivieren (wichtig für Multi-Worker gunicorn)
     with app.app_context():
@@ -828,6 +846,7 @@ def create_app():
         # Aktuellen Stand als Ergebnis speichern (upsert)
         _snapshot_evt_result(doc)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_casedoc(doc))
 
     @app.post("/api/casedocs/<string:case_id>/stamp")
@@ -845,6 +864,7 @@ def create_app():
         doc.updated_at = _utcnow()
         _sync_team_from_doc(doc)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_casedoc(doc))
 
     # ---------------------------
@@ -894,6 +914,7 @@ def create_app():
         )
         db.session.add(entry)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_logentry(entry)), 201
 
     @app.patch("/api/radiolog/<int:entry_id>")
@@ -906,6 +927,7 @@ def create_app():
         if "note" in data:
             entry.note = (data["note"] or "").strip() or None
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_logentry(entry))
 
     @app.delete("/api/radiolog/<int:entry_id>")
@@ -914,6 +936,7 @@ def create_app():
         entry = db.get_or_404(RadioLogEntry, entry_id)
         db.session.delete(entry)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     # ---------------------------
@@ -980,6 +1003,7 @@ def create_app():
             RadioLogEntry.query.delete()
 
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     # ---------------------------
@@ -1020,6 +1044,7 @@ def create_app():
                 else:
                     failed.append(cd.id)
         db.session.commit()
+        _emit_refresh("dashboard")
         # Diagnostic: quick connectivity check
         diag = None
         if failed:
@@ -1163,6 +1188,7 @@ function show(id){
             url = str(data["base_url"]).strip().rstrip("/")
             cfg.base_url = url
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"evt_count": cfg.evt_count, "base_url": cfg.base_url or ""})
 
     # ---------------------------
@@ -1324,6 +1350,7 @@ function show(id){
             db.session.flush()
             created.append({"id": m.id, "title": title, "skipped": False})
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"created": created})
 
     # ---------------------------
@@ -1356,6 +1383,7 @@ function show(id){
         if db.session.get(CaseDoc, cid) is None:
             db.session.add(CaseDoc(id=cid))
         db.session.commit()
+        _emit_refresh("dashboard")
         return redirect("/cases")
 
     @app.get("/cases/<string:case_id>/edit")
@@ -1371,6 +1399,7 @@ function show(id){
         cd = db.get_or_404(CaseDefinition, case_id)
         _save_case_from_form(cd, request.form)
         db.session.commit()
+        _emit_refresh("dashboard")
         return redirect("/cases")
 
     @app.post("/cases/<string:case_id>/delete")
@@ -1383,6 +1412,7 @@ function show(id){
             db.session.delete(doc)
         db.session.delete(cd)
         db.session.commit()
+        _emit_refresh("dashboard")
         return redirect("/cases")
 
     def _save_case_from_form(cd: CaseDefinition, data):
@@ -1461,6 +1491,7 @@ function show(id){
         data = request.get_json(force=True) or {}
         cd.active = bool(data.get("active", not cd.active))
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"id": cd.id, "active": cd.active})
 
     @app.get("/api/cases/export")
@@ -1522,6 +1553,7 @@ function show(id){
                 if db.session.get(CaseDoc, cid) is None:
                     db.session.add(CaseDoc(id=cid))
             db.session.commit()
+            _emit_refresh("dashboard")
             return jsonify({"ok": True, "created": created, "updated": updated})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -1614,6 +1646,7 @@ function show(id){
         )
         db.session.add(team)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_team(team, include_missions=True)), 201
 
     @app.patch("/api/teams/<int:team_id>")
@@ -1736,6 +1769,7 @@ function show(id){
 
         team.updated_at = _utcnow()
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.post("/api/teams/<int:team_id>/quittieren")
@@ -1785,6 +1819,7 @@ function show(id){
             created_at=_utcnow(),
         ))
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_team(team, include_missions=True))
 
     @app.delete("/api/teams/<int:team_id>")
@@ -1793,6 +1828,7 @@ function show(id){
         team = db.get_or_404(Team, team_id)
         db.session.delete(team)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     @app.get("/api/teams/timeline")
@@ -1862,6 +1898,7 @@ function show(id){
             team.updated_at      = now
 
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True, "sent_to": [t.id for t in targets]})
 
     @app.delete("/api/testalarm/<int:team_id>")
@@ -1872,6 +1909,7 @@ function show(id){
         team.test_alarm_text = None
         team.updated_at      = _utcnow()
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     # ---------------------------
@@ -1888,6 +1926,7 @@ function show(id){
             team.test_alarm_text = "__UEBUNGSENDE__"
             team.updated_at      = now
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True, "sent_to": [t.id for t in targets]})
 
     # ---------------------------
@@ -1947,6 +1986,7 @@ function show(id){
         )
         db.session.add(mission)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_mission(mission, include_teams=True)), 201
 
     @app.patch("/api/missions/<int:mission_id>")
@@ -1970,6 +2010,7 @@ function show(id){
 
         mission.updated_at = _utcnow()
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_mission(mission, include_teams=True))
 
     @app.delete("/api/missions/<int:mission_id>")
@@ -1985,6 +2026,7 @@ function show(id){
                 doc.assigned_evt = None
         db.session.delete(mission)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     # ---------------------------
@@ -2053,6 +2095,7 @@ function show(id){
                 )
 
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify(serialize_assignment(a)), 201
 
     @app.delete("/api/assignments/<int:assignment_id>")
@@ -2063,6 +2106,7 @@ function show(id){
         team = a.team  # Team merken bevor wir löschen
         db.session.delete(a)
         db.session.commit()
+        _emit_refresh("dashboard")
 
         # Prüfen ob Team noch irgendeinem Einsatz zugewiesen ist
         still_assigned = Assignment.query.filter_by(team_id=team.id).first() is not None
@@ -2072,6 +2116,7 @@ function show(id){
             team.availability = "verfügbar"
             team.updated_at = _utcnow()
             db.session.commit()
+            _emit_refresh("dashboard")
 
         return jsonify({"ok": True})
 
@@ -2125,6 +2170,7 @@ function show(id){
             db.session.add(CaseDoc(id=new_id))
 
         db.session.commit()
+        _emit_refresh("dashboard")
 
         return jsonify({
             "ok": True,
@@ -2160,6 +2206,7 @@ function show(id){
             db.session.delete(mission)
         db.session.delete(cd)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True, "id": case_id, "deleted_mission_id": deleted_mission_id})
 
     # ---------------------------
@@ -2232,6 +2279,7 @@ function show(id){
                 if "base_url" in cfg_data:
                     config.base_url = cfg_data["base_url"]
                 db.session.commit()
+                _emit_refresh("dashboard")
 
             # Fälle importieren (Upsert)
             cases_updated = 0
@@ -2281,6 +2329,7 @@ function show(id){
                         db.session.add(CaseDoc(id=cid))
 
                 db.session.commit()
+                _emit_refresh("dashboard")
 
             # Teams importieren (Optional)
             teams_created = 0
@@ -2719,6 +2768,7 @@ function show(id){
         )
         db.session.add(step)
         db.session.commit()
+        _emit_refresh("dashboard")
 
         return jsonify({
             "id": step.id,
@@ -2736,6 +2786,7 @@ function show(id){
         step = CaseProgressStep.query.filter_by(id=step_id, case_id=case_id).first_or_404()
         db.session.delete(step)
         db.session.commit()
+        _emit_refresh("dashboard")
         return jsonify({"ok": True})
 
     @app.get("/api/simulation/status")
@@ -3526,5 +3577,5 @@ function show(id){
         print(f"  EVT-App (Handy): http://{lip}:5080/evt")
         print()
 
-    app.run(host="0.0.0.0", port=5000, debug=False,
-            ssl_context=ssl_ctx, threaded=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False,
+                 ssl_context=ssl_ctx, allow_unsafe_werkzeug=True)

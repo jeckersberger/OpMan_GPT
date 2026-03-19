@@ -263,12 +263,14 @@
   </footer>
 
   <script src="/static/lib/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"
+          onerror="(function(){var s=document.createElement('script');s.src='/static/lib/socket.io.min.js';document.head.appendChild(s);})()"></script>
   {% if initial_data %}
   <script>window.__INITIAL_DATA__ = {{ initial_data | tojson }};</script>
   {% endif %}
   {% if initial_geodata %}
   <script>window.__INITIAL_GEODATA__ = {{ initial_geodata | tojson }};</script>
   {% endif %}
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/app.js?v=7"></script>
 </body>
 </html>

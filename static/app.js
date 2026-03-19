@@ -1392,11 +1392,38 @@ async function _silentRefreshAll() {
   }
 }
 
-// Polling: Banner erst nach 5 aufeinanderfolgenden Fehlern anzeigen
+// ── WebSocket-Echtzeit + Fallback-Polling ──
 let _pollFailStreak = 0;
 let _pollBusy = false;
-setInterval(async () => {
-  if (_pollBusy) return;  // vorheriger Poll noch nicht fertig
+let _socketConnected = false;
+
+// WebSocket-Verbindung (Socket.IO)
+if (typeof io !== "undefined") {
+  const socket = io({ transports: ["websocket", "polling"], reconnectionDelay: 1000 });
+  socket.on("connect", () => {
+    console.log("[WS] verbunden");
+    _socketConnected = true;
+    _showConnBanner(true);
+  });
+  socket.on("disconnect", () => {
+    console.log("[WS] getrennt");
+    _socketConnected = false;
+  });
+  socket.on("refresh", async (data) => {
+    if (_pollBusy) return;
+    _pollBusy = true;
+    try {
+      await _silentRefreshAll();
+      _pollFailStreak = 0;
+      _showConnBanner(true);
+    } catch (_) { /* ignore */ }
+    finally { _pollBusy = false; }
+  });
+}
+
+// Fallback-Polling: 30s wenn WebSocket aktiv, 5s ohne WebSocket
+async function _pollOnce() {
+  if (_pollBusy) return;
   _pollBusy = true;
   try {
     await _silentRefreshAll();
@@ -1408,7 +1435,14 @@ setInterval(async () => {
   } finally {
     _pollBusy = false;
   }
-}, 5000);
+}
+function _schedulePoll() {
+  setTimeout(async () => {
+    await _pollOnce();
+    _schedulePoll();
+  }, _socketConnected ? 30000 : 5000);
+}
+_schedulePoll();
 
 // ---------------- LAN-Info (Handy-Zugang) ----------------
 let _lanInfo = null;

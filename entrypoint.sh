@@ -27,10 +27,11 @@ if [ -x "$APP_DIR/venv/bin/pip" ]; then
   "$APP_DIR/venv/bin/pip" install --quiet -r "$APP_DIR/requirements.txt" 2>/dev/null || true
 fi
 
-# ── Gunicorn starten ────────────────────────────────────────────
+# ── Gunicorn starten (gevent-websocket für SocketIO) ──────────
 exec gunicorn \
   --bind 0.0.0.0:8000 \
-  --workers "${GUNICORN_WORKERS:-2}" \
+  --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+  --workers "${GUNICORN_WORKERS:-1}" \
   --timeout 120 \
   --access-logfile - \
   'app:create_app()'

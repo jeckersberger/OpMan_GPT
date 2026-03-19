@@ -2115,6 +2115,7 @@ function show(id){
             patient=(data.get("patient") or "").strip() or "Unbekannt",
             lat=data.get("lat"),
             lng=data.get("lng"),
+            w3w=(data.get("w3w") or "").strip() or None,
             active=True,
             spontan=True,
             sort_order=max_sort + 1,
@@ -2134,6 +2135,7 @@ function show(id){
             "patient": cd.patient,
             "lat": cd.lat,
             "lng": cd.lng,
+            "w3w": cd.w3w,
         }), 201
 
     @app.delete("/api/cases/<string:case_id>/spontan")

@@ -1,5 +1,6 @@
 let map;
 let lastClickedLatLng = null;
+let lastClickedW3w = "";  // last resolved W3W address from map click
 
 let teams = [];
 let missions = [];
@@ -127,7 +128,9 @@ function initMap(){
   L.control.layers(layers, {}, { position: "topright", collapsed: false }).addTo(map);
 
   map.on("click", (e) => {
+    console.log("[map click]", e.latlng.lat, e.latlng.lng);
     lastClickedLatLng = e.latlng;
+    lastClickedW3w = "";  // reset until resolved
     $("lastClick").textContent = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
 
     // quick-fill create forms
@@ -136,26 +139,34 @@ function initMap(){
 
     // Show position in quick-case form
     const posEl = $("quickCasePos");
-    if (posEl) posEl.innerHTML = `📍 Position: <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b>`;
+    if (posEl) posEl.innerHTML = `📍 <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b>`;
+
+    // Reset W3W fields
+    const w3wEl = $("lastClickW3w");
+    const quickW3w = $("quickCaseW3w");
+    if (w3wEl) { w3wEl.textContent = "⏳ auflösen…"; w3wEl.style.color = "#a6b3d1"; }
+    if (quickW3w) { quickW3w.value = ""; quickW3w.placeholder = "⏳ wird aufgelöst…"; }
 
     // Reverse-W3W: GPS → what3words-Adresse auflösen
-    const w3wEl = $("lastClickW3w");
-    if (w3wEl) {
-      w3wEl.textContent = "⏳ …";
-      w3wEl.style.color = "#a6b3d1";
-      fetch(`/api/exercise/reverse-w3w?lat=${e.latlng.lat.toFixed(6)}&lng=${e.latlng.lng.toFixed(6)}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d.ok && d.words) {
-            const clean = d.words.replace("///", "");
-            w3wEl.innerHTML = `<a href="https://what3words.com/${esc(clean)}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;">${esc(d.words)}</a>`;
-          } else {
-            w3wEl.textContent = "—";
-            w3wEl.style.color = "#667";
-          }
-        })
-        .catch(() => { w3wEl.textContent = "—"; w3wEl.style.color = "#667"; });
-    }
+    fetch(`/api/exercise/reverse-w3w?lat=${e.latlng.lat.toFixed(6)}&lng=${e.latlng.lng.toFixed(6)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && d.words) {
+          lastClickedW3w = d.words;
+          const clean = d.words.replace("///", "");
+          if (w3wEl) w3wEl.innerHTML = `<a href="https://what3words.com/${esc(clean)}" target="_blank" style="color:#4ea1ff;text-decoration:none;font-family:monospace;">${esc(d.words)}</a>`;
+          if (quickW3w) quickW3w.value = d.words;
+          if (posEl) posEl.innerHTML = `📍 <b>${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}</b> — <span style="font-family:monospace;color:#4ea1ff;">${esc(d.words)}</span>`;
+        } else {
+          if (w3wEl) { w3wEl.textContent = d.error || "nicht verfügbar"; w3wEl.style.color = "#ff6b6b"; }
+          if (quickW3w) quickW3w.placeholder = "W3W nicht verfügbar";
+        }
+      })
+      .catch((err) => {
+        console.warn("[W3W reverse] Fehler:", err);
+        if (w3wEl) { w3wEl.textContent = "Fehler"; w3wEl.style.color = "#ff6b6b"; }
+        if (quickW3w) quickW3w.placeholder = "W3W-Auflösung fehlgeschlagen";
+      });
   });
 }
 
@@ -1715,6 +1726,7 @@ async function quickCreateCase() {
   const lat = $("missionLat")?.value ? parseFloat($("missionLat").value) : null;
   const lng = $("missionLng")?.value ? parseFloat($("missionLng").value) : null;
 
+  const w3wVal = $("quickCaseW3w")?.value || lastClickedW3w || "";
   try {
     const result = await api("/api/cases/spontan", {
       method: "POST",
@@ -1723,11 +1735,15 @@ async function quickCreateCase() {
         schlagwort: title,
         patient: patientEl?.value || "",
         lat, lng,
+        w3w: w3wVal,
       }),
     });
     // Felder zurücksetzen
     titleEl.value = "";
     if (patientEl) patientEl.value = "";
+    const quickW3w = $("quickCaseW3w");
+    if (quickW3w) { quickW3w.value = ""; quickW3w.placeholder = "///what3words (wird bei Klick ausgefüllt)"; }
+    lastClickedW3w = "";
     if (posEl) posEl.innerHTML = `✅ <b>${esc(result.id)}</b> erstellt! Klick erneut auf die Karte für nächste Position.`;
 
     // Geodata neu laden und Karte aktualisieren

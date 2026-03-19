@@ -239,6 +239,7 @@
         <div style="display:flex;flex-direction:column;gap:.4rem;padding:.4rem 0;">
           <input type="text" id="quickCaseTitle" placeholder="Einsatzstichwort (z.B. Fahrradunfall)" style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:.35rem .5rem;font-size:.82rem;">
           <input type="text" id="quickCasePatient" placeholder="Patientenname (optional)" style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:.35rem .5rem;font-size:.82rem;">
+          <input type="text" id="quickCaseW3w" placeholder="///what3words (wird bei Klick ausgefüllt)" readonly style="background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:#4ea1ff;padding:.35rem .5rem;font-size:.82rem;font-family:monospace;cursor:default;">
           <div style="display:flex;gap:.4rem;align-items:center;">
             <button onclick="quickCreateCase()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:.35rem .7rem;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;flex:1;">🚀 Fall anlegen</button>
           </div>
@@ -268,6 +269,6 @@
   {% if initial_geodata %}
   <script>window.__INITIAL_GEODATA__ = {{ initial_geodata | tojson }};</script>
   {% endif %}
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

@@ -233,15 +233,45 @@ def reverse_w3w(lat: float, lng: float):
     return None
 
 
+def _get_persistent_secret() -> str:
+    """Liefert einen stabilen SECRET_KEY – auch ohne .env-Datei.
+
+    Reihenfolge:
+    1. Umgebungsvariable SECRET_KEY (docker-compose / .env)
+    2. Datei instance/secret_key (einmal generiert, überlebt Container-Restarts)
+    3. Neu generieren → in instance/secret_key speichern
+    """
+    env_key = os.environ.get("SECRET_KEY", "").strip()
+    if env_key and env_key != "bitte-aendern-openssl-rand-hex-32":
+        return env_key
+
+    key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "secret_key")
+    # Versuche existierenden Key zu lesen
+    if os.path.exists(key_file):
+        try:
+            with open(key_file) as f:
+                stored = f.read().strip()
+            if stored:
+                return stored
+        except Exception:
+            pass
+
+    # Neuen Key generieren und persistent speichern
+    import secrets as _sec
+    new_key = _sec.token_hex(32)
+    os.makedirs(os.path.dirname(key_file), exist_ok=True)
+    try:
+        with open(key_file, "w") as f:
+            f.write(new_key)
+        print(f"[startup] SECRET_KEY generiert und gespeichert in {key_file}", flush=True)
+    except Exception as e:
+        print(f"[WARNUNG] SECRET_KEY konnte nicht gespeichert werden: {e}", flush=True)
+    return new_key
+
+
 def create_app():
     app = Flask(__name__)
-    _secret = os.environ.get("SECRET_KEY", "")
-    if not _secret or _secret == "bitte-aendern-openssl-rand-hex-32":
-        import secrets as _sec
-        _secret = _sec.token_hex(32)
-        print("[WARNUNG] SECRET_KEY nicht in .env gesetzt – generiere zufälligen Key für diese Sitzung.", flush=True)
-        print("[WARNUNG] Setze SECRET_KEY in deiner .env-Datei für persistente Sessions!", flush=True)
-    app.config["SECRET_KEY"] = _secret
+    app.config["SECRET_KEY"] = _get_persistent_secret()
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///einsatzleiter.db"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     # WAL-Modus für SQLite: mehrere gunicorn-Worker können gleichzeitig lesen
@@ -483,6 +513,17 @@ def create_app():
             return f(*args, **kwargs)
         return wrapper
 
+    def _set_admin_cookie(resp, token):
+        """Setzt das Admin-Cookie mit korrekten Flags für alle Browser/Geräte."""
+        is_https = request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+        resp.set_cookie(_ADMIN_COOKIE, token,
+                        max_age=_ADMIN_TOKEN_MAX_AGE,
+                        httponly=True,
+                        secure=is_https,
+                        samesite="Lax",
+                        path="/")
+        return resp
+
     @app.post("/api/auth/verify-pin")
     def verify_pin():
         """Prüft die PIN und setzt ein Admin-Cookie."""
@@ -494,9 +535,7 @@ def create_app():
             return jsonify({"ok": False, "error": "Falsche PIN"}), 403
         token = _make_admin_token(pin)
         resp = make_response(jsonify({"ok": True}))
-        resp.set_cookie(_ADMIN_COOKIE, token,
-                        max_age=_ADMIN_TOKEN_MAX_AGE,
-                        httponly=True, samesite="Lax")
+        _set_admin_cookie(resp, token)
         return resp
 
     @app.get("/api/auth/status")
@@ -515,19 +554,18 @@ def create_app():
         cfg = db.get_or_404(ExerciseConfig, 1)
         cfg.admin_pin = new_pin
         db.session.commit()
+        _emit_refresh("dashboard")
         # Neues Token setzen
         token = _make_admin_token(new_pin)
         resp = make_response(jsonify({"ok": True}))
-        resp.set_cookie(_ADMIN_COOKIE, token,
-                        max_age=_ADMIN_TOKEN_MAX_AGE,
-                        httponly=True, samesite="Lax")
+        _set_admin_cookie(resp, token)
         return resp
 
     @app.post("/api/auth/logout")
     def admin_logout():
         """Entfernt das Admin-Cookie."""
         resp = make_response(jsonify({"ok": True}))
-        resp.delete_cookie(_ADMIN_COOKIE)
+        resp.delete_cookie(_ADMIN_COOKIE, path="/")
         return resp
 
     def _cases_dict(active_only: bool = False):

@@ -476,6 +476,78 @@ def create_app():
             _save_w3w_cache(cache)
 
     # ---------------------------
+    # Site-Login (ersetzt Nginx Basic Auth)
+    # ---------------------------
+    _SITE_COOKIE = "opman_site_token"
+    _SITE_TOKEN_MAX_AGE = 365 * 24 * 3600  # 1 Jahr
+    _SITE_USER = os.environ.get("SITE_USER", "") or "brk"
+    _SITE_PASS = os.environ.get("SITE_PASS", "") or "funkuebung"
+
+    def _make_site_token() -> str:
+        """Erzeugt ein signiertes Token für den Site-Zugang."""
+        secret = app.config["SECRET_KEY"]
+        payload = f"site:{_SITE_USER}:{_SITE_PASS}"
+        return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+    def _check_site() -> bool:
+        """Prüft ob das Site-Cookie gültig ist."""
+        token = request.cookies.get(_SITE_COOKIE)
+        if not token:
+            return False
+        return hmac.compare_digest(token, _make_site_token())
+
+    def site_login_required(f):
+        """Decorator: zeigt Login-Seite wenn Site-Cookie fehlt."""
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if not _check_site():
+                return render_template("site_login.html")
+            return f(*args, **kwargs)
+        return wrapper
+
+    @app.post("/api/site-login")
+    def site_login():
+        """Prüft Site-Zugangsdaten und setzt ein Cookie."""
+        data = request.get_json(force=True)
+        user = str(data.get("user", "")).strip()
+        pw = str(data.get("pass", "")).strip()
+        if user != _SITE_USER or pw != _SITE_PASS:
+            return jsonify({"ok": False, "error": "Falsche Zugangsdaten"}), 403
+        token = _make_site_token()
+        resp = make_response(jsonify({"ok": True}))
+        is_https = request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"
+        resp.set_cookie(_SITE_COOKIE, token,
+                        max_age=_SITE_TOKEN_MAX_AGE,
+                        httponly=True,
+                        secure=is_https,
+                        samesite="Lax",
+                        path="/")
+        return resp
+
+    @app.post("/api/site-logout")
+    def site_logout():
+        """Entfernt das Site-Cookie."""
+        resp = make_response(jsonify({"ok": True}))
+        resp.delete_cookie(_SITE_COOKIE, path="/")
+        return resp
+
+    # Site-Login auf ALLE Seiten anwenden (außer statische Dateien + Login selbst)
+    @app.before_request
+    def _enforce_site_login():
+        """Erzwingt Site-Login für alle Requests außer Login-Endpunkte und statische Dateien."""
+        # Diese Pfade brauchen keinen Site-Login
+        exempt = ("/api/site-login", "/static/", "/favicon.ico")
+        path = request.path
+        if any(path.startswith(e) for e in exempt):
+            return None
+        if not _check_site():
+            # API-Requests bekommen 401, Seiten-Requests das Login-Formular
+            if path.startswith("/api/"):
+                return jsonify({"error": "Anmeldung erforderlich"}), 401
+            return render_template("site_login.html")
+        return None
+
+    # ---------------------------
     # Admin-PIN Authentifizierung
     # ---------------------------
     _ADMIN_COOKIE = "opman_admin_token"
